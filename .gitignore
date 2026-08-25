@@ -1,0 +1,26 @@
+out-release/
+
+# Foundry
+out/
+cache/
+broadcast/
+lib/
+
+# Node / Hardhat
+node_modules/
+hardhat/artifacts/
+hardhat/cache/
+hardhat/typechain-types/
+
+# Deployments (keep the .gitkeep, ignore runtime-generated chain files)
+deployments/*.json
+!deployments/.gitkeep
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+*.log

@@ -1,0 +1,19 @@
+{
+  "name": "mohayo-hardhat",
+  "version": "0.1.0",
+  "private": true,
+  "description": "生产部署与链下运维层：从 Foundry out/ 读取 ABI+字节码，负责部署/播种/运维任务",
+  "scripts": {
+    "deploy": "hardhat run scripts/deploy.ts",
+    "seed": "hardhat run scripts/seed.ts",
+    "task": "hardhat"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^3.0.8",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.4",
+    "hardhat": "^2.22.17",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  }
+}

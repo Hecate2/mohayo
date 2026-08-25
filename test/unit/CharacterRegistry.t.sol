@@ -1,0 +1,233 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import {BaseTest} from "../BaseTest.sol";
+import {CharacterRegistry} from "../../src/core/CharacterRegistry.sol";
+
+/// @title CharacterRegistryTest - 角色创建/种族词条随机/ERC-721 钩子/GM 入口
+/// @notice 用 MockRNG.setFixed 强制特定掷骰结果，验证种族三层加权、词条方向分布、
+///         资源流词条上限、种族属性上限、转移锁定与等级重置、首角色重掷计数器。
+contract CharacterRegistryTest is BaseTest {
+    function setUp() public override {
+        super.setUp();
+    }
+
+    // ---- 基础创建 ----
+    function testCreateCharacterBasic() public {
+        uint32[] memory skills = new uint32[](0);
+        vm.prank(alice);
+        uint256 tokenId = cr.createCharacter(1, skills);
+        assertEq(tokenId, 1);
+        assertEq(cr.ownerOf(tokenId), alice);
+        CharacterRegistry.Character memory c = cr.getCharacter(tokenId);
+        assertEq(c.classId, 1);
+        assertTrue(c.race < 5); // 种族必为合法值
+        assertEq(c.level, 1);
+        assertEq(c.affixCount, 2);
+        assertEq(c.hp, c.maxHp);
+        assertEq(cr.freeRerolls(alice), 3); // 首角色福利
+    }
+
+    function testCreateCharacterUnknownClassRejected() public {
+        uint32[] memory skills = new uint32[](0);
+        vm.prank(alice);
+        vm.expectRevert("CR: unknown class");
+        cr.createCharacter(99, skills);
+    }
+
+    function testCreateCharacterTooManySkillsRejected() public {
+        uint32[] memory skills = new uint32[](9);
+        for (uint8 i; i < 9; ++i) skills[i] = skillAttack;
+        vm.prank(alice);
+        vm.expectRevert("CR: too many skills");
+        cr.createCharacter(1, skills);
+    }
+
+    // ---- 种族三层加权（setFixed 强制各层）----
+    function testRaceTier0Human() public {
+        mockRng.setFixed(0); // 0 < 850 → tier0 → 人类
+        uint256 tokenId = _createCharacter(alice, 1, new uint32[](0));
+        assertEq(cr.getCharacter(tokenId).race, cr.RACE_HUMAN());
+    }
+
+    function testRaceTier1Elf() public {
+        mockRng.setFixed(900); // 850 ≤ 900 < 970 → tier1；sub=0 < 50 → 精灵
+        uint256 tokenId = _createCharacter(alice, 1, new uint32[](0));
+        assertEq(cr.getCharacter(tokenId).race, cr.RACE_ELF());
+    }
+
+    function testRaceTier2Demon() public {
+        mockRng.setFixed(990); // 990 ≥ 970 → tier2；sub=90 ≥ 50 → 恶魔
+        uint256 tokenId = _createCharacter(alice, 1, new uint32[](0));
+        assertEq(cr.getCharacter(tokenId).race, cr.RACE_DEMON());
+    }
+
+    // ---- 词条方向分布 ----
+    function testAffixDirectionPositive() public {
+        mockRng.setFixed(0); // 0 < 200 → 正面
+        uint256 tokenId = _createCharacter(alice, 1, new uint32[](0));
+        CharacterRegistry.Character memory c = cr.getCharacter(tokenId);
+        assertEq(cr.getAffixTemplate(c.affixIds[0]).direction, cr.AFFIX_POSITIVE());
+        assertEq(cr.getAffixTemplate(c.affixIds[1]).direction, cr.AFFIX_POSITIVE());
+    }
+
+    function testAffixDirectionDoubleEdged() public {
+        mockRng.setFixed(680); // 200 ≤ 680 < 880 → 双刃
+        uint256 tokenId = _createCharacter(alice, 1, new uint32[](0));
+        CharacterRegistry.Character memory c = cr.getCharacter(tokenId);
+        assertEq(cr.getAffixTemplate(c.affixIds[0]).direction, cr.AFFIX_DOUBLE_EDGED());
+        assertEq(cr.getAffixTemplate(c.affixIds[1]).direction, cr.AFFIX_DOUBLE_EDGED());
+    }
+
+    function testAffixDirectionNegative() public {
+        mockRng.setFixed(990); // 990 ≥ 880 → 负面
+        uint256 tokenId = _createCharacter(alice, 1, new uint32[](0));
+        CharacterRegistry.Character memory c = cr.getCharacter(tokenId);
+        assertEq(cr.getAffixTemplate(c.affixIds[0]).direction, cr.AFFIX_NEGATIVE());
+        assertEq(cr.getAffixTemplate(c.affixIds[1]).direction, cr.AFFIX_NEGATIVE());
+    }
+
+    // ---- 属性计算与种族上限 ----
+    function testStatsCappedByHumanCap() public {
+        mockRng.setFixed(0); // 人类 + 正面词条 1（攻击 +10%）
+        uint256 tokenId = _createCharacter(alice, 1, new uint32[](0));
+        (uint64 hp, uint64 maxHp, uint64 attack, uint64 magic, uint64 defense, uint64 speed) = cr.getStats(tokenId);
+        // 战士 base：120/30/10/25/10；双词条攻击 +20% → 36，但人类上限 ×1.0 → 30
+        assertEq(maxHp, 120);
+        assertEq(attack, 30);
+        assertEq(magic, 10);
+        assertEq(defense, 25);
+        assertEq(speed, 10);
+        assertEq(hp, maxHp);
+    }
+
+    function testStatsDemonHigherAttackCap() public {
+        // GM 铸造：恶魔（攻击上限 ×1.3）+ 双刃词条 3（攻击 +25% 防御 -10%）
+        uint16[] memory affixes = new uint16[](1);
+        affixes[0] = 3;
+        uint32[] memory skills = new uint32[](0);
+        uint256 tokenId = cr.gmMintCharacter(alice, 1, 4, affixes, skills);
+        (,, uint64 attack,, uint64 defense,) = cr.getStats(tokenId);
+        // 攻击 = 30×1.25 = 37（上限 30×1.3 = 39）；防御 = 25×0.9 = 22（上限 25×0.9 = 22）
+        assertEq(attack, 37);
+        assertEq(defense, 22);
+    }
+
+    // ---- 资源流词条（默诵/好战本能）----
+    function testResourceAffixManaDiscount() public {
+        mockRng.setFixed(682); // 双刃方向；682 % 4 = 2 → 词条 5（默诵 manaDiscount=5）
+        uint256 tokenId = _createCharacter(alice, 1, new uint32[](0));
+        CharacterRegistry.Character memory c = cr.getCharacter(tokenId);
+        assertEq(c.manaDiscount, 10); // 两槽都是词条 5 → 5+5
+        assertEq(c.apBonus, 0);
+    }
+
+    function testResourceAffixApBonus() public {
+        mockRng.setFixed(683); // 683 % 4 = 3 → 词条 6（好战本能 apBonus=3）
+        uint256 tokenId = _createCharacter(alice, 1, new uint32[](0));
+        CharacterRegistry.Character memory c = cr.getCharacter(tokenId);
+        assertEq(c.apBonus, 6);
+        assertEq(c.manaDiscount, 0);
+    }
+
+    // ---- GM 入口 ----
+    function testGmMintCharacter() public {
+        uint16[] memory affixes = new uint16[](1);
+        affixes[0] = 3;
+        uint32[] memory skills = new uint32[](1);
+        skills[0] = skillAttack;
+        uint256 tokenId = cr.gmMintCharacter(bob, 1, 4, affixes, skills);
+        CharacterRegistry.Character memory c = cr.getCharacter(tokenId);
+        assertEq(cr.ownerOf(tokenId), bob);
+        assertEq(c.classId, 1);
+        assertEq(c.race, 4);
+        assertEq(c.affixCount, 1);
+        assertEq(c.affixIds[0], 3);
+        assertEq(c.skillCount, 1);
+        assertEq(c.skillIds[0], skillAttack);
+        assertEq(cr.freeRerolls(bob), 0); // GM 铸造不触发首角色福利
+    }
+
+    function testGmDisabledReverts() public {
+        CharacterRegistry crNoGm = new CharacterRegistry(rng, sr, false);
+        uint16[] memory affixes = new uint16[](0);
+        uint32[] memory skills = new uint32[](0);
+        vm.expectRevert("CR: GM disabled");
+        crNoGm.gmMintCharacter(alice, 1, 0, affixes, skills);
+    }
+
+    // ---- ERC-721 转移钩子 ----
+    function testTransferChangesOwner() public {
+        uint256 tokenId = _createCharacter(alice, 1, new uint32[](0));
+        vm.prank(alice);
+        cr.transferFrom(alice, bob, tokenId);
+        assertEq(cr.ownerOf(tokenId), bob);
+        assertEq(cr.getCharacter(tokenId).level, 1); // 等级重置
+    }
+
+    function testTransferLockedInRoom() public {
+        uint256 tokenId = _createCharacter(alice, 1, new uint32[](0));
+        vm.prank(address(ce));
+        cr.setInRoom(tokenId, 7);
+        vm.prank(alice);
+        vm.expectRevert("CR: in room");
+        cr.transferFrom(alice, bob, tokenId);
+    }
+
+    // ---- 首角色重掷计数器 ----
+    function testRerollExhaustsFreeCount() public {
+        uint256 tokenId = _createCharacter(alice, 1, new uint32[](0));
+        assertEq(cr.freeRerolls(alice), 3);
+        vm.prank(alice);
+        cr.rerollCharacter(tokenId);
+        assertEq(cr.freeRerolls(alice), 2);
+        assertEq(cr.balanceOf(alice), 0); // 已销毁
+        // 每次重掷需新 token（销毁后不可再掷）
+        uint256 tokenId2 = _createCharacter(alice, 1, new uint32[](0));
+        vm.prank(alice);
+        cr.rerollCharacter(tokenId2);
+        assertEq(cr.freeRerolls(alice), 1);
+        uint256 tokenId3 = _createCharacter(alice, 1, new uint32[](0));
+        vm.prank(alice);
+        cr.rerollCharacter(tokenId3);
+        assertEq(cr.freeRerolls(alice), 0);
+    }
+
+    /// @notice 生产语义（gmEnabled=false）：计数器耗尽后重掷必须回退
+    function testRerollRevertsWhenGmDisabled() public {
+        CharacterRegistry crProd = new CharacterRegistry(rng, sr, false);
+        crProd.registerClass(1, cr.getClassDef(1));
+        crProd.registerAffixTemplate(1, cr.getAffixTemplate(1)); // 正面词条（方向 0）
+        mockRng.setFixed(0); // 人类 + 正面词条
+        vm.prank(alice);
+        uint256 tokenId = crProd.createCharacter(1, new uint32[](0));
+        assertEq(crProd.freeRerolls(alice), 3);
+        for (uint8 i; i < 3; ++i) {
+            vm.prank(alice);
+            crProd.rerollCharacter(tokenId);
+            tokenId = _createOn(crProd, alice, 1);
+        }
+        vm.expectRevert("CR: no reroll");
+        vm.prank(alice);
+        crProd.rerollCharacter(tokenId);
+    }
+
+    function _createOn(CharacterRegistry reg, address player, uint8 classId) internal returns (uint256 tokenId) {
+        vm.prank(player);
+        tokenId = reg.createCharacter(classId, new uint32[](0));
+    }
+
+    // ---- 模糊测试：任意职业创建不变量 ----
+    function testFuzzCreateCharacterInvariants(uint8 classId) public {
+        classId = uint8(bound(classId, 1, 5));
+        uint256 tokenId = _createCharacter(alice, classId, new uint32[](0));
+        CharacterRegistry.Character memory c = cr.getCharacter(tokenId);
+        assertTrue(c.race < 5);
+        assertEq(c.affixCount, 2);
+        assertEq(c.level, 1);
+        assertLe(c.hp, c.maxHp);
+        // 属性不超种族上限（上限乘区 ≤1300）
+        assertLe(c.attack, cr.getClassDef(classId).baseAttack * 13 / 10);
+        assertLe(c.magic, cr.getClassDef(classId).baseMagic * 13 / 10);
+    }
+}
