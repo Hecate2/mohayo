@@ -7,9 +7,10 @@ import {RNGRouter} from "./RNGRouter.sol";
 import {SkillRegistry} from "./SkillRegistry.sol";
 
 /// @title CharacterRegistry - 角色 CRUD + 种族/词条随机 + ERC-721 转移钩子
-/// @notice 创建流程：职业 → 种族三层加权（85/12/3）→ 词条（方向 20/68/12 → 词条 → 档位）。
-///         种族创建时随机生成、永久不可改；种族/词条以直接修正（千分比）作用于基础属性，无任何封顶。
-///         资源流词条（默诵 manaDiscount / 好战本能 apBonus）每角色 ≤2 条。
+/// @notice 创建流程：职业 → 种族三层加权（85/12/3）→ 四项能力词条 → 资源词条。
+///         生命、物攻、魔攻、敏捷各自独立抽取 1~10 档，档位值 0~2000‰、高档更稀有；
+///         随后抽取 0~4 条资源词条，每条固定为 AP 消耗-1 / AP 产量+1 / 魔素消耗-1 / 魔素产量+1 之一。
+///         词条不再有正面/双刃/负面方向，词条加成均为非负。
 ///         ERC-721 transfer 钩子：等级重置 + 房间内锁定（技术设计 §2.1 / §6.0）。
 contract CharacterRegistry is ERC721, Ownable {
     RNGRouter public immutable rng;
@@ -19,7 +20,8 @@ contract CharacterRegistry is ERC721, Ownable {
     uint256 public constant MAX_AFFIXES = 256;
     uint256 public constant MAX_CLASSES = 32;
     uint256 public constant MAX_RACES = 16;
-    uint8 public constant MAX_AFFIX_PER_CHAR = 2;
+    uint8 public constant MAX_AFFIX_TIER = 10;
+    uint8 public constant MAX_RESOURCE_AFFIX_PER_CHAR = 4;
     uint8 public constant MAX_SKILL_PER_CHAR = 8;
 
     // ---- 数量级基准（用户定案）：1 级基准 / 满级 300 / 词条上限 ×3 ----
@@ -28,9 +30,19 @@ contract CharacterRegistry is ERC721, Ownable {
     uint64 public constant BASE_MAGIC = 10;
     uint64 public constant BASE_SPEED = 10;
     uint16 public constant MAX_LEVEL = 300; // 满级；能力值 = 1 级基准 × level（线性插值，满级 = 1 级 × 300）
-    int64 public constant MAX_AFFIX_MOD = 2000; // 词条单属性修正上限（千分比）：极端词条最多把能力值 ×3
+    uint16 public constant MAX_AFFIX_MOD = 2000; // 能力词条单档加成上限（千分比）：最高档 +2000‰
 
-    // ---- 种族/词条方向常量（与 SkillRegistry 对齐；本地定义避免跨合约常量解析）----
+    // ---- 能力索引与资源效果枚举 ----
+    uint8 public constant ABILITY_HP = 0;
+    uint8 public constant ABILITY_ATTACK = 1;
+    uint8 public constant ABILITY_MAGIC = 2;
+    uint8 public constant ABILITY_SPEED = 3;
+    uint8 public constant RESOURCE_AP_COST = 0; // AP 消耗 -1
+    uint8 public constant RESOURCE_AP_PRODUCTION = 1; // AP 产量 +1
+    uint8 public constant RESOURCE_MANA_COST = 2; // 魔素消耗 -1
+    uint8 public constant RESOURCE_MANA_PRODUCTION = 3; // 魔素产量 +1
+
+    // ---- 种族常量 ----
     uint8 public constant RACE_HUMAN = 0;
     uint8 public constant RACE_ORC = 1;
     uint8 public constant RACE_GIANT = 2;
@@ -39,21 +51,18 @@ contract CharacterRegistry is ERC721, Ownable {
     uint8 public constant RACE_DRAGONKIN = 5;
     uint8 public constant RACE_ANGEL = 6;
     uint8 public constant RACE_DEMON = 7;
-    uint8 public constant AFFIX_POSITIVE = 0;
-    uint8 public constant AFFIX_DOUBLE_EDGED = 1;
-    uint8 public constant AFFIX_NEGATIVE = 2;
 
     // ---- 种族三层加权（千分比）----
     uint16[3] public raceTierWeights = [850, 120, 30]; // 常见/略稀有/最稀有
-    // ---- 词条方向加权（千分比）----
-    uint16[3] public affixDirectionWeights = [200, 680, 120]; // 正面/双刃/负面
 
     struct Character {
         uint8 classId;
         uint8 race;
         uint16 level; // 等级（满级 MAX_LEVEL=300；能力值 = 1 级基准 × level 线性插值）
-        uint16[4] affixIds; // 词条（≤2 条，数组留余量）
-        uint8 affixCount;
+        uint16[4] affixIds; // 四项能力词条模板 id
+        uint8[4] affixTiers; // 每条能力词条的 1~10 档
+        uint8[4] resourceTypes; // 已抽到的资源效果（RESOURCE_*）
+        uint8 resourceCount; // 资源词条数量（0~4）
         uint32[8] skillIds; // 职业技 + 种族技 + 自选技
         uint8 skillCount;
         uint64 hp;
@@ -61,21 +70,21 @@ contract CharacterRegistry is ERC721, Ownable {
         uint64 attack;
         uint64 magic;
         uint64 speed;
-        uint16 manaDiscount; // 默诵
-        uint16 apDiscount; // 战术素养：自身技能 AP 消耗折扣
-        uint16 apBonus; // 好战本能
-        int16 manaGainBonus; // 聚魔/好战本能/散魔：房间魔素池每回合增量修正（可为负）
-        uint16 apCapBonus; // 斗魂：个人 AP 上限加成
+        uint16[4] abilityBonuses; // HP/物攻/魔攻/敏捷词条最终非负修正（千分比）
+        uint16 manaDiscount; // 魔素消耗折扣
+        uint16 apDiscount; // AP 消耗折扣
+        uint16 apBonus; // 每回合 AP 产量加成
+        int16 manaGainBonus; // 每回合魔素产量加成
         uint32 roomId; // 所在房间（0 = 不在房间）
     }
     mapping(uint256 => Character) public characters;
     uint256 public nextTokenId = 1;
 
     struct ClassDef {
-        int64 baseHpPct; // 职业 HP 加成（千分比**增量**，与种族/词条同约定：1000+mod 为乘数；守卫 +350 = ×1.35）
-        int64 baseAttackPct; // 职业物攻加成（千分比增量，相对 BASE_ATTACK：剑士 +2000 = ×3.0）
-        int64 baseMagicPct; // 职业魔攻加成（千分比增量，相对 BASE_MAGIC）
-        int64 baseSpeedPct; // 职业敏捷加成（千分比增量，相对 BASE_SPEED）
+        int64 baseHpPct; // 职业 HP 加成（千分比**增量**，与种族同约定：1000+mod 为乘数）
+        int64 baseAttackPct; // 职业物攻加成（千分比增量）
+        int64 baseMagicPct; // 职业魔攻加成（千分比增量）
+        int64 baseSpeedPct; // 职业敏捷加成（千分比增量）
         uint8 skillSlots; // 职业额外自选槽（无职业 3 / 职业 1）
         bool exists; // 注册标记（职业增量可为 0，用 exists 区分未注册）
     }
@@ -93,20 +102,15 @@ contract CharacterRegistry is ERC721, Ownable {
     mapping(uint8 => RaceDef) public raceDefs;
     uint8 public raceCount;
 
+    /// @dev 一个模板对应一种能力；具体数值由 10 档表承载，第 1 档允许为 0（无加成）。
     struct AffixTemplate {
-        uint8 direction; // AFFIX_*（正面/双刃/负面）
-        uint8 resourceType; // 0=非资源流 1=资源流（魔素/AP 类，受 ≤2 条上限约束）
-        uint16 manaDiscount; // 默诵：魔素折扣
-        uint16 apDiscount; // 战术素养：AP 消耗折扣
-        uint16 apBonus; // 好战本能：每回合 AP 加成
-        int16 manaGainBonus; // 聚魔/好战本能/散魔：房间魔素池每回合增量修正（可为负）
-        uint16 apCapBonus; // 斗魂：个人 AP 上限加成
-        int64[3] statMods; // 攻击/魔法/速度 修正（千分比，可为负）
-        int64 hpMod; // HP 修正（千分比）
-        uint16[5] tierWeights; // 档位 1~5 权重（千分比）
+        uint8 statType; // ABILITY_HP / ABILITY_ATTACK / ABILITY_MAGIC / ABILITY_SPEED
+        bool exists;
+        uint16[10] tierWeights; // 档位 1~10 权重（千分比），高档应更低
+        uint16[10] tierValues; // 档位 1~10 的加成值，上限 MAX_AFFIX_MOD
     }
     mapping(uint16 => AffixTemplate) public affixTemplates;
-    uint16 public affixCount;
+    uint16[4] public abilityAffixTemplateIds; // 按 ABILITY_* 索引
 
     /// @notice 首角色免费重掷计数器（playerId => 剩余次数；非道具、不可转移）
     mapping(address => uint8) public freeRerolls;
@@ -118,7 +122,7 @@ contract CharacterRegistry is ERC721, Ownable {
 
     event CharacterCreated(uint256 indexed tokenId, address indexed owner, uint8 classId, uint8 race, uint16 level);
     event CharacterRerolled(uint256 indexed tokenId, address indexed owner);
-    event AffixTemplateRegistered(uint16 indexed id, uint8 direction);
+    event AffixTemplateRegistered(uint16 indexed id, uint8 indexed statType);
     event ClassRegistered(uint8 indexed id);
     event RaceRegistered(uint8 indexed id);
 
@@ -149,29 +153,39 @@ contract CharacterRegistry is ERC721, Ownable {
 
     function registerAffixTemplate(uint16 id, AffixTemplate calldata t) external onlyOwner {
         require(id > 0 && id <= MAX_AFFIXES, "CR: bad affixId");
-        require(t.direction <= 2, "CR: bad direction");
-        require(affixTemplates[id].direction == 0 && affixTemplates[id].statMods[0] == 0, "CR: affix exists");
+        require(!affixTemplates[id].exists, "CR: affix exists");
+        require(t.statType <= ABILITY_SPEED, "CR: bad stat type");
+
+        uint256 totalWeight;
+        for (uint8 i; i < MAX_AFFIX_TIER; ++i) {
+            totalWeight += t.tierWeights[i];
+            if (i > 0) require(t.tierValues[i] >= t.tierValues[i - 1], "CR: tier values not ordered");
+            require(t.tierValues[i] <= MAX_AFFIX_MOD, "CR: ability bonus too high");
+        }
+        require(totalWeight > 0, "CR: empty tier weights");
+
         affixTemplates[id] = t;
-        if (id > affixCount) affixCount = id;
-        emit AffixTemplateRegistered(id, t.direction);
+        affixTemplates[id].exists = true;
+        require(abilityAffixTemplateIds[t.statType] == 0, "CR: stat template exists");
+        abilityAffixTemplateIds[t.statType] = id;
+        emit AffixTemplateRegistered(id, t.statType);
     }
 
     function setRaceTierWeights(uint16[3] calldata w) external onlyOwner {
         raceTierWeights = w;
     }
 
-    function setAffixDirectionWeights(uint16[3] calldata w) external onlyOwner {
-        affixDirectionWeights = w;
-    }
-
     // ---- 创建 ----
-    /// @notice 正常创建：种族/词条全部走 AFFIX RNG；自选技由玩家指定
+    /// @notice 正常创建：种族、四项能力档位、资源词条数量与种类全部走 AFFIX RNG。
     function createCharacter(uint8 classId, uint32[] calldata skillIds) external returns (uint256 tokenId) {
         require(classDefs[classId].exists, "CR: unknown class");
         uint8 race = _rollRace(tokenId);
         uint16[4] memory affixIds;
-        uint8 affixCount_ = _rollAffixes(affixIds);
-        tokenId = _mintCharacter(msg.sender, classId, race, affixIds, affixCount_, skillIds);
+        uint8[4] memory affixTiers;
+        uint8[4] memory resourceTypes;
+        uint8 resourceCount_ = _rollResourceAffixes(resourceTypes);
+        _rollAbilityAffixes(affixIds, affixTiers);
+        tokenId = _mintCharacter(msg.sender, classId, race, affixIds, affixTiers, resourceTypes, resourceCount_, skillIds);
         if (!firstRerollClaimed[msg.sender]) {
             firstRerollClaimed[msg.sender] = true;
             freeRerolls[msg.sender] = 3; // 首角色福利（一次性）
@@ -179,7 +193,7 @@ contract CharacterRegistry is ERC721, Ownable {
         emit CharacterCreated(tokenId, msg.sender, classId, race, characters[tokenId].level);
     }
 
-    /// @notice GM 测试入口：指定全属性，绕过 RNG/费用/限额/首角色判定（技术设计 §6.7）
+    /// @notice GM 测试入口：显式指定能力词条（按最高档计算），绕过 RNG/费用/限额/首角色判定（技术设计 §6.7）
     function gmMintCharacter(address to, uint8 classId, uint8 race, uint16[] calldata affixIds_, uint32[] calldata skillIds)
         external
         onlyOwner
@@ -188,11 +202,16 @@ contract CharacterRegistry is ERC721, Ownable {
         require(gmEnabled, "CR: GM disabled");
         require(classDefs[classId].exists, "CR: unknown class");
         require(race < raceCount, "CR: unknown race");
+        require(affixIds_.length <= 4, "CR: too many affixes");
         uint16[4] memory affixIds;
-        uint8 n = uint8(affixIds_.length);
-        require(n <= MAX_AFFIX_PER_CHAR, "CR: too many affixes");
-        for (uint8 i; i < n; ++i) affixIds[i] = affixIds_[i];
-        tokenId = _mintCharacter(to, classId, race, affixIds, n, skillIds);
+        uint8[4] memory affixTiers;
+        for (uint8 i; i < affixIds_.length; ++i) {
+            require(affixTemplates[affixIds_[i]].exists, "CR: unknown affix");
+            affixIds[i] = affixIds_[i];
+            affixTiers[i] = MAX_AFFIX_TIER;
+        }
+        uint8[4] memory noResources;
+        tokenId = _mintCharacter(to, classId, race, affixIds, affixTiers, noResources, 0, skillIds);
         emit CharacterCreated(tokenId, to, classId, race, characters[tokenId].level);
     }
 
@@ -202,14 +221,20 @@ contract CharacterRegistry is ERC721, Ownable {
         require(level >= 1 && level <= MAX_LEVEL, "CR: bad level");
         Character storage c = characters[tokenId];
         c.level = level;
-        _computeStats(c, c.classId, c.race, c.affixIds, c.affixCount);
+        _computeStats(c, c.classId, c.race);
         c.hp = c.maxHp;
     }
 
-    function _mintCharacter(address to, uint8 classId, uint8 race, uint16[4] memory affixIds, uint8 affixCount_, uint32[] calldata skillIds)
-        private
-        returns (uint256 tokenId)
-    {
+    function _mintCharacter(
+        address to,
+        uint8 classId,
+        uint8 race,
+        uint16[4] memory affixIds,
+        uint8[4] memory affixTiers,
+        uint8[4] memory resourceTypes,
+        uint8 resourceCount_,
+        uint32[] calldata skillIds
+    ) private returns (uint256 tokenId) {
         require(skillIds.length <= MAX_SKILL_PER_CHAR, "CR: too many skills");
         tokenId = nextTokenId++;
         _safeMint(to, tokenId);
@@ -217,52 +242,53 @@ contract CharacterRegistry is ERC721, Ownable {
         c.classId = classId;
         c.race = race;
         c.level = 1;
-        c.affixCount = affixCount_;
-        for (uint8 i; i < affixCount_; ++i) c.affixIds[i] = affixIds[i];
-        _computeStats(c, classId, race, affixIds, affixCount_);
+        for (uint8 i; i < 4; ++i) {
+            c.affixIds[i] = affixIds[i];
+            c.affixTiers[i] = affixTiers[i];
+            c.resourceTypes[i] = resourceTypes[i];
+        }
+        c.resourceCount = resourceCount_;
+        _computeStats(c, classId, race);
         _mergeSkills(c, classId, race, skillIds);
         c.hp = c.maxHp;
     }
 
-    function _computeStats(Character storage c, uint8 classId, uint8 race, uint16[4] memory affixIds, uint8 affixCount_) private {
+    /// @dev 属性从已存储的词条字段重算（幂等：transfer 重置等级时复用同一函数）。
+    function _computeStats(Character storage c, uint8 classId, uint8 race) private {
         ClassDef memory def = classDefs[classId];
         RaceDef memory rd = raceDefs[race];
-        // 种族/职业/词条的加成百分比线性相加（千分比）；词条单属性修正钳制 ≤ MAX_AFFIX_MOD（最多 ×3）
+        // 职业/种族仍可有正负修正；词条能力修正保证非负（单档 0~2000‰，多条叠加不设个人封顶）。
         int64[3] memory mods = [int64(rd.statMods[0]), int64(rd.statMods[1]), int64(rd.statMods[2])];
         int64 hpMod = int64(rd.hpMod);
-        int64[3] memory affixMods;
-        int64 affixHpMod;
-        // 资源流字段清零（幂等：transfer 重置等级时重算，避免重复累加）
+
+        for (uint8 j; j < 4; ++j) c.abilityBonuses[j] = 0;
         c.manaDiscount = 0;
         c.apDiscount = 0;
         c.apBonus = 0;
         c.manaGainBonus = 0;
-        c.apCapBonus = 0;
-        uint8 resourceCount;
-        for (uint8 i; i < affixCount_; ++i) {
-            AffixTemplate memory t = affixTemplates[affixIds[i]];
-            for (uint8 j; j < 3; ++j) affixMods[j] += t.statMods[j];
-            affixHpMod += t.hpMod;
-            if (t.resourceType != 0) {
-                c.manaDiscount += t.manaDiscount;
-                c.apDiscount += t.apDiscount;
-                c.apBonus += t.apBonus;
-                c.manaGainBonus += t.manaGainBonus;
-                c.apCapBonus += t.apCapBonus;
-                resourceCount++;
-            }
-        }
-        // 资源流词条 ≤2 条（创建时已保证，此处冗余防御）
-        require(resourceCount <= MAX_AFFIX_PER_CHAR, "CR: resource affix cap");
-        for (uint8 j; j < 3; ++j) {
-            if (affixMods[j] > MAX_AFFIX_MOD) affixMods[j] = MAX_AFFIX_MOD;
-            mods[j] += affixMods[j];
-        }
-        if (affixHpMod > MAX_AFFIX_MOD) affixHpMod = MAX_AFFIX_MOD;
-        hpMod += affixHpMod;
 
-        // 等级公式（先乘后除，防中间溢出）：总加成 = 职业 + 种族 + 词条（千分比线性相加）
-        // 假定的满级能力值 = 基准 × 总加成 /1000 × MAX_LEVEL；当前 = 满级 × level / MAX_LEVEL（线性插值）
+        for (uint8 i; i < 4; ++i) {
+            uint8 tier = c.affixTiers[i];
+            if (tier == 0) continue; // GM 铸造未指定的槽位无词条
+            require(tier <= MAX_AFFIX_TIER, "CR: bad affix tier");
+            AffixTemplate memory t = affixTemplates[c.affixIds[i]];
+            require(t.exists, "CR: unknown affix");
+            // 同一能力多条词条时线性叠加，不设个人封顶
+            c.abilityBonuses[t.statType] += t.tierValues[tier - 1];
+        }
+        for (uint8 i; i < c.resourceCount; ++i) {
+            if (c.resourceTypes[i] == RESOURCE_AP_COST) c.apDiscount += 1;
+            else if (c.resourceTypes[i] == RESOURCE_AP_PRODUCTION) c.apBonus += 1;
+            else if (c.resourceTypes[i] == RESOURCE_MANA_COST) c.manaDiscount += 1;
+            else c.manaGainBonus += 1;
+        }
+
+        hpMod += int64(int256(uint256(c.abilityBonuses[ABILITY_HP])));
+        mods[0] += int64(int256(uint256(c.abilityBonuses[ABILITY_ATTACK])));
+        mods[1] += int64(int256(uint256(c.abilityBonuses[ABILITY_MAGIC])));
+        mods[2] += int64(int256(uint256(c.abilityBonuses[ABILITY_SPEED])));
+
+        // 等级公式（先乘后除）：总加成 = 职业 + 种族 + 词条（千分比线性相加）
         c.maxHp = _calcStat(BASE_HP, def.baseHpPct + hpMod, c.level);
         c.attack = _calcStat(BASE_ATTACK, def.baseAttackPct + mods[0], c.level);
         c.magic = _calcStat(BASE_MAGIC, def.baseMagicPct + mods[1], c.level);
@@ -272,16 +298,14 @@ contract CharacterRegistry is ERC721, Ownable {
     function _calcStat(uint64 base, int64 mod, uint16 level) internal pure returns (uint64) {
         int256 totalPct = 1000 + int256(mod);
         if (totalPct <= 0) return 0;
-        // 满级能力值 = 基准 × (1000+总加成) / 1000 × MAX_LEVEL（先乘后除）
         uint256 full = uint256(base) * uint256(totalPct) * uint256(MAX_LEVEL) / 1000;
-        // 当前等级 = 满级 × level / MAX_LEVEL（线性插值）
         uint256 v = full * uint256(level) / uint256(MAX_LEVEL);
         return uint64(v);
     }
 
     function _mergeSkills(Character storage c, uint8 classId, uint8 race, uint32[] calldata skillIds) private {
         uint8 n = 0;
-        // 自选技校验：仅允许公共池技与本职业技；跨职业职业技拒绝（红线 op 仅本职业可用）；
+        // 自选技校验：仅允许公共池技与本职业技；跨职业职业技拒绝；
         // 种族技一律拒绝（随种族自动并入，手动传入会重复并破坏种族绑定）
         for (uint256 i; i < skillIds.length; ++i) {
             uint32 sid = skillIds[i];
@@ -344,53 +368,34 @@ contract CharacterRegistry is ERC721, Ownable {
         return sub < 50 ? RACE_ANGEL : RACE_DEMON;
     }
 
-    function _rollAffixes(uint16[4] memory out) private returns (uint8 count) {
-        uint8 resourceCount;
-        for (uint8 slot; slot < MAX_AFFIX_PER_CHAR; ++slot) {
-            uint8 direction = _rollDirection(slot);
-            uint16 affixId = _pickAffix(direction, slot);
-            // 资源流词条 ≤2 条：已满则在同方向内重掷其他词条
-            if (affixTemplates[affixId].resourceType != 0) {
-                if (resourceCount >= MAX_AFFIX_PER_CHAR) {
-                    affixId = _pickAffixNonResource(direction, slot);
-                } else {
-                    resourceCount++;
-                }
-            }
-            out[count++] = affixId;
+    /// @notice 四项能力各自独立抽取一条模板的档位（1~10，高档更稀有；第 1 档可为 0 加成）。
+    function _rollAbilityAffixes(uint16[4] memory outIds, uint8[4] memory outTiers) private {
+        for (uint8 stat; stat < 4; ++stat) {
+            uint16 templateId = abilityAffixTemplateIds[stat];
+            require(templateId != 0, "CR: missing ability template");
+            outIds[stat] = templateId;
+            outTiers[stat] = _rollTier(templateId, keccak256(abi.encodePacked("ability", stat)));
         }
     }
 
-    function _rollDirection(uint8 slot) private returns (uint8) {
-        uint16[3] memory w = affixDirectionWeights;
-        uint256 total = uint256(w[0]) + uint256(w[1]) + uint256(w[2]);
-        uint256 roll = rng.next(CATEGORY_AFFIX, keccak256(abi.encodePacked("dir", slot))) % total;
-        if (roll < w[0]) return AFFIX_POSITIVE;
-        if (roll < w[0] + w[1]) return AFFIX_DOUBLE_EDGED;
-        return AFFIX_NEGATIVE;
+    /// @notice 先抽资源词条数量（0~MAX_RESOURCE_AFFIX_PER_CHAR 均匀），再为每条独立抽一种资源效果。
+    function _rollResourceAffixes(uint8[4] memory outTypes) private returns (uint8 count) {
+        count = uint8(rng.next(CATEGORY_AFFIX, keccak256("resourceCount")) % (MAX_RESOURCE_AFFIX_PER_CHAR + 1));
+        for (uint8 slot; slot < count; ++slot) {
+            outTypes[slot] = uint8(rng.next(CATEGORY_AFFIX, keccak256(abi.encodePacked("resourceType", slot))) % 4);
+        }
     }
 
-    function _pickAffix(uint8 direction, uint8 slot) private returns (uint16) {
-        // 收集该方向全部词条，按权重抽取
-        uint16[] memory pool = new uint16[](affixCount);
-        uint8 n;
-        for (uint16 i = 1; i <= affixCount; ++i) {
-            if (affixTemplates[i].direction == direction) pool[n++] = i;
+    function _rollTier(uint16 templateId, bytes32 context) private returns (uint8 tier) {
+        AffixTemplate memory t = affixTemplates[templateId];
+        uint256 total;
+        for (uint8 i; i < MAX_AFFIX_TIER; ++i) total += t.tierWeights[i];
+        uint256 roll = rng.next(CATEGORY_AFFIX, context) % total;
+        for (uint8 i; i < MAX_AFFIX_TIER; ++i) {
+            if (roll < t.tierWeights[i]) return i + 1;
+            roll -= t.tierWeights[i];
         }
-        require(n > 0, "CR: no affix in direction");
-        uint256 roll = rng.next(CATEGORY_AFFIX, keccak256(abi.encodePacked("affix", slot))) % n;
-        return pool[roll];
-    }
-
-    function _pickAffixNonResource(uint8 direction, uint8 slot) private returns (uint16) {
-        uint16[] memory pool = new uint16[](affixCount);
-        uint8 n;
-        for (uint16 i = 1; i <= affixCount; ++i) {
-            if (affixTemplates[i].direction == direction && affixTemplates[i].resourceType == 0) pool[n++] = i;
-        }
-        require(n > 0, "CR: no non-resource affix");
-        uint256 roll = rng.next(CATEGORY_AFFIX, keccak256(abi.encodePacked("affixNR", slot))) % n;
-        return pool[roll];
+        return MAX_AFFIX_TIER;
     }
 
     // ---- 重掷（首角色免费计数器；付费路径待道具层落地）----
@@ -411,9 +416,9 @@ contract CharacterRegistry is ERC721, Ownable {
         if (from != address(0) && to != address(0)) {
             Character storage c = characters[tokenId];
             require(c.roomId == 0, "CR: in room");
-            // 所有权变更 → 等级重置为 1，属性按等级 1 重算（幂等：_computeStats 先清零资源流字段）
+            // 所有权变更 → 等级重置为 1，属性按等级 1 重算（幂等：_computeStats 先清零词条聚合字段）
             c.level = 1;
-            _computeStats(c, c.classId, c.race, c.affixIds, c.affixCount);
+            _computeStats(c, c.classId, c.race);
             c.hp = c.maxHp;
         }
         return super._update(to, tokenId, auth);

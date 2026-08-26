@@ -18,7 +18,7 @@ library CombatEndLib {
     event ManaChanged(uint32 indexed roomId, int32 delta, uint32 pool);
 
     function regenMana(CombatTypes.Ctx memory ctx, CombatTypes.Room storage r) external {
-        // int32 算术：manaGainBonus 可为负（散魔/好战本能），避免 uint32 下溢回退
+        // int32 算术：魔素产量加成为非负小值，逐成员累加避免 uint32 溢出
         int32 gain = int32(uint32(r.manaPerTurn));
         for (uint8 i; i < r.memberCount; ++i) {
             if (r.members[i].alive) gain += int32(r.members[i].manaGainBonus);

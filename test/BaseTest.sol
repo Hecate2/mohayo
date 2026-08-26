@@ -124,34 +124,22 @@ contract BaseTest is Test {
         cr.registerRace(7, CharacterRegistry.RaceDef({statMods: [int16(300), -100, 200], hpMod: int16(-150), raceSkillId: skillSoulDrain, raceSkillId2: skillAbyssWhisper, selfSelectBonus: 0, exists: true})); // 恶魔：物攻+30%/敏捷+20%/魔攻-10%/生命-15%
     }
 
-    // ---- 词条模板（content-design.md §6.2：18 条可实现；方向 × 档位；资源流 ≤2 条）----
+    // ---- 词条模板（四种能力词条；资源效果固定四种、由引擎内置）----
     function _seedAffixes() internal {
-        uint16[5] memory tier = [uint16(450), 300, 160, 75, 15]; // 档位 1~5 长尾（≈45/30/16/7.5/1.5%）
-        // 正面（5）：纯增益
-        cr.registerAffixTemplate(1, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(100), 0, 0], hpMod: 0, tierWeights: tier})); // 巨力：物攻↑
-        cr.registerAffixTemplate(2, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 100, 0], hpMod: 0, tierWeights: tier})); // 魔性：魔攻↑
-        cr.registerAffixTemplate(3, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 150, tierWeights: tier})); // 铁躯：生命↑
-        cr.registerAffixTemplate(4, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 100], hpMod: 0, tierWeights: tier})); // 迅捷：敏捷↑
-        cr.registerAffixTemplate(5, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 1, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 1, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 0, tierWeights: tier})); // 聚魔：房间魔素池每回合 +1
-        // 双刃（9）：一好一坏
-        cr.registerAffixTemplate(6, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 300, 0], hpMod: -100, tierWeights: tier})); // 玻璃法杖：魔攻↑/生命↓
-        cr.registerAffixTemplate(7, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(-50), 0, 200], hpMod: 0, tierWeights: tier})); // 轻装突袭：敏捷↑/物攻↓
-        cr.registerAffixTemplate(8, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(250), -150, 0], hpMod: 0, tierWeights: tier})); // 蛮力觉醒：物攻↑/魔攻↓
-        cr.registerAffixTemplate(9, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(-150), 250, 0], hpMod: 0, tierWeights: tier})); // 贤者血脉：魔攻↑/物攻↓
-        cr.registerAffixTemplate(10, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, -100], hpMod: 200, tierWeights: tier})); // 磐石骨架：生命↑/敏捷↓
-        cr.registerAffixTemplate(11, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 200], hpMod: -100, tierWeights: tier})); // 疾风之躯：敏捷↑/生命↓
-        cr.registerAffixTemplate(12, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 1, manaDiscount: 1, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, -100], hpMod: 0, tierWeights: tier})); // 默诵：魔素消耗-1/敏捷↓
-        cr.registerAffixTemplate(13, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 1, manaDiscount: 0, apDiscount: 0, apBonus: 1, manaGainBonus: -1, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 0, tierWeights: tier})); // 好战本能：AP+1/池-1
-        cr.registerAffixTemplate(14, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 1, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 5, statMods: [int64(0), -100, 0], hpMod: 0, tierWeights: tier})); // 斗魂：AP上限+5/魔攻↓
-        // 负面（4）：纯减益
-        cr.registerAffixTemplate(15, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: -100, tierWeights: tier})); // 脆弱：生命↓
-        cr.registerAffixTemplate(16, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, -100], hpMod: 0, tierWeights: tier})); // 迟钝：敏捷↓
-        cr.registerAffixTemplate(17, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 1, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: -1, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 0, tierWeights: tier})); // 散魔：房间魔素池每回合 -1
-        cr.registerAffixTemplate(18, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), -100, 0], hpMod: 0, tierWeights: tier})); // 魔素蚀体：魔攻↓
-        // 正面（新增 3 条资源流，纯增益；受资源流 ≤2 条上限约束）
-        cr.registerAffixTemplate(19, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 1, manaDiscount: 1, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 0, tierWeights: tier})); // 冥想：自身魔素消耗-1
-        cr.registerAffixTemplate(20, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 1, manaDiscount: 0, apDiscount: 1, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 0, tierWeights: tier})); // 战术素养：自身AP消耗-1
-        cr.registerAffixTemplate(21, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 1, manaDiscount: 0, apDiscount: 0, apBonus: 1, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 0, tierWeights: tier})); // 战意：自身每回合AP+1
+        uint16[10] memory weights = [uint16(400), 220, 140, 90, 60, 35, 25, 15, 10, 5];
+        uint16[10] memory values = [uint16(0), 100, 250, 450, 700, 950, 1200, 1450, 1700, 2000];
+
+        _registerAffix(1, 0, weights, values); // 生命
+        _registerAffix(2, 1, weights, values); // 物攻
+        _registerAffix(3, 2, weights, values); // 魔攻
+        _registerAffix(4, 3, weights, values); // 敏捷
+    }
+
+    function _registerAffix(uint16 id, uint8 statType, uint16[10] memory weights, uint16[10] memory values) internal {
+        cr.registerAffixTemplate(
+            id,
+            CharacterRegistry.AffixTemplate({statType: statType, exists: false, tierWeights: weights, tierValues: values})
+        );
     }
 
     // ---- 技能 ----

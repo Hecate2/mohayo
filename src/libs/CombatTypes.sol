@@ -14,7 +14,7 @@ library CombatTypes {
         CharacterRegistry characterRegistry;
         Economy economy;
         uint16 minHitRate;
-        uint16 apCapBase; // 全局基础 AP 上限（个人上限 = apCapBase + apCapBonus）
+        uint16 apCapBase; // 全局 AP 上限（词条不再提供个人上限加成）
     }
     // ---- Effect op 枚举 ----
     uint8 public constant OP_STUN = 1;
@@ -87,11 +87,10 @@ library CombatTypes {
         uint64 magic;
         uint64 speed;
         uint16 ap;
-        uint16 manaDiscount;
-        uint16 apDiscount;
-        uint16 apBonus;
-        int16 manaGainBonus;
-        uint16 apCapBonus;
+        uint16 manaDiscount; // 词条：魔素消耗折扣
+        uint16 apDiscount; // 词条：AP 消耗折扣
+        uint16 apBonus; // 词条：每回合 AP 产量加成
+        int16 manaGainBonus; // 词条：每回合魔素产量加成
         uint8 classId;
         ActiveEffect[6] effects;
         uint8 effectCount;

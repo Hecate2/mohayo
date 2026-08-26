@@ -69,7 +69,7 @@ contract CombatEngine is Ownable {
     /// @notice 全局命中下限（千分比，官方可调）
     uint16 public minHitRate = 50;
 
-    /// @notice 全局基础 AP 上限（个人上限 = apCapBase + 角色 apCapBonus；官方可调）
+    /// @notice 全局 AP 上限（词条不再提供个人上限加成；官方可调）
     /// @dev 数量级（用户定案）：大技能 AP 消耗 10（斩铁剑）→ 上限 = 2×10 + 余量 2 = 22
     uint16 public apCapBase = 22;
 
@@ -199,7 +199,6 @@ contract CombatEngine is Ownable {
         m.apDiscount = c.apDiscount;
         m.apBonus = c.apBonus;
         m.manaGainBonus = c.manaGainBonus;
-        m.apCapBonus = c.apCapBonus;
         m.classId = c.classId;
         m.alive = true;
         r.memberCount++;

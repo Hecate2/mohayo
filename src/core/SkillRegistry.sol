@@ -56,11 +56,6 @@ contract SkillRegistry is Ownable {
     uint8 public constant SCOPE_ALL_ALLY = 2;
     uint8 public constant SCOPE_ALL_ENEMY = 3;
 
-    // ---- 词条方向（CharacterRegistry 复用）----
-    uint8 public constant AFFIX_POSITIVE = 0;
-    uint8 public constant AFFIX_DOUBLE_EDGED = 1;
-    uint8 public constant AFFIX_NEGATIVE = 2;
-
     // ---- 种族（CharacterRegistry 复用）----
     uint8 public constant RACE_HUMAN = 0;
     uint8 public constant RACE_ORC = 1;

@@ -154,11 +154,10 @@ library CombatLib {
                 if (m.hp == 0) onMemberDeath(ctx, r, u);
                 if (!m.alive) continue;
                 if (isStunned(m.effects, m.effectCount)) continue;
-                // 好战本能：每回合 AP 加成（行动前结算，受个人上限钳制；被控时暂停）
+                // 资源词条：每回合 AP 产量加成（行动前结算，受全局上限钳制；被控时暂停）
                 if (m.apBonus > 0) {
                     m.ap += m.apBonus;
-                    uint16 cap = ctx.apCapBase + m.apCapBonus;
-                    if (m.ap > cap) m.ap = cap;
+                    if (m.ap > ctx.apCapBase) m.ap = ctx.apCapBase;
                 }
                 if (m.planLen == 0) continue;
                 uint16 skillId = m.plan[m.planStart];
