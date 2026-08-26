@@ -57,6 +57,16 @@ contract Seed is Script {
         uint32 skillIdle = _registerSkill(sr, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0, _emptyEffects(), 0);
         // 鹰眼：职业绑定（火枪手 classId=3）
         _registerClassSkill(sr, 3, 3, 5, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0, _guarNextEffect(), 1);
+        // 一闪：公共自选池（原剑士职业技移入）
+        uint32 skillFlash = _registerSkill(sr, 1, 5, 0, 0, 0, 0, 0, 1, 0, 0, 350, 350, 650, 0, _emptyEffects(), 0);
+        // 魔法剑：剑士职业技（魔攻输出 + 少量魔素 + 少量 AP）
+        uint32 skillMagicSword = _registerClassSkill(sr, 1, 2, 0, 10, 0, 0, 5, 0, 1, 0, 0, 200, 0, 1000, 0, _emptyEffects(), 0);
+        // 左轮弹雨：火枪手职业技（铅弹 ammoId=1，命中后少量 AP）
+        uint32 skillRevolverRain = _registerClassSkill(sr, 3, 1, 0, 10, 1, 3, 0, 0, 3, 0, 3, 60, 0, 700, 0, _emptyEffects(), 0);
+        // 龙击弹：火枪手职业技（龙击弹 ammoId=2，命中后注入少量魔素）
+        uint32 skillDragonBullet = _registerClassSkill(sr, 3, 1, 0, 0, 2, 1, 0, 0, 1, 0, 0, 300, 0, 1000, 0, _dragonBulletEffects(), 1);
+        // 爆裂魔法：黑魔法师职业技（耗光魔素 + 固有绝对命中 + 自晕）
+        uint32 skillBurstMagic = _registerClassSkill(sr, 4, 2, 0, 0, 0, 0, 0, 0, 4, 0, 0, 500, 0, 1000, 3, _burstMagicEffects(), 1);
 
         // ---- 种族（content-design.md §3：常见四 + 略稀有二 + 最稀有二，含种族技）----
         cr.registerRace(0, CharacterRegistry.RaceDef({statMods: [int16(0), 0, 0], hpMod: int16(0), raceSkillId: 0, raceSkillId2: 0, selfSelectBonus: 2, exists: true})); // 人类：基准，自选 +2
@@ -71,26 +81,30 @@ contract Seed is Script {
         // ---- 词条模板（content-design.md §6.2：18 条可实现；方向 × 档位；资源流 ≤2 条）----
         uint16[5] memory tier = [uint16(450), 300, 160, 75, 15]; // 档位 1~5 长尾（≈45/30/16/7.5/1.5%）
         // 正面（5）：纯增益
-        cr.registerAffixTemplate(1, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(100), 0, 0], hpMod: 0, tierWeights: tier})); // 巨力：物攻↑
-        cr.registerAffixTemplate(2, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 100, 0], hpMod: 0, tierWeights: tier})); // 魔性：魔攻↑
-        cr.registerAffixTemplate(3, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 150, tierWeights: tier})); // 铁躯：生命↑
-        cr.registerAffixTemplate(4, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 100], hpMod: 0, tierWeights: tier})); // 迅捷：敏捷↑
-        cr.registerAffixTemplate(5, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 1, manaDiscount: 0, apBonus: 0, manaGainBonus: 1, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 0, tierWeights: tier})); // 聚魔：房间魔素池每回合 +1
+        cr.registerAffixTemplate(1, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(100), 0, 0], hpMod: 0, tierWeights: tier})); // 巨力：物攻↑
+        cr.registerAffixTemplate(2, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 100, 0], hpMod: 0, tierWeights: tier})); // 魔性：魔攻↑
+        cr.registerAffixTemplate(3, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 150, tierWeights: tier})); // 铁躯：生命↑
+        cr.registerAffixTemplate(4, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 100], hpMod: 0, tierWeights: tier})); // 迅捷：敏捷↑
+        cr.registerAffixTemplate(5, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 1, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 1, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 0, tierWeights: tier})); // 聚魔：房间魔素池每回合 +1
         // 双刃（9）：一好一坏
-        cr.registerAffixTemplate(6, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 300, 0], hpMod: -100, tierWeights: tier})); // 玻璃法杖：魔攻↑/生命↓
-        cr.registerAffixTemplate(7, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(-50), 0, 200], hpMod: 0, tierWeights: tier})); // 轻装突袭：敏捷↑/物攻↓
-        cr.registerAffixTemplate(8, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(250), -150, 0], hpMod: 0, tierWeights: tier})); // 蛮力觉醒：物攻↑/魔攻↓
-        cr.registerAffixTemplate(9, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(-150), 250, 0], hpMod: 0, tierWeights: tier})); // 贤者血脉：魔攻↑/物攻↓
-        cr.registerAffixTemplate(10, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, -100], hpMod: 200, tierWeights: tier})); // 磐石骨架：生命↑/敏捷↓
-        cr.registerAffixTemplate(11, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 200], hpMod: -100, tierWeights: tier})); // 疾风之躯：敏捷↑/生命↓
-        cr.registerAffixTemplate(12, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 1, manaDiscount: 1, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, -100], hpMod: 0, tierWeights: tier})); // 默诵：魔素消耗-1/敏捷↓
-        cr.registerAffixTemplate(13, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 1, manaDiscount: 0, apBonus: 1, manaGainBonus: -1, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 0, tierWeights: tier})); // 好战本能：AP+1/池-1
-        cr.registerAffixTemplate(14, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 1, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 5, statMods: [int64(0), -100, 0], hpMod: 0, tierWeights: tier})); // 斗魂：AP上限+5/魔攻↓
+        cr.registerAffixTemplate(6, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 300, 0], hpMod: -100, tierWeights: tier})); // 玻璃法杖：魔攻↑/生命↓
+        cr.registerAffixTemplate(7, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(-50), 0, 200], hpMod: 0, tierWeights: tier})); // 轻装突袭：敏捷↑/物攻↓
+        cr.registerAffixTemplate(8, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(250), -150, 0], hpMod: 0, tierWeights: tier})); // 蛮力觉醒：物攻↑/魔攻↓
+        cr.registerAffixTemplate(9, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(-150), 250, 0], hpMod: 0, tierWeights: tier})); // 贤者血脉：魔攻↑/物攻↓
+        cr.registerAffixTemplate(10, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, -100], hpMod: 200, tierWeights: tier})); // 磐石骨架：生命↑/敏捷↓
+        cr.registerAffixTemplate(11, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 200], hpMod: -100, tierWeights: tier})); // 疾风之躯：敏捷↑/生命↓
+        cr.registerAffixTemplate(12, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 1, manaDiscount: 1, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, -100], hpMod: 0, tierWeights: tier})); // 默诵：魔素消耗-1/敏捷↓
+        cr.registerAffixTemplate(13, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 1, manaDiscount: 0, apDiscount: 0, apBonus: 1, manaGainBonus: -1, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 0, tierWeights: tier})); // 好战本能：AP+1/池-1
+        cr.registerAffixTemplate(14, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 1, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 5, statMods: [int64(0), -100, 0], hpMod: 0, tierWeights: tier})); // 斗魂：AP上限+5/魔攻↓
         // 负面（4）：纯减益
-        cr.registerAffixTemplate(15, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: -100, tierWeights: tier})); // 脆弱：生命↓
-        cr.registerAffixTemplate(16, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, -100], hpMod: 0, tierWeights: tier})); // 迟钝：敏捷↓
-        cr.registerAffixTemplate(17, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 1, manaDiscount: 0, apBonus: 0, manaGainBonus: -1, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 0, tierWeights: tier})); // 散魔：房间魔素池每回合 -1
-        cr.registerAffixTemplate(18, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), -100, 0], hpMod: 0, tierWeights: tier})); // 魔素蚀体：魔攻↓
+        cr.registerAffixTemplate(15, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: -100, tierWeights: tier})); // 脆弱：生命↓
+        cr.registerAffixTemplate(16, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, -100], hpMod: 0, tierWeights: tier})); // 迟钝：敏捷↓
+        cr.registerAffixTemplate(17, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 1, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: -1, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 0, tierWeights: tier})); // 散魔：房间魔素池每回合 -1
+        cr.registerAffixTemplate(18, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 0, manaDiscount: 0, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), -100, 0], hpMod: 0, tierWeights: tier})); // 魔素蚀体：魔攻↓
+        // 正面（新增 3 条资源流，纯增益；受资源流 ≤2 条上限约束）
+        cr.registerAffixTemplate(19, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 1, manaDiscount: 1, apDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 0, tierWeights: tier})); // 冥想：自身魔素消耗-1
+        cr.registerAffixTemplate(20, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 1, manaDiscount: 0, apDiscount: 1, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 0, tierWeights: tier})); // 战术素养：自身AP消耗-1
+        cr.registerAffixTemplate(21, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 1, manaDiscount: 0, apDiscount: 0, apBonus: 1, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 0, tierWeights: tier})); // 战意：自身每回合AP+1
 
         // ---- 怪物 AI 与敌人模板 ----
         uint16 aiSlime = sr.registerAI(SkillRegistry.MonsterAI({skillCycle: [uint16(skillAttack), 0, 0, 0, 0, 0, 0, 0], cycleLen: 1}));
@@ -240,5 +254,13 @@ contract Seed is Script {
 
     function _guarNextEffect() internal pure returns (SkillRegistry.Effect[4] memory e) {
         e[0] = SkillRegistry.Effect({op: 7, duration: 2, magnitude: 0, scope: 0, prob: 1000});
+    }
+
+    function _dragonBulletEffects() internal pure returns (SkillRegistry.Effect[4] memory e) {
+        e[0] = SkillRegistry.Effect({op: 13, duration: 0, magnitude: 5, scope: 0, prob: 1000});
+    }
+
+    function _burstMagicEffects() internal pure returns (SkillRegistry.Effect[4] memory e) {
+        e[0] = SkillRegistry.Effect({op: 1, duration: 3, magnitude: 0, scope: 0, prob: 1000});
     }
 }

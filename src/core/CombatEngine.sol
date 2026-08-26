@@ -53,6 +53,7 @@ contract CombatEngine is Ownable {
     uint8 public constant WT_HP_DEFICIT_ALLY = 1;
     uint8 public constant WT_THREAT_ENEMY = 2;
     uint8 public constant FLAG_GUARANTEED_HIT = 1;
+    uint8 public constant FLAG_MANA_ALL = 2;
     uint8 public constant SCOPE_SELF = 0;
     uint8 public constant SCOPE_TARGET = 1;
     uint8 public constant SCOPE_ALL_ALLY = 2;
@@ -194,6 +195,7 @@ contract CombatEngine is Ownable {
         m.speed = c.speed;
         m.ap = 0; // 加入房间时初始化 0（跨战斗继承从加入起算）
         m.manaDiscount = c.manaDiscount;
+        m.apDiscount = c.apDiscount;
         m.apBonus = c.apBonus;
         m.manaGainBonus = c.manaGainBonus;
         m.apCapBonus = c.apCapBonus;

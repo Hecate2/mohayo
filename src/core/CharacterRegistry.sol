@@ -54,6 +54,7 @@ contract CharacterRegistry is ERC721, Ownable {
         uint64 magic;
         uint64 speed;
         uint16 manaDiscount; // 默诵
+        uint16 apDiscount; // 战术素养：自身技能 AP 消耗折扣
         uint16 apBonus; // 好战本能
         int16 manaGainBonus; // 聚魔/好战本能/散魔：房间魔素池每回合增量修正（可为负）
         uint16 apCapBonus; // 斗魂：个人 AP 上限加成
@@ -87,6 +88,7 @@ contract CharacterRegistry is ERC721, Ownable {
         uint8 direction; // AFFIX_*（正面/双刃/负面）
         uint8 resourceType; // 0=非资源流 1=资源流（魔素/AP 类，受 ≤2 条上限约束）
         uint16 manaDiscount; // 默诵：魔素折扣
+        uint16 apDiscount; // 战术素养：AP 消耗折扣
         uint16 apBonus; // 好战本能：每回合 AP 加成
         int16 manaGainBonus; // 聚魔/好战本能/散魔：房间魔素池每回合增量修正（可为负）
         uint16 apCapBonus; // 斗魂：个人 AP 上限加成
@@ -214,6 +216,7 @@ contract CharacterRegistry is ERC721, Ownable {
             hpMod += t.hpMod;
             if (t.resourceType != 0) {
                 c.manaDiscount += t.manaDiscount;
+                c.apDiscount += t.apDiscount;
                 c.apBonus += t.apBonus;
                 c.manaGainBonus += t.manaGainBonus;
                 c.apCapBonus += t.apCapBonus;

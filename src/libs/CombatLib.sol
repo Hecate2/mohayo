@@ -282,11 +282,12 @@ library CombatLib {
     ) internal {
         SkillRegistry.Skill memory s = ctx.skillRegistry.getSkill(skillId);
         if (s.id == 0) return;
-        if (!checkAndDeductMember(ctx, r, m, s, vault)) {
+        (bool ok, uint32 manaConsumed) = checkAndDeductMember(ctx, r, m, s, vault);
+        if (!ok) {
             emit ResourceShort(r.id, 0, mi, skillId);
             return;
         }
-        resolveSkill(ctx, r, m.effects, m.effectCount, m.hp, m.maxHp, m.attack, m.magic, m.speed, 0, mi, s, m.player, false);
+        resolveSkill(ctx, r, m.effects, m.effectCount, m.hp, m.maxHp, m.attack, m.magic, m.speed, 0, mi, s, m.player, false, manaConsumed);
     }
 
     function checkAndDeductMember(
@@ -295,19 +296,25 @@ library CombatLib {
         CombatTypes.RoomMember storage m,
         SkillRegistry.Skill memory s,
         mapping(uint32 => mapping(address => mapping(uint16 => uint32))) storage vault
-    ) internal returns (bool) {
+    ) internal returns (bool ok, uint32 manaConsumed) {
         uint16 apCost = s.apCost;
+        uint16 effApCost = apCost > m.apDiscount ? apCost - m.apDiscount : 0;
         uint32 manaCost = s.manaCost;
-        uint32 effMana = manaCost > m.manaDiscount ? manaCost - m.manaDiscount : 0;
-        if (m.ap < apCost) return false;
-        if (r.manaPool < effMana) return false;
-        if (s.ammoId != 0 && vault[r.id][m.player][s.ammoId] < s.ammoCost) return false;
-        if (s.hpCost > 0 && m.hp <= s.hpCost) return false;
-        m.ap -= apCost;
+        uint32 effMana;
+        if ((s.flags & CombatTypes.FLAG_MANA_ALL) != 0) {
+            effMana = r.manaPool; // 耗光整个房间魔素池
+        } else {
+            effMana = manaCost > m.manaDiscount ? manaCost - m.manaDiscount : 0;
+        }
+        if (m.ap < effApCost) return (false, 0);
+        if (r.manaPool < effMana) return (false, 0);
+        if (s.ammoId != 0 && vault[r.id][m.player][s.ammoId] < s.ammoCost) return (false, 0);
+        if (s.hpCost > 0 && m.hp <= s.hpCost) return (false, 0);
+        m.ap -= effApCost;
         r.manaPool -= effMana;
         if (s.ammoId != 0) vault[r.id][m.player][s.ammoId] -= s.ammoCost;
         if (s.hpCost > 0) m.hp -= s.hpCost;
-        return true;
+        return (true, effMana);
     }
 
     function executeEnemySkill(CombatTypes.Ctx memory ctx, CombatTypes.Room storage r, CombatTypes.Enemy storage e, uint8 ei, uint16 skillId) internal {
@@ -318,7 +325,7 @@ library CombatLib {
             return;
         }
         if (s.manaCost > 0) r.manaPool -= s.manaCost;
-        resolveSkill(ctx, r, e.effects, e.effectCount, e.hp, e.maxHp, e.attack, e.magic, e.speed, 1, ei, s, address(0), true);
+        resolveSkill(ctx, r, e.effects, e.effectCount, e.hp, e.maxHp, e.attack, e.magic, e.speed, 1, ei, s, address(0), true, 0);
     }
 
     // ---- 技能统一结算 ----
@@ -336,7 +343,8 @@ library CombatLib {
         uint8 actorIndex,
         SkillRegistry.Skill memory s,
         address actorPlayer,
-        bool actorIsEnemy
+        bool actorIsEnemy,
+        uint32 manaConsumed
     ) internal {
         emit UnitActed(r.id, actorType, actorIndex, s.id);
 
@@ -350,7 +358,7 @@ library CombatLib {
             (uint8 tCount, CombatTypes.Target[10] memory targets) = CombatTargetLib.selectTargets(r, s, actorType, actorIndex, actorIsEnemy);
             for (uint8 k; k < tCount; ++k) {
                 CombatTypes.Target memory t = targets[k];
-                uint64 dealt = resolveTarget(ctx, r, actorEffects, actorEffectCount, hp, maxHp, attack, magic, speed, actorType, actorIndex, s, actorPlayer, t, guaranteed, allyTargeting);
+                uint64 dealt = resolveTarget(ctx, r, actorEffects, actorEffectCount, hp, maxHp, attack, magic, speed, actorType, actorIndex, s, actorPlayer, t, guaranteed, allyTargeting, manaConsumed);
                 totalDamage += dealt;
                 if (dealt > 0) anyHit = true;
             }
@@ -376,7 +384,8 @@ library CombatLib {
         address actorPlayer,
         CombatTypes.Target memory t,
         bool guaranteed,
-        bool allyTargeting
+        bool allyTargeting,
+        uint32 manaConsumed
     ) internal returns (uint64 dealt) {
         if (!guaranteed) {
             uint256 acc = s.baseAcc;
@@ -414,7 +423,12 @@ library CombatLib {
                 healTarget(ctx, r, t, tHp, tMaxHp, heal);
                 dealt = heal;
             } else {
-                uint64 stat = (s.kind == CombatTypes.KIND_MAGIC) ? magic : attack;
+                uint64 stat;
+                if ((s.flags & CombatTypes.FLAG_MANA_ALL) != 0) {
+                    stat = uint64(manaConsumed); // 伤害基数 = 本次耗光的魔素量
+                } else {
+                    stat = (s.kind == CombatTypes.KIND_MAGIC) ? magic : attack;
+                }
                 dealt = computeDamage(ctx, r, s, stat, actorEffects, actorEffectCount, tEffects, tEffectCount);
                 dealDamage(ctx, r, t, dealt, guaranteed);
             }
@@ -541,11 +555,12 @@ library CombatLib {
         uint8 tEffectCount
     ) internal returns (uint64) {
         uint256 dmg = uint256(s.power) * stat / 1000;
+        // 钳制先于乘区：damageCap 只压基础伤害，狂暴/龙鳞的乘区加成可突破单次伤害上限（用户定案）
+        if (s.damageCap != 0 && dmg > s.damageCap) dmg = s.damageCap;
         uint256 outMod = sumMod(actorEffects, actorEffectCount, CombatTypes.OP_DMG_OUT_MOD);
         if (outMod != 0) dmg = dmg * (1000 + outMod) / 1000;
         uint256 inMod = sumMod(tEffects, tEffectCount, CombatTypes.OP_DMG_IN_MOD);
         if (inMod != 0) dmg = dmg * (1000 + inMod) / 1000;
-        if (s.damageCap != 0 && dmg > s.damageCap) dmg = s.damageCap;
         return uint64(dmg);
     }
 

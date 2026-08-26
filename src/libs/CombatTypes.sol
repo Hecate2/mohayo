@@ -45,7 +45,7 @@ library CombatTypes {
     uint8 public constant TGT_ALL_ALLY = 7;
     uint8 public constant TGT_ROOM_ALL = 8;
     uint8 public constant TGT_SELF = 9;
-    uint8 public constant TGT_MOST_WOUNDED_ALLY = 10; // 治疗血量亏空比例最高者（圣愈之光）
+    uint8 public constant TGT_MOST_WOUNDED_ALLY = 10; // 治疗血量亏空绝对值最高者（圣愈之光）
 
     // ---- weightMode ----
     uint8 public constant WT_UNIFORM = 0;
@@ -53,6 +53,7 @@ library CombatTypes {
     uint8 public constant WT_THREAT_ENEMY = 2;
 
     uint8 public constant FLAG_GUARANTEED_HIT = 1;
+    uint8 public constant FLAG_MANA_ALL = 2; // 耗光房间魔素池，伤害 = power × 消耗魔素 / 1000（爆裂魔法）
 
     // ---- Effect scope ----
     uint8 public constant SCOPE_SELF = 0;
@@ -87,6 +88,7 @@ library CombatTypes {
         uint64 speed;
         uint16 ap;
         uint16 manaDiscount;
+        uint16 apDiscount;
         uint16 apBonus;
         int16 manaGainBonus;
         uint16 apCapBonus;

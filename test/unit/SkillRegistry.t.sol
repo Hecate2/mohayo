@@ -10,7 +10,7 @@ contract SkillRegistryTest is BaseTest {
     }
 
     function testRegisterSkillAssignsId() public {
-        assertEq(sr.skillCount(), 22); // 14 通用 + 1 职业技（鹰眼）+ 8 种族技
+        assertEq(sr.skillCount(), 27); // 22 通用 + 5 职业技（鹰眼/魔法剑/左轮弹雨/龙击弹/爆裂魔法）
         assertTrue(skillAttack > 0);
         assertTrue(skillIdle > skillAttack);
     }

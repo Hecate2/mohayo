@@ -106,35 +106,17 @@ library CombatTargetLib {
         return 255;
     }
 
-    /// @notice 治疗血量亏空比例最高者：比例 → 绝对亏空 → 加入序（线性 argmax，零 RNG）
+    /// @notice 治疗血量亏空绝对值最高者：绝对亏空 → 加入序（线性 argmax，零 RNG）
     function pickMostWoundedAlly(CombatTypes.Room storage r) internal view returns (uint8) {
         uint8 best = 255;
-        uint256 bestRatioNum;
-        uint256 bestRatioDen;
         uint64 bestDeficit;
         for (uint8 i; i < r.memberCount; ++i) {
             CombatTypes.RoomMember storage m = r.members[i];
             if (!m.alive) continue;
             uint64 deficit = m.maxHp - m.hp;
             if (deficit == 0) continue; // 满血跳过
-            uint256 ratioNum = uint256(deficit) * 1000;
-            uint256 ratioDen = m.maxHp;
-            if (best == 255) {
+            if (best == 255 || deficit > bestDeficit) {
                 best = i;
-                bestRatioNum = ratioNum;
-                bestRatioDen = ratioDen;
-                bestDeficit = deficit;
-                continue;
-            }
-            if (ratioNum * bestRatioDen > bestRatioNum * ratioDen) {
-                best = i;
-                bestRatioNum = ratioNum;
-                bestRatioDen = ratioDen;
-                bestDeficit = deficit;
-            } else if (ratioNum * bestRatioDen == bestRatioNum * ratioDen && deficit > bestDeficit) {
-                best = i;
-                bestRatioNum = ratioNum;
-                bestRatioDen = ratioDen;
                 bestDeficit = deficit;
             }
         }
