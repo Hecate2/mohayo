@@ -96,8 +96,6 @@ contract SkillRegistry is Ownable {
         uint64 damageCap; // 单目标单次伤害上限；0 = 无上限（仅管理员破墙技）
         uint16 baseAcc; // 基础命中率（千分比，≤1000）
         uint8 flags; // 位掩码（bit0 = GUARANTEED_HIT）
-        uint8[4] modRace; // 种族伤害修正（匹配目标种族时生效；全 0 = 无）
-        uint16[4] modPermille; // 与 modRace 一一对应（1200 = ×1.2）
         Effect[4] effects; // 固定长度，配 effectCount 使用
         uint8 effectCount; // 实际 effects 数量（0~4）
         SummonRule summon; // 仅 SUMMON
@@ -117,10 +115,8 @@ contract SkillRegistry is Ownable {
     struct EnemyTemplate {
         uint16 aiId; // 关联 MonsterAI
         uint8 threat; // 威胁权重（THREAT_ENEMY 抽取权重；1 = 均匀等价）
-        uint8 race; // 怪物种族（风味标签 + modRace 查表键）
         uint64 maxHp;
         uint64 power;
-        uint64 defense;
         uint64 magic;
         uint64 speed;
         uint16 baseAcc;
@@ -227,10 +223,6 @@ contract SkillRegistry is Ownable {
         st.damageCap = s.damageCap;
         st.baseAcc = s.baseAcc;
         st.flags = s.flags;
-        for (uint8 i; i < 4; ++i) {
-            st.modRace[i] = s.modRace[i];
-            st.modPermille[i] = s.modPermille[i];
-        }
         st.effectCount = s.effectCount;
         for (uint8 i; i < s.effectCount; ++i) {
             st.effects[i] = s.effects[i];

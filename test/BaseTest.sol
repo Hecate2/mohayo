@@ -86,40 +86,40 @@ contract BaseTest is Test {
 
     // ---- 职业 ----
     function _seedClasses() internal {
-        cr.registerClass(1, CharacterRegistry.ClassDef({baseHp: 120, baseAttack: 30, baseMagic: 10, baseDefense: 25, baseSpeed: 10, skillSlots: 1})); // 战士
-        cr.registerClass(2, CharacterRegistry.ClassDef({baseHp: 90, baseAttack: 28, baseMagic: 8, baseDefense: 15, baseSpeed: 22, skillSlots: 1})); // 火枪手
-        cr.registerClass(3, CharacterRegistry.ClassDef({baseHp: 80, baseAttack: 10, baseMagic: 35, baseDefense: 12, baseSpeed: 12, skillSlots: 1})); // 黑魔法师
-        cr.registerClass(4, CharacterRegistry.ClassDef({baseHp: 95, baseAttack: 12, baseMagic: 28, baseDefense: 18, baseSpeed: 14, skillSlots: 1})); // 白魔法师
-        cr.registerClass(5, CharacterRegistry.ClassDef({baseHp: 100, baseAttack: 20, baseMagic: 20, baseDefense: 18, baseSpeed: 15, skillSlots: 3})); // 无职业
+        cr.registerClass(1, CharacterRegistry.ClassDef({baseHp: 120, baseAttack: 30, baseMagic: 10, baseSpeed: 10, skillSlots: 1})); // 战士
+        cr.registerClass(2, CharacterRegistry.ClassDef({baseHp: 90, baseAttack: 28, baseMagic: 8, baseSpeed: 22, skillSlots: 1})); // 火枪手
+        cr.registerClass(3, CharacterRegistry.ClassDef({baseHp: 80, baseAttack: 10, baseMagic: 35, baseSpeed: 12, skillSlots: 1})); // 黑魔法师
+        cr.registerClass(4, CharacterRegistry.ClassDef({baseHp: 95, baseAttack: 12, baseMagic: 28, baseSpeed: 14, skillSlots: 1})); // 白魔法师
+        cr.registerClass(5, CharacterRegistry.ClassDef({baseHp: 100, baseAttack: 20, baseMagic: 20, baseSpeed: 15, skillSlots: 3})); // 无职业
     }
 
     // ---- 种族（上限乘区 + 种族技 + 自选槽加成）----
     function _seedRaces() internal {
-        cr.registerRace(0, CharacterRegistry.RaceDef({capPermille: [1000, 1000, 1000, 1000], capHpPermille: 1000, raceSkillId: 0, selfSelectBonus: 2})); // 人类
-        cr.registerRace(1, CharacterRegistry.RaceDef({capPermille: [900, 1300, 1000, 1100], capHpPermille: 900, raceSkillId: 0, selfSelectBonus: 0})); // 精灵
-        cr.registerRace(2, CharacterRegistry.RaceDef({capPermille: [1100, 900, 1300, 900], capHpPermille: 1200, raceSkillId: 0, selfSelectBonus: 0})); // 龙人
-        cr.registerRace(3, CharacterRegistry.RaceDef({capPermille: [1200, 1200, 1200, 1200], capHpPermille: 1200, raceSkillId: 0, selfSelectBonus: 0})); // 天使
-        cr.registerRace(4, CharacterRegistry.RaceDef({capPermille: [1300, 1300, 900, 1100], capHpPermille: 1000, raceSkillId: 0, selfSelectBonus: 0})); // 恶魔
+        cr.registerRace(0, CharacterRegistry.RaceDef({capPermille: [1000, 1000, 1000], capHpPermille: 1000, raceSkillId: 0, selfSelectBonus: 2})); // 人类
+        cr.registerRace(1, CharacterRegistry.RaceDef({capPermille: [900, 1300, 1100], capHpPermille: 900, raceSkillId: 0, selfSelectBonus: 0})); // 精灵
+        cr.registerRace(2, CharacterRegistry.RaceDef({capPermille: [1100, 900, 900], capHpPermille: 1200, raceSkillId: 0, selfSelectBonus: 0})); // 龙人
+        cr.registerRace(3, CharacterRegistry.RaceDef({capPermille: [1200, 1200, 1200], capHpPermille: 1200, raceSkillId: 0, selfSelectBonus: 0})); // 天使
+        cr.registerRace(4, CharacterRegistry.RaceDef({capPermille: [1300, 1300, 1100], capHpPermille: 1000, raceSkillId: 0, selfSelectBonus: 0})); // 恶魔
     }
 
     // ---- 词条模板（方向 × 档位；资源流词条 ≤2 条）----
     function _seedAffixes() internal {
         // 正面：攻击 +10%
-        cr.registerAffixTemplate(1, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [int64(100), 0, 0, 0], hpMod: 0, tierWeights: [300, 250, 200, 150, 100]}));
+        cr.registerAffixTemplate(1, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [int64(100), 0, 0], hpMod: 0, tierWeights: [300, 250, 200, 150, 100]}));
         // 正面：HP +15%
-        cr.registerAffixTemplate(2, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [int64(0), 0, 0, 0], hpMod: 150, tierWeights: [300, 250, 200, 150, 100]}));
-        // 双刃：攻击 +25% 防御 -10%
-        cr.registerAffixTemplate(3, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [int64(250), 0, -100, 0], hpMod: 0, tierWeights: [uint16(200), 200, 200, 200, 200]}));
+        cr.registerAffixTemplate(2, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [int64(0), 0, 0], hpMod: 150, tierWeights: [300, 250, 200, 150, 100]}));
+        // 双刃：攻击 +25% 速度 -10%
+        cr.registerAffixTemplate(3, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [int64(250), 0, -100], hpMod: 0, tierWeights: [uint16(200), 200, 200, 200, 200]}));
         // 双刃：速度 +20% 攻击 -5%
-        cr.registerAffixTemplate(4, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [int64(-50), 0, 0, 200], hpMod: 0, tierWeights: [uint16(200), 200, 200, 200, 200]}));
+        cr.registerAffixTemplate(4, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [int64(-50), 0, 200], hpMod: 0, tierWeights: [uint16(200), 200, 200, 200, 200]}));
         // 双刃：魔攻 +30% HP -10%（资源流：默诵 manaDiscount）
-        cr.registerAffixTemplate(5, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 1, manaDiscount: 5, apBonus: 0, statMods: [int64(0), 300, 0, 0], hpMod: -100, tierWeights: [uint16(200), 200, 200, 200, 200]}));
-        // 双刃：攻击 +20% 防御 -15%（资源流：好战本能 apBonus）
-        cr.registerAffixTemplate(6, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 2, manaDiscount: 0, apBonus: 3, statMods: [int64(200), 0, -150, 0], hpMod: 0, tierWeights: [uint16(200), 200, 200, 200, 200]}));
+        cr.registerAffixTemplate(5, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 1, manaDiscount: 5, apBonus: 0, statMods: [int64(0), 300, 0], hpMod: -100, tierWeights: [uint16(200), 200, 200, 200, 200]}));
+        // 双刃：攻击 +20% 速度 -15%（资源流：好战本能 apBonus）
+        cr.registerAffixTemplate(6, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 2, manaDiscount: 0, apBonus: 3, statMods: [int64(200), 0, -150], hpMod: 0, tierWeights: [uint16(200), 200, 200, 200, 200]}));
         // 负面：攻击 -10%
-        cr.registerAffixTemplate(7, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [int64(-100), 0, 0, 0], hpMod: 0, tierWeights: [uint16(200), 200, 200, 200, 200]}));
+        cr.registerAffixTemplate(7, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [int64(-100), 0, 0], hpMod: 0, tierWeights: [uint16(200), 200, 200, 200, 200]}));
         // 负面：HP -10%
-        cr.registerAffixTemplate(8, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [int64(0), 0, 0, 0], hpMod: -100, tierWeights: [uint16(200), 200, 200, 200, 200]}));
+        cr.registerAffixTemplate(8, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [int64(0), 0, 0], hpMod: -100, tierWeights: [uint16(200), 200, 200, 200, 200]}));
     }
 
     // ---- 技能 ----
@@ -128,7 +128,6 @@ contract BaseTest is Test {
         skillAttack = sr.registerSkill(SkillRegistry.Skill({
             id: 0, kind: 1, apCost: 0, apGain: 10, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
             targeting: 1, weightMode: 0, targetCount: 0, power: 100, damageCap: 0, baseAcc: 1000, flags: 0,
-            modRace: [uint8(0), 0, 0, 0], modPermille: [uint16(0), 0, 0, 0],
             effects: [SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 0, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
@@ -137,7 +136,6 @@ contract BaseTest is Test {
         skillMagicBolt = sr.registerSkill(SkillRegistry.Skill({
             id: 0, kind: 2, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 5, hpCost: 0,
             targeting: 1, weightMode: 0, targetCount: 0, power: 150, damageCap: 0, baseAcc: 1000, flags: 0,
-            modRace: [uint8(0), 0, 0, 0], modPermille: [uint16(0), 0, 0, 0],
             effects: [SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 0, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
@@ -146,7 +144,6 @@ contract BaseTest is Test {
         skillHeal = sr.registerSkill(SkillRegistry.Skill({
             id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 5, hpCost: 0,
             targeting: 5, weightMode: 1, targetCount: 0, power: 100, damageCap: 0, baseAcc: 1000, flags: 0,
-            modRace: [uint8(0), 0, 0, 0], modPermille: [uint16(0), 0, 0, 0],
             effects: [SkillRegistry.Effect({op: 9, duration: 0, magnitude: 0, scope: 1, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
@@ -155,7 +152,6 @@ contract BaseTest is Test {
         skillStrike3 = sr.registerSkill(SkillRegistry.Skill({
             id: 0, kind: 1, apCost: 10, apGain: 15, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
             targeting: 3, weightMode: 0, targetCount: 3, power: 50, damageCap: 0, baseAcc: 1000, flags: 0,
-            modRace: [uint8(0), 0, 0, 0], modPermille: [uint16(0), 0, 0, 0],
             effects: [SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 0, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
@@ -164,7 +160,6 @@ contract BaseTest is Test {
         skillShield = sr.registerSkill(SkillRegistry.Skill({
             id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 5, hpCost: 0,
             targeting: 9, weightMode: 0, targetCount: 0, power: 100, damageCap: 0, baseAcc: 1000, flags: 0,
-            modRace: [uint8(0), 0, 0, 0], modPermille: [uint16(0), 0, 0, 0],
             effects: [SkillRegistry.Effect({op: 4, duration: 3, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
@@ -173,7 +168,6 @@ contract BaseTest is Test {
         skillStun = sr.registerSkill(SkillRegistry.Skill({
             id: 0, kind: 1, apCost: 10, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
             targeting: 1, weightMode: 0, targetCount: 0, power: 50, damageCap: 0, baseAcc: 1000, flags: 0,
-            modRace: [uint8(0), 0, 0, 0], modPermille: [uint16(0), 0, 0, 0],
             effects: [SkillRegistry.Effect({op: 1, duration: 2, magnitude: 0, scope: 1, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
@@ -182,7 +176,6 @@ contract BaseTest is Test {
         skillSmoke = sr.registerSkill(SkillRegistry.Skill({
             id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 5, hpCost: 0,
             targeting: 8, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
-            modRace: [uint8(0), 0, 0, 0], modPermille: [uint16(0), 0, 0, 0],
             effects: [SkillRegistry.Effect({op: 6, duration: 2, magnitude: 200, scope: 2, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
@@ -191,7 +184,6 @@ contract BaseTest is Test {
         skillEagleEye = sr.registerClassSkill(SkillRegistry.Skill({
             id: 0, kind: 3, apCost: 5, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
             targeting: 9, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
-            modRace: [uint8(0), 0, 0, 0], modPermille: [uint16(0), 0, 0, 0],
             effects: [SkillRegistry.Effect({op: 7, duration: 2, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }), 2); // 火枪手 classId=2
@@ -200,7 +192,6 @@ contract BaseTest is Test {
         skillManaBurst = sr.registerSkill(SkillRegistry.Skill({
             id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
             targeting: 9, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
-            modRace: [uint8(0), 0, 0, 0], modPermille: [uint16(0), 0, 0, 0],
             effects: [SkillRegistry.Effect({op: 13, duration: 0, magnitude: 20, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
@@ -209,7 +200,6 @@ contract BaseTest is Test {
         skillDot = sr.registerSkill(SkillRegistry.Skill({
             id: 0, kind: 2, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 5, hpCost: 0,
             targeting: 1, weightMode: 0, targetCount: 0, power: 30, damageCap: 0, baseAcc: 1000, flags: 0,
-            modRace: [uint8(0), 0, 0, 0], modPermille: [uint16(0), 0, 0, 0],
             effects: [SkillRegistry.Effect({op: 8, duration: 3, magnitude: 10, scope: 1, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
@@ -218,7 +208,6 @@ contract BaseTest is Test {
         skillTaunt = sr.registerSkill(SkillRegistry.Skill({
             id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 3, hpCost: 0,
             targeting: 1, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
-            modRace: [uint8(0), 0, 0, 0], modPermille: [uint16(0), 0, 0, 0],
             effects: [SkillRegistry.Effect({op: 11, duration: 2, magnitude: 0, scope: 1, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
@@ -227,7 +216,6 @@ contract BaseTest is Test {
         skillBerserk = sr.registerSkill(SkillRegistry.Skill({
             id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
             targeting: 9, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
-            modRace: [uint8(0), 0, 0, 0], modPermille: [uint16(0), 0, 0, 0],
             effects: [SkillRegistry.Effect({op: 2, duration: 2, magnitude: 300, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 3, duration: 2, magnitude: 200, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 2, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
@@ -236,7 +224,6 @@ contract BaseTest is Test {
         skillSummon = sr.registerSkill(SkillRegistry.Skill({
             id: 0, kind: 4, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 10, hpCost: 0,
             targeting: 9, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
-            modRace: [uint8(0), 0, 0, 0], modPermille: [uint16(0), 0, 0, 0],
             effects: [SkillRegistry.Effect({op: 14, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 1, enemyHeadroom: 2})
         }));
@@ -245,7 +232,6 @@ contract BaseTest is Test {
         skillIdle = sr.registerSkill(SkillRegistry.Skill({
             id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
             targeting: 9, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
-            modRace: [uint8(0), 0, 0, 0], modPermille: [uint16(0), 0, 0, 0],
             effects: [SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 0, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
@@ -265,20 +251,20 @@ contract BaseTest is Test {
         }));
 
         templateSlime = sr.registerTemplate(SkillRegistry.EnemyTemplate({
-            aiId: aiSlime, threat: 1, race: 0, maxHp: 50, power: 12, defense: 5, magic: 5, speed: 8, baseAcc: 1000,
+            aiId: aiSlime, threat: 1, maxHp: 50, power: 12, magic: 5, speed: 8, baseAcc: 1000,
             rewardMin: 5, rewardMax: 10,
             onDeathSpawn: SkillRegistry.OnDeathSpawn({templateId: 0, count: 0, prob: 0})
         }));
 
         // Boss：死亡召唤史莱姆（概率 500‰）
         templateBoss = sr.registerTemplate(SkillRegistry.EnemyTemplate({
-            aiId: aiBoss, threat: 5, race: 0, maxHp: 200, power: 25, defense: 10, magic: 15, speed: 12, baseAcc: 1000,
+            aiId: aiBoss, threat: 5, maxHp: 200, power: 25, magic: 15, speed: 12, baseAcc: 1000,
             rewardMin: 30, rewardMax: 50,
             onDeathSpawn: SkillRegistry.OnDeathSpawn({templateId: templateSlime, count: 2, prob: 500})
         }));
 
         templateSummoned = sr.registerTemplate(SkillRegistry.EnemyTemplate({
-            aiId: aiSlime, threat: 1, race: 0, maxHp: 30, power: 10, defense: 3, magic: 3, speed: 6, baseAcc: 1000,
+            aiId: aiSlime, threat: 1, maxHp: 30, power: 10, magic: 3, speed: 6, baseAcc: 1000,
             rewardMin: 3, rewardMax: 6,
             onDeathSpawn: SkillRegistry.OnDeathSpawn({templateId: 0, count: 0, prob: 0})
         }));

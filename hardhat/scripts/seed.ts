@@ -23,28 +23,28 @@ async function main() {
 
   // ---- 职业 ----
   if (!seeded) {
-  await cr.registerClass(1, { baseHp: 120, baseAttack: 30, baseMagic: 10, baseDefense: 25, baseSpeed: 10, skillSlots: 1 });
-  await cr.registerClass(2, { baseHp: 90, baseAttack: 28, baseMagic: 8, baseDefense: 15, baseSpeed: 22, skillSlots: 1 });
-  await cr.registerClass(3, { baseHp: 80, baseAttack: 10, baseMagic: 35, baseDefense: 12, baseSpeed: 12, skillSlots: 1 });
-  await cr.registerClass(4, { baseHp: 95, baseAttack: 12, baseMagic: 28, baseDefense: 18, baseSpeed: 14, skillSlots: 1 });
-  await cr.registerClass(5, { baseHp: 100, baseAttack: 20, baseMagic: 20, baseDefense: 18, baseSpeed: 15, skillSlots: 3 });
+  await cr.registerClass(1, { baseHp: 120, baseAttack: 30, baseMagic: 10, baseSpeed: 10, skillSlots: 1 });
+  await cr.registerClass(2, { baseHp: 90, baseAttack: 28, baseMagic: 8, baseSpeed: 22, skillSlots: 1 });
+  await cr.registerClass(3, { baseHp: 80, baseAttack: 10, baseMagic: 35, baseSpeed: 12, skillSlots: 1 });
+  await cr.registerClass(4, { baseHp: 95, baseAttack: 12, baseMagic: 28, baseSpeed: 14, skillSlots: 1 });
+  await cr.registerClass(5, { baseHp: 100, baseAttack: 20, baseMagic: 20, baseSpeed: 15, skillSlots: 3 });
 
   // ---- 种族 ----
-  await cr.registerRace(0, { capPermille: [1000, 1000, 1000, 1000], capHpPermille: 1000, raceSkillId: 0, selfSelectBonus: 2 });
-  await cr.registerRace(1, { capPermille: [900, 1300, 1000, 1100], capHpPermille: 900, raceSkillId: 0, selfSelectBonus: 0 });
-  await cr.registerRace(2, { capPermille: [1100, 900, 1300, 900], capHpPermille: 1200, raceSkillId: 0, selfSelectBonus: 0 });
-  await cr.registerRace(3, { capPermille: [1200, 1200, 1200, 1200], capHpPermille: 1200, raceSkillId: 0, selfSelectBonus: 0 });
-  await cr.registerRace(4, { capPermille: [1300, 1300, 900, 1100], capHpPermille: 1000, raceSkillId: 0, selfSelectBonus: 0 });
+  await cr.registerRace(0, { capPermille: [1000, 1000, 1000], capHpPermille: 1000, raceSkillId: 0, selfSelectBonus: 2 });
+  await cr.registerRace(1, { capPermille: [900, 1300, 1100], capHpPermille: 900, raceSkillId: 0, selfSelectBonus: 0 });
+  await cr.registerRace(2, { capPermille: [1100, 900, 900], capHpPermille: 1200, raceSkillId: 0, selfSelectBonus: 0 });
+  await cr.registerRace(3, { capPermille: [1200, 1200, 1200], capHpPermille: 1200, raceSkillId: 0, selfSelectBonus: 0 });
+  await cr.registerRace(4, { capPermille: [1300, 1300, 1100], capHpPermille: 1000, raceSkillId: 0, selfSelectBonus: 0 });
 
   // ---- 词条模板 ----
-  await cr.registerAffixTemplate(1, { direction: 0, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [100, 0, 0, 0], hpMod: 0, tierWeights: [300, 250, 200, 150, 100] });
-  await cr.registerAffixTemplate(2, { direction: 0, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [0, 0, 0, 0], hpMod: 150, tierWeights: [300, 250, 200, 150, 100] });
-  await cr.registerAffixTemplate(3, { direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [250, 0, -100, 0], hpMod: 0, tierWeights: [200, 200, 200, 200, 200] });
-  await cr.registerAffixTemplate(4, { direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [-50, 0, 0, 200], hpMod: 0, tierWeights: [200, 200, 200, 200, 200] });
-  await cr.registerAffixTemplate(5, { direction: 1, resourceType: 1, manaDiscount: 5, apBonus: 0, statMods: [0, 300, 0, 0], hpMod: -100, tierWeights: [200, 200, 200, 200, 200] });
-  await cr.registerAffixTemplate(6, { direction: 1, resourceType: 2, manaDiscount: 0, apBonus: 3, statMods: [200, 0, -150, 0], hpMod: 0, tierWeights: [200, 200, 200, 200, 200] });
-  await cr.registerAffixTemplate(7, { direction: 2, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [-100, 0, 0, 0], hpMod: 0, tierWeights: [200, 200, 200, 200, 200] });
-  await cr.registerAffixTemplate(8, { direction: 2, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [0, 0, 0, 0], hpMod: -100, tierWeights: [200, 200, 200, 200, 200] });
+  await cr.registerAffixTemplate(1, { direction: 0, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [100, 0, 0], hpMod: 0, tierWeights: [300, 250, 200, 150, 100] });
+  await cr.registerAffixTemplate(2, { direction: 0, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [0, 0, 0], hpMod: 150, tierWeights: [300, 250, 200, 150, 100] });
+  await cr.registerAffixTemplate(3, { direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [250, 0, -100], hpMod: 0, tierWeights: [200, 200, 200, 200, 200] });
+  await cr.registerAffixTemplate(4, { direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [-50, 0, 200], hpMod: 0, tierWeights: [200, 200, 200, 200, 200] });
+  await cr.registerAffixTemplate(5, { direction: 1, resourceType: 1, manaDiscount: 5, apBonus: 0, statMods: [0, 300, 0], hpMod: -100, tierWeights: [200, 200, 200, 200, 200] });
+  await cr.registerAffixTemplate(6, { direction: 1, resourceType: 2, manaDiscount: 0, apBonus: 3, statMods: [200, 0, -150], hpMod: 0, tierWeights: [200, 200, 200, 200, 200] });
+  await cr.registerAffixTemplate(7, { direction: 2, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [-100, 0, 0], hpMod: 0, tierWeights: [200, 200, 200, 200, 200] });
+  await cr.registerAffixTemplate(8, { direction: 2, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [0, 0, 0], hpMod: -100, tierWeights: [200, 200, 200, 200, 200] });
 
   // ---- 技能（与 Seed.s.sol 完全同口径）----
   const emptyEffects = () => Array.from({ length: 4 }, () => ({ op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000 }));
@@ -53,7 +53,6 @@ async function main() {
   const mkSkill = (p: Partial<any> = {}) => ({
     id: 0, kind: 1, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
     targeting: 1, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
-    modRace: [0, 0, 0, 0], modPermille: [0, 0, 0, 0],
     effects: emptyEffects(), effectCount: 0,
     summon: { templateId: 0, maxCount: 0, enemyHeadroom: 0 },
     ...p,
@@ -79,15 +78,15 @@ async function main() {
   const aiBoss = await reg(sr.registerAI, { skillCycle: [skillAttack, skillAttack, skillMagicBolt, 0, 0, 0, 0, 0], cycleLen: 3 });
 
   const templateSlime = await reg(sr.registerTemplate, {
-    aiId: aiSlime, threat: 1, race: 0, maxHp: 50, power: 12, defense: 5, magic: 5, speed: 8, baseAcc: 1000,
+    aiId: aiSlime, threat: 1, maxHp: 50, power: 12, magic: 5, speed: 8, baseAcc: 1000,
     rewardMin: 5, rewardMax: 10, onDeathSpawn: { templateId: 0, count: 0, prob: 0 },
   });
   const templateBoss = await reg(sr.registerTemplate, {
-    aiId: aiBoss, threat: 5, race: 0, maxHp: 200, power: 25, defense: 10, magic: 15, speed: 12, baseAcc: 1000,
+    aiId: aiBoss, threat: 5, maxHp: 200, power: 25, magic: 15, speed: 12, baseAcc: 1000,
     rewardMin: 30, rewardMax: 50, onDeathSpawn: { templateId: templateSlime, count: 2, prob: 500 },
   });
   await reg(sr.registerTemplate, {
-    aiId: aiSlime, threat: 1, race: 0, maxHp: 30, power: 10, defense: 3, magic: 3, speed: 6, baseAcc: 1000,
+    aiId: aiSlime, threat: 1, maxHp: 30, power: 10, magic: 3, speed: 6, baseAcc: 1000,
     rewardMin: 3, rewardMax: 6, onDeathSpawn: { templateId: 0, count: 0, prob: 0 },
   });
 

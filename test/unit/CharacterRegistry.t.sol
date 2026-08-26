@@ -91,26 +91,25 @@ contract CharacterRegistryTest is BaseTest {
     function testStatsCappedByHumanCap() public {
         mockRng.setFixed(0); // 人类 + 正面词条 1（攻击 +10%）
         uint256 tokenId = _createCharacter(alice, 1, new uint32[](0));
-        (uint64 hp, uint64 maxHp, uint64 attack, uint64 magic, uint64 defense, uint64 speed) = cr.getStats(tokenId);
-        // 战士 base：120/30/10/25/10；双词条攻击 +20% → 36，但人类上限 ×1.0 → 30
+        (uint64 hp, uint64 maxHp, uint64 attack, uint64 magic, uint64 speed) = cr.getStats(tokenId);
+        // 战士 base：120/30/10/10；双词条攻击 +20% → 36，但人类上限 ×1.0 → 30
         assertEq(maxHp, 120);
         assertEq(attack, 30);
         assertEq(magic, 10);
-        assertEq(defense, 25);
         assertEq(speed, 10);
         assertEq(hp, maxHp);
     }
 
     function testStatsDemonHigherAttackCap() public {
-        // GM 铸造：恶魔（攻击上限 ×1.3）+ 双刃词条 3（攻击 +25% 防御 -10%）
+        // GM 铸造：恶魔（攻击上限 ×1.3）+ 双刃词条 3（攻击 +25% 速度 -10%）
         uint16[] memory affixes = new uint16[](1);
         affixes[0] = 3;
         uint32[] memory skills = new uint32[](0);
         uint256 tokenId = cr.gmMintCharacter(alice, 1, 4, affixes, skills);
-        (,, uint64 attack,, uint64 defense,) = cr.getStats(tokenId);
-        // 攻击 = 30×1.25 = 37（上限 30×1.3 = 39）；防御 = 25×0.9 = 22（上限 25×0.9 = 22）
+        (,, uint64 attack,, uint64 speed) = cr.getStats(tokenId);
+        // 攻击 = 30×1.25 = 37（上限 30×1.3 = 39）；速度 = 10×0.9 = 9（上限 10×1.1 = 11）
         assertEq(attack, 37);
-        assertEq(defense, 22);
+        assertEq(speed, 9);
     }
 
     // ---- 资源流词条（默诵/好战本能）----

@@ -116,7 +116,7 @@ task("char-state", "查看角色状态")
     const c = await contracts.CharacterRegistry.characters(Number(args.token));
     console.log(JSON.stringify({
       classId: c.classId, race: c.race, level: c.level, hp: c.hp.toString(), maxHp: c.maxHp.toString(),
-      attack: c.attack.toString(), magic: c.magic.toString(), defense: c.defense.toString(), speed: c.speed.toString(),
+      attack: c.attack.toString(), magic: c.magic.toString(), speed: c.speed.toString(),
       roomId: c.roomId.toString(), skillCount: c.skillCount,
     }, null, 2));
   });

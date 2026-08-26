@@ -49,7 +49,6 @@ contract CharacterRegistry is ERC721, Ownable {
         uint64 maxHp;
         uint64 attack;
         uint64 magic;
-        uint64 defense;
         uint64 speed;
         uint16 manaDiscount; // 默诵
         uint16 apBonus; // 好战本能
@@ -62,7 +61,6 @@ contract CharacterRegistry is ERC721, Ownable {
         uint64 baseHp;
         uint64 baseAttack;
         uint64 baseMagic;
-        uint64 baseDefense;
         uint64 baseSpeed;
         uint8 skillSlots; // 职业额外自选槽（无职业 3 / 职业 1）
     }
@@ -70,7 +68,7 @@ contract CharacterRegistry is ERC721, Ownable {
     uint8 public classCount;
 
     struct RaceDef {
-        uint16[4] capPermille; // 攻击/魔法/防御/速度 上限乘区（1200 = ×1.2）
+        uint16[3] capPermille; // 攻击/魔法/速度 上限乘区（1200 = ×1.2）
         uint16 capHpPermille; // HP 上限乘区
         uint32 raceSkillId; // 种族技（0 = 无，人类）
         uint8 selfSelectBonus; // 人类 +2 自选槽
@@ -83,7 +81,7 @@ contract CharacterRegistry is ERC721, Ownable {
         uint8 resourceType; // 0=无 1=manaDiscount 2=apBonus
         uint16 manaDiscount; // 默诵：魔素折扣
         uint16 apBonus; // 好战本能：每回合 AP 加成
-        int64[4] statMods; // 攻击/魔法/防御/速度 修正（千分比，可为负）
+        int64[3] statMods; // 攻击/魔法/速度 修正（千分比，可为负）
         int64 hpMod; // HP 修正（千分比）
         uint16[5] tierWeights; // 档位 1~5 权重（千分比）
     }
@@ -197,12 +195,12 @@ contract CharacterRegistry is ERC721, Ownable {
     function _computeStats(Character storage c, uint8 classId, uint8 race, uint16[4] memory affixIds, uint8 affixCount_) private {
         ClassDef memory def = classDefs[classId];
         RaceDef memory rd = raceDefs[race];
-        int64[4] memory mods = [int64(0), int64(0), int64(0), int64(0)];
+        int64[3] memory mods = [int64(0), int64(0), int64(0)];
         int64 hpMod = 0;
         uint8 resourceCount;
         for (uint8 i; i < affixCount_; ++i) {
             AffixTemplate memory t = affixTemplates[affixIds[i]];
-            for (uint8 j; j < 4; ++j) mods[j] += t.statMods[j];
+            for (uint8 j; j < 3; ++j) mods[j] += t.statMods[j];
             hpMod += t.hpMod;
             if (t.resourceType == 1) {
                 c.manaDiscount += t.manaDiscount;
@@ -218,8 +216,7 @@ contract CharacterRegistry is ERC721, Ownable {
         c.maxHp = _applyCap(def.baseHp, hpMod, rd.capHpPermille);
         c.attack = _applyCap(def.baseAttack, mods[0], rd.capPermille[0]);
         c.magic = _applyCap(def.baseMagic, mods[1], rd.capPermille[1]);
-        c.defense = _applyCap(def.baseDefense, mods[2], rd.capPermille[2]);
-        c.speed = _applyCap(def.baseSpeed, mods[3], rd.capPermille[3]);
+        c.speed = _applyCap(def.baseSpeed, mods[2], rd.capPermille[2]);
     }
 
     function _applyCap(uint64 base, int64 mod, uint16 capPermille) private pure returns (uint64) {
@@ -350,9 +347,9 @@ contract CharacterRegistry is ERC721, Ownable {
     }
 
     // ---- 查询 ----
-    function getStats(uint256 tokenId) external view returns (uint64 hp, uint64 maxHp, uint64 attack, uint64 magic, uint64 defense, uint64 speed) {
+    function getStats(uint256 tokenId) external view returns (uint64 hp, uint64 maxHp, uint64 attack, uint64 magic, uint64 speed) {
         Character storage c = characters[tokenId];
-        return (c.hp, c.maxHp, c.attack, c.magic, c.defense, c.speed);
+        return (c.hp, c.maxHp, c.attack, c.magic, c.speed);
     }
 
     function getCharacter(uint256 tokenId) external view returns (Character memory) {

@@ -84,11 +84,9 @@ library CombatLib {
         e.maxHp = t.maxHp;
         e.attack = t.power;
         e.magic = t.magic;
-        e.defense = t.defense;
         e.speed = t.speed;
         e.baseAcc = t.baseAcc;
         e.threat = t.threat;
-        e.race = t.race;
         e.aiId = t.aiId;
         e.alive = true;
         r.enemyCount++;
@@ -152,7 +150,7 @@ library CombatLib {
             if (u < 100) {
                 CombatTypes.RoomMember storage m = r.members[u];
                 if (!m.alive) continue;
-                (m.hp, m.effectCount) = tickEffects(ctx, r, m.effects, m.effectCount, m.hp, m.maxHp, m.attack, m.defense, m.speed, 0, u);
+                (m.hp, m.effectCount) = tickEffects(ctx, r, m.effects, m.effectCount, m.hp, m.maxHp, m.attack, m.speed, 0, u);
                 if (m.hp == 0) onMemberDeath(ctx, r, u);
                 if (!m.alive) continue;
                 if (isStunned(m.effects, m.effectCount)) continue;
@@ -164,7 +162,7 @@ library CombatLib {
                 uint8 ei = u - 100;
                 CombatTypes.Enemy storage e = r.enemies[ei];
                 if (!e.alive) continue;
-                (e.hp, e.effectCount) = tickEffects(ctx, r, e.effects, e.effectCount, e.hp, e.maxHp, e.attack, e.defense, e.speed, 1, ei);
+                (e.hp, e.effectCount) = tickEffects(ctx, r, e.effects, e.effectCount, e.hp, e.maxHp, e.attack, e.speed, 1, ei);
                 if (e.hp == 0) onEnemyDeath(ctx, r, ei);
                 if (!e.alive) continue;
                 if (isStunned(e.effects, e.effectCount)) continue;
@@ -191,7 +189,6 @@ library CombatLib {
         uint64 hp,
         uint64 maxHp,
         uint64 attack,
-        uint64 defense,
         uint64 speed,
         uint8 unitType,
         uint8 unitIndex
@@ -283,7 +280,7 @@ library CombatLib {
             emit ResourceShort(r.id, 0, mi, skillId);
             return;
         }
-        resolveSkill(ctx, r, m.effects, m.effectCount, m.hp, m.maxHp, m.attack, m.magic, m.defense, m.speed, 0, mi, s, m.player, m.race, false);
+        resolveSkill(ctx, r, m.effects, m.effectCount, m.hp, m.maxHp, m.attack, m.magic, m.speed, 0, mi, s, m.player, false);
     }
 
     function checkAndDeductMember(
@@ -315,7 +312,7 @@ library CombatLib {
             return;
         }
         if (s.manaCost > 0) r.manaPool -= s.manaCost;
-        resolveSkill(ctx, r, e.effects, e.effectCount, e.hp, e.maxHp, e.attack, e.magic, e.defense, e.speed, 1, ei, s, address(0), e.race, true);
+        resolveSkill(ctx, r, e.effects, e.effectCount, e.hp, e.maxHp, e.attack, e.magic, e.speed, 1, ei, s, address(0), true);
     }
 
     // ---- 技能统一结算 ----
@@ -328,13 +325,11 @@ library CombatLib {
         uint64 maxHp,
         uint64 attack,
         uint64 magic,
-        uint64 defense,
         uint64 speed,
         uint8 actorType,
         uint8 actorIndex,
         SkillRegistry.Skill memory s,
         address actorPlayer,
-        uint8 actorRace,
         bool actorIsEnemy
     ) internal {
         emit UnitActed(r.id, actorType, actorIndex, s.id);
@@ -349,7 +344,7 @@ library CombatLib {
             (uint8 tCount, CombatTypes.Target[10] memory targets) = CombatTargetLib.selectTargets(r, s, actorType, actorIndex, actorIsEnemy);
             for (uint8 k; k < tCount; ++k) {
                 CombatTypes.Target memory t = targets[k];
-                uint64 dealt = resolveTarget(ctx, r, actorEffects, actorEffectCount, hp, maxHp, attack, magic, defense, speed, actorType, actorIndex, s, actorPlayer, actorRace, t, guaranteed, allyTargeting);
+                uint64 dealt = resolveTarget(ctx, r, actorEffects, actorEffectCount, hp, maxHp, attack, magic, speed, actorType, actorIndex, s, actorPlayer, t, guaranteed, allyTargeting);
                 totalDamage += dealt;
                 if (dealt > 0) anyHit = true;
             }
@@ -368,13 +363,11 @@ library CombatLib {
         uint64 maxHp,
         uint64 attack,
         uint64 magic,
-        uint64 defense,
         uint64 speed,
         uint8 actorType,
         uint8 actorIndex,
         SkillRegistry.Skill memory s,
         address actorPlayer,
-        uint8 actorRace,
         CombatTypes.Target memory t,
         bool guaranteed,
         bool allyTargeting
@@ -391,8 +384,6 @@ library CombatLib {
 
         uint64 tHp;
         uint64 tMaxHp;
-        uint64 tDefense;
-        uint8 tRace;
         CombatTypes.ActiveEffect[6] storage tEffects;
         uint8 tEffectCount;
         if (t.kind == 0) {
@@ -400,8 +391,6 @@ library CombatLib {
             if (!tm.alive) return 0;
             tHp = tm.hp;
             tMaxHp = tm.maxHp;
-            tDefense = tm.defense;
-            tRace = tm.race;
             tEffects = tm.effects;
             tEffectCount = tm.effectCount;
         } else {
@@ -409,8 +398,6 @@ library CombatLib {
             if (!te.alive) return 0;
             tHp = te.hp;
             tMaxHp = te.maxHp;
-            tDefense = te.defense;
-            tRace = te.race;
             tEffects = te.effects;
             tEffectCount = te.effectCount;
         }
@@ -422,7 +409,7 @@ library CombatLib {
                 dealt = heal;
             } else {
                 uint64 stat = (s.kind == CombatTypes.KIND_MAGIC) ? magic : attack;
-                dealt = computeDamage(ctx, r, s, stat, tRace, actorEffects, actorEffectCount, tEffects, tEffectCount);
+                dealt = computeDamage(ctx, r, s, stat, actorEffects, actorEffectCount, tEffects, tEffectCount);
                 dealDamage(ctx, r, t, dealt, guaranteed);
             }
         }
@@ -433,7 +420,10 @@ library CombatLib {
                 uint256 pr = CombatTypes.nextRandom(r) % 1000;
                 if (pr >= e.prob) continue;
             }
-            applySkillEffect(ctx, r, actorEffects, actorEffectCount, actorType, actorIndex, s, t, tEffects, tEffectCount, e, dealt, actorPlayer, actorRace, tRace);
+            applySkillEffect(ctx, r, actorEffects, actorEffectCount, actorType, actorIndex, s, t, tEffects, tEffectCount, e, dealt, actorPlayer);
+            // 刷新计数：同一技能多个效果可能作用于同一单位，计数需与存储同步（否则后效果覆盖前效果）
+            actorEffectCount = (actorType == 0) ? r.members[actorIndex].effectCount : r.enemies[actorIndex].effectCount;
+            tEffectCount = (t.kind == 0) ? r.members[t.index].effectCount : r.enemies[t.index].effectCount;
         }
 
         if (t.kind == 0) {
@@ -456,9 +446,7 @@ library CombatLib {
         uint8 tEffectCount,
         SkillRegistry.Effect memory e,
         uint64 dealt,
-        address actorPlayer,
-        uint8 actorRace,
-        uint8 tRace
+        address actorPlayer
     ) internal {
         uint8 op = e.op;
         uint8 duration = e.duration;
@@ -541,18 +529,12 @@ library CombatLib {
         CombatTypes.Room storage r,
         SkillRegistry.Skill memory s,
         uint64 stat,
-        uint8 tRace,
         CombatTypes.ActiveEffect[6] storage actorEffects,
         uint8 actorEffectCount,
         CombatTypes.ActiveEffect[6] storage tEffects,
         uint8 tEffectCount
     ) internal returns (uint64) {
         uint256 dmg = uint256(s.power) * stat / 1000;
-        for (uint8 i; i < 4; ++i) {
-            if (s.modRace[i] != 0 && s.modRace[i] == tRace) {
-                dmg = dmg * s.modPermille[i] / 1000;
-            }
-        }
         uint256 outMod = sumMod(actorEffects, actorEffectCount, CombatTypes.OP_DMG_OUT_MOD);
         if (outMod != 0) dmg = dmg * (1000 + outMod) / 1000;
         uint256 inMod = sumMod(tEffects, tEffectCount, CombatTypes.OP_DMG_IN_MOD);

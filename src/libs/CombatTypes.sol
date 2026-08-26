@@ -82,13 +82,11 @@ library CombatTypes {
         uint64 maxHp;
         uint64 attack;
         uint64 magic;
-        uint64 defense;
         uint64 speed;
         uint16 ap;
         uint16 manaDiscount;
         uint16 apBonus;
         uint8 classId;
-        uint8 race;
         uint16 manaGainBonus;
         ActiveEffect[6] effects;
         uint8 effectCount;
@@ -105,11 +103,9 @@ library CombatTypes {
         uint64 maxHp;
         uint64 attack;
         uint64 magic;
-        uint64 defense;
         uint64 speed;
         uint16 baseAcc;
         uint8 threat;
-        uint8 race;
         uint16 aiId;
         uint8 turnCounter;
         ActiveEffect[6] effects;

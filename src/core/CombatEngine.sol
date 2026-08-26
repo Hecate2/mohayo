@@ -183,13 +183,11 @@ contract CombatEngine is Ownable {
         m.maxHp = c.maxHp;
         m.attack = c.attack;
         m.magic = c.magic;
-        m.defense = c.defense;
         m.speed = c.speed;
         m.ap = 0; // 加入房间时初始化 0（跨战斗继承从加入起算）
         m.manaDiscount = c.manaDiscount;
         m.apBonus = c.apBonus;
         m.classId = c.classId;
-        m.race = c.race;
         m.alive = true;
         r.memberCount++;
         characterRegistry.setInRoom(characterId, roomId);

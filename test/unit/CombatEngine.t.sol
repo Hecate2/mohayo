@@ -39,7 +39,7 @@ contract CombatEngineTest is BaseTest {
 
         // 高攻敌人 + 败北地下城（difficulty 2）：power 2000 → 普攻 100×2000/1000 = 200 秒杀 120 HP 成员
         templateHulk = sr.registerTemplate(SkillRegistry.EnemyTemplate({
-            aiId: aiSlime, threat: 1, race: 0, maxHp: 500, power: 2000, defense: 0, magic: 0, speed: 1, baseAcc: 1000,
+            aiId: aiSlime, threat: 1, maxHp: 500, power: 2000, magic: 0, speed: 1, baseAcc: 1000,
             rewardMin: 1, rewardMax: 1,
             onDeathSpawn: SkillRegistry.OnDeathSpawn({templateId: 0, count: 0, prob: 0})
         }));
@@ -52,7 +52,7 @@ contract CombatEngineTest is BaseTest {
 
         // Boss 地下城（difficulty 3，死亡召唤史莱姆，概率 1000‰ 保证必召）
         templateBossAlwaysSpawn = sr.registerTemplate(SkillRegistry.EnemyTemplate({
-            aiId: aiBoss, threat: 5, race: 0, maxHp: 200, power: 25, defense: 10, magic: 15, speed: 12, baseAcc: 1000,
+            aiId: aiBoss, threat: 5, maxHp: 200, power: 25, magic: 15, speed: 12, baseAcc: 1000,
             rewardMin: 30, rewardMax: 50,
             onDeathSpawn: SkillRegistry.OnDeathSpawn({templateId: templateSlime, count: 2, prob: 1000})
         }));
@@ -73,7 +73,7 @@ contract CombatEngineTest is BaseTest {
 
         // 坦克敌人 + 地下城（difficulty 5）：高 HP 高攻，伤害修正测试用
         templateTank = sr.registerTemplate(SkillRegistry.EnemyTemplate({
-            aiId: aiSlime, threat: 1, race: 0, maxHp: 500, power: 100, defense: 0, magic: 0, speed: 1, baseAcc: 1000,
+            aiId: aiSlime, threat: 1, maxHp: 500, power: 100, magic: 0, speed: 1, baseAcc: 1000,
             rewardMin: 1, rewardMax: 1,
             onDeathSpawn: SkillRegistry.OnDeathSpawn({templateId: 0, count: 0, prob: 0})
         }));
@@ -518,11 +518,11 @@ contract CombatEngineTest is BaseTest {
         vm.prank(alice);
         ce.startCombat(roomId);
         vm.prank(alice);
-        ce.advanceTurn(roomId); // 狂暴
+        ce.advanceTurn(roomId); // 狂暴（成员先手）；坦克随后普攻 10×1200/1000=12
         vm.prank(alice);
         ce.advanceTurn(roomId); // 核弹 78；坦克反击 10×1200/1000=12
         assertEq(ce.getEnemy(roomId, 0).hp, 500 - 78, "DMG_OUT_MOD applied");
-        assertEq(ce.getMember(roomId, 0).hp, 120 - 12, "DMG_IN_MOD applied");
+        assertEq(ce.getMember(roomId, 0).hp, 120 - 12 - 12, "DMG_IN_MOD applied");
     }
 
     // ---- 变体敌人表：开战一次掷骰选表 ----
