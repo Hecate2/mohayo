@@ -49,7 +49,7 @@ contract CombatEngineTest is BaseTest {
         uint16[] memory ws = new uint16[](1);
         ws[0] = 100;
         ce.registerEnemyTable(2, ids, ws);
-        ce.setDungeon(2, CombatTypes.DungeonConfig({tableId: 2, enemyCount: 1, manaPerTurn: 0, rewardBase: 0, entryFee: 0, rescueFee: 10, turnInterval: 0}));
+        ce.setDungeon(2, CombatTypes.DungeonConfig({tableId: 2, enemyCount: 1, manaPerTurn: 0, rewardBase: 0, entryFee: 0, rescueFee: 10, turnInterval: 0, battles: 1}));
 
         // Boss 地下城（difficulty 3，死亡召唤史莱姆，概率 1000‰ 保证必召）
         templateBossAlwaysSpawn = sr.registerTemplate(SkillRegistry.EnemyTemplate({
@@ -62,7 +62,7 @@ contract CombatEngineTest is BaseTest {
         uint16[] memory ws3 = new uint16[](1);
         ws3[0] = 100;
         ce.registerEnemyTable(3, ids3, ws3);
-        ce.setDungeon(3, CombatTypes.DungeonConfig({tableId: 3, enemyCount: 1, manaPerTurn: 1, rewardBase: 0, entryFee: 0, rescueFee: 0, turnInterval: 0}));
+        ce.setDungeon(3, CombatTypes.DungeonConfig({tableId: 3, enemyCount: 1, manaPerTurn: 1, rewardBase: 0, entryFee: 0, rescueFee: 0, turnInterval: 0, battles: 1}));
 
         // 单史莱姆地下城（difficulty 4）：确定性目标测试用（房间级 PRNG 下目标选择随机）
         uint16[] memory ids4 = new uint16[](1);
@@ -70,7 +70,7 @@ contract CombatEngineTest is BaseTest {
         uint16[] memory ws4 = new uint16[](1);
         ws4[0] = 100;
         ce.registerEnemyTable(4, ids4, ws4);
-        ce.setDungeon(4, CombatTypes.DungeonConfig({tableId: 4, enemyCount: 1, manaPerTurn: 2, rewardBase: 0, entryFee: 0, rescueFee: 0, turnInterval: 0}));
+        ce.setDungeon(4, CombatTypes.DungeonConfig({tableId: 4, enemyCount: 1, manaPerTurn: 2, rewardBase: 0, entryFee: 0, rescueFee: 0, turnInterval: 0, battles: 1}));
 
         // 坦克敌人 + 地下城（difficulty 5）：高 HP 高攻，伤害修正测试用
         templateTank = sr.registerTemplate(SkillRegistry.EnemyTemplate({
@@ -83,7 +83,7 @@ contract CombatEngineTest is BaseTest {
         uint16[] memory ws5 = new uint16[](1);
         ws5[0] = 100;
         ce.registerEnemyTable(5, ids5, ws5);
-        ce.setDungeon(5, CombatTypes.DungeonConfig({tableId: 5, enemyCount: 1, manaPerTurn: 0, rewardBase: 0, entryFee: 0, rescueFee: 0, turnInterval: 0}));
+        ce.setDungeon(5, CombatTypes.DungeonConfig({tableId: 5, enemyCount: 1, manaPerTurn: 0, rewardBase: 0, entryFee: 0, rescueFee: 0, turnInterval: 0, battles: 1}));
     }
 
     // ---- 技能构造辅助 ----

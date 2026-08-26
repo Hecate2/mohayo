@@ -86,6 +86,29 @@ contract BaseTest is Test {
     uint16 public templateSlime;
     uint16 public templateBoss;
     uint16 public templateSummoned;
+    // ---- D9 机神帝座（content-design.md §8.2，最难关）技能/模板 id（供 D9Emperor 测试引用）----
+    uint32 public skillSparkSaw; // 机神士兵·火花锯刃（单物理）
+    uint32 public skillParticleSlash; // 机神督军·粒子斩（单物理高伤）
+    uint32 public skillMarshalLeak; // 机神督军·磁场超载（房间魔素 +100）
+    uint32 public skillFurnaceLeak; // 机神魔素炉·魔素泄漏（房间魔素 +100）
+    uint32 public skillFurnaceSiphon; // 机神魔素炉·魔素虹吸（房间魔素 -80）
+    uint32 public skillFurnaceSummon; // 机神魔素炉·召唤机神卫兵
+    uint32 public skillEmperorCannon; // 机神皇帝·机神火花炮（单体重炮，耗魔素 40，可 miss）
+    uint32 public skillEmperorWheel; // 机神皇帝·机神幻光轮（4 段魔法连击 + 概率眩晕）
+    uint32 public skillEmperorLeak; // 机神皇帝·魔素泄漏（+100）
+    uint32 public skillEmperorSiphon; // 机神皇帝·魔素虹吸（-80）
+    uint32 public skillEmperorPressure; // 机神皇帝·帝王威压（全体降命中 + 概率眩晕）
+    uint32 public skillEmperorSummon; // 机神皇帝·召唤机神卫兵
+    uint16 public aiSoldier;
+    uint16 public aiMarshal;
+    uint16 public aiFurnace;
+    uint16 public aiEmperor;
+    uint16 public aiChest;
+    uint16 public templateSoldier; // 机神士兵（普遍杂兵/可被召唤）
+    uint16 public templateMarshal; // 机神督军（②行军小 Boss）
+    uint16 public templateFurnace; // 机神魔素炉（③核心；死亡召唤皇帝 60%）
+    uint16 public templateEmperor; // 机神皇帝（D9 Boss）
+    uint16 public templateChest; // 机神宝箱（④待机；死亡召唤皇帝 20%）
 
     function setUp() public virtual {
         // 真实时间戳：避免 day=0 与映射默认值冲突（work/mintUsd 的自然日判定）
@@ -117,6 +140,8 @@ contract BaseTest is Test {
         _seedAffixes();
         _seedAIAndTemplates();
         _seedDungeons();
+        _seedD9();
+        _seedD10();
     }
 
     // ---- 职业（content-design.md §4：剑士/守卫/火枪手/黑魔法师/白魔法师 + 无职业）----
@@ -562,8 +587,153 @@ contract BaseTest is Test {
         ws[0] = 100;
         ce.registerEnemyTable(1, ids, ws);
         ce.setDungeon(1, CombatTypes.DungeonConfig({
-            tableId: 1, enemyCount: 2, manaPerTurn: 1, rewardBase: 20, entryFee: 5, rescueFee: 10, turnInterval: 5
+            tableId: 1, enemyCount: 2, manaPerTurn: 1, rewardBase: 20, entryFee: 5, rescueFee: 10, turnInterval: 5, battles: 1
         }));
+    }
+
+    // ---- 敌人表构造辅助 ----
+    function _singleTable(uint16 tableId, uint16 templateId) internal {
+        uint16[] memory ids = new uint16[](1);
+        ids[0] = templateId;
+        uint16[] memory ws = new uint16[](1);
+        ws[0] = 100;
+        ce.registerEnemyTable(tableId, ids, ws);
+    }
+
+    function _weightedTable(uint16 tableId, uint16 t1, uint16 w1, uint16 t2, uint16 w2) internal {
+        uint16[] memory ids = new uint16[](2);
+        ids[0] = t1;
+        ids[1] = t2;
+        uint16[] memory ws = new uint16[](2);
+        ws[0] = w1;
+        ws[1] = w2;
+        ce.registerEnemyTable(tableId, ids, ws);
+    }
+
+    // ---- D9 机神帝座（content-design.md §8.2，最难关：四场决战）----
+    // 设计锚点：让最强的满级队伍也不一定能通过。①机神哨岗（士兵群）→②机神行军（士兵+督军）
+    // →③机神魔素炉（双向魔素 ± 海量 + 召唤；炉毁 60% 同场召唤皇帝）→④王座大厅变体（85% 宝箱 / 15% 皇帝亲征）。
+    function _seedD9() internal {
+        // ---- 怪技能 ----
+        // 机神士兵·火花锯刃：单目标物理中伤
+        SkillRegistry.Skill memory s = _base(1, 0, 1, 1, 1300, 950, 0);
+        skillSparkSaw = sr.registerSkill(s);
+        // 机神督军·粒子斩：单目标物理高伤
+        s = _base(1, 0, 1, 1, 1700, 950, 0);
+        skillParticleSlash = sr.registerSkill(s);
+        // 机神督军·磁场超载：房间魔素 +100（SCOPE_SELF → 正增量）
+        s = _base(3, 0, 9, 0, 0, 1000, 0);
+        s.effects[0] = _eff(13, 0, 100, 0, 1000);
+        s.effectCount = 1;
+        skillMarshalLeak = sr.registerSkill(s);
+        // 魔素泄漏：房间魔素 +100（SCOPE_SELF → 正增量，补爆裂魔法）
+        s = _base(3, 0, 9, 0, 0, 1000, 0);
+        s.effects[0] = _eff(13, 0, 100, 0, 1000);
+        s.effectCount = 1;
+        skillFurnaceLeak = sr.registerSkill(s);
+        // 魔素虹吸：房间魔素 -80（SCOPE_TARGET → 负增量）
+        s = _base(3, 0, 9, 0, 0, 1000, 0);
+        s.effects[0] = _eff(13, 0, 80, 1, 1000);
+        s.effectCount = 1;
+        skillFurnaceSiphon = sr.registerSkill(s);
+        // 机神火花炮：单体重炮，耗魔素 40（不足则哑火）；伤害 = attack×17000/1000 ≈ 5.1 万（仅极强生命值可挡）
+        s = _base(1, 40, 1, 1, 17000, 900, 0);
+        skillEmperorCannon = sr.registerSkill(s);
+        // 机神幻光轮：4 段魔法连击（每段 ≈ magic×6700/1000 ≈ 2 万）+ 概率眩晕 2 回合
+        s = _base(2, 12, 3, 4, 6700, 900, 0);
+        s.effects[0] = _eff(1, 2, 0, 1, 400);
+        s.effectCount = 1;
+        skillEmperorWheel = sr.registerSkill(s);
+        // 皇帝·魔素泄漏 / 虹吸（与炉同款资源操纵）
+        s = _base(3, 0, 9, 0, 0, 1000, 0);
+        s.effects[0] = _eff(13, 0, 100, 0, 1000);
+        s.effectCount = 1;
+        skillEmperorLeak = sr.registerSkill(s);
+        s = _base(3, 0, 9, 0, 0, 1000, 0);
+        s.effects[0] = _eff(13, 0, 80, 1, 1000);
+        s.effectCount = 1;
+        skillEmperorSiphon = sr.registerSkill(s);
+        // 帝王威压：全体降命中 3 回合 + 概率眩晕 1 回合
+        s = _base(3, 2, 4, 0, 0, 1000, 0);
+        s.effects[0] = _eff(6, 3, 300, 3, 1000);
+        s.effects[1] = _eff(1, 1, 0, 3, 300);
+        s.effectCount = 2;
+        skillEmperorPressure = sr.registerSkill(s);
+
+        // ---- AI（士兵/督军/宝箱不依赖召唤技，可先注册）----
+        aiSoldier = sr.registerAI(SkillRegistry.MonsterAI({skillCycle: [uint16(skillSparkSaw), 0, 0, 0, 0, 0, 0, 0], cycleLen: 1}));
+        aiMarshal = sr.registerAI(SkillRegistry.MonsterAI({skillCycle: [uint16(skillParticleSlash), uint16(skillParticleSlash), uint16(skillMarshalLeak), 0, 0, 0, 0, 0], cycleLen: 3}));
+        aiChest = sr.registerAI(SkillRegistry.MonsterAI({skillCycle: [uint16(0), 0, 0, 0, 0, 0, 0, 0], cycleLen: 1}));
+
+        // ---- 模板（士兵/督军：引用已注册 AI）----
+        templateSoldier = sr.registerTemplate(SkillRegistry.EnemyTemplate({
+            aiId: aiSoldier, threat: 3, maxHp: 2600, power: 380, magic: 150, speed: 28, baseAcc: 1000,
+            rewardMin: 8, rewardMax: 15,
+            onDeathSpawn: SkillRegistry.OnDeathSpawn({templateId: 0, count: 0, prob: 0})
+        }));
+        templateMarshal = sr.registerTemplate(SkillRegistry.EnemyTemplate({
+            aiId: aiMarshal, threat: 8, maxHp: 9000, power: 900, magic: 600, speed: 42, baseAcc: 1000,
+            rewardMin: 40, rewardMax: 70,
+            onDeathSpawn: SkillRegistry.OnDeathSpawn({templateId: 0, count: 0, prob: 0})
+        }));
+
+        // ---- 召唤技（须在 templateSoldier 注册后再注册，否则 SummonRule 引用到 0）----
+        s = _base(4, 0, 9, 0, 0, 1000, 0);
+        s.effects[0] = _eff(14, 0, 0, 0, 1000);
+        s.effectCount = 1;
+        s.summon = SkillRegistry.SummonRule({templateId: templateSoldier, maxCount: 2, enemyHeadroom: 0});
+        skillFurnaceSummon = sr.registerSkill(s);
+        s = _base(4, 0, 9, 0, 0, 1000, 0);
+        s.effects[0] = _eff(14, 0, 0, 0, 1000);
+        s.effectCount = 1;
+        s.summon = SkillRegistry.SummonRule({templateId: templateSoldier, maxCount: 2, enemyHeadroom: 0});
+        skillEmperorSummon = sr.registerSkill(s);
+
+        // ---- 炉 / 皇帝 AI（引用召唤技，须在其后）----
+        aiFurnace = sr.registerAI(SkillRegistry.MonsterAI({skillCycle: [uint16(skillFurnaceLeak), uint16(skillFurnaceSiphon), uint16(skillFurnaceSummon), uint16(skillFurnaceLeak), uint16(skillFurnaceSiphon), 0, 0, 0], cycleLen: 5}));
+        aiEmperor = sr.registerAI(SkillRegistry.MonsterAI({skillCycle: [uint16(skillEmperorWheel), uint16(skillEmperorCannon), uint16(skillEmperorPressure), uint16(skillEmperorSummon), uint16(skillEmperorLeak), uint16(skillEmperorCannon), 0, 0], cycleLen: 6}));
+
+        // ---- 皇帝 / 炉 / 宝箱模板（皇帝须先于炉/宝箱注册，供 onDeathSpawn 引用）----
+        templateEmperor = sr.registerTemplate(SkillRegistry.EnemyTemplate({
+            aiId: aiEmperor, threat: 9, maxHp: 60000, power: 3000, magic: 3000, speed: 60, baseAcc: 1000,
+            rewardMin: 300, rewardMax: 450,
+            onDeathSpawn: SkillRegistry.OnDeathSpawn({templateId: 0, count: 0, prob: 0})
+        }));
+        templateFurnace = sr.registerTemplate(SkillRegistry.EnemyTemplate({
+            aiId: aiFurnace, threat: 4, maxHp: 22000, power: 0, magic: 0, speed: 5, baseAcc: 0,
+            rewardMin: 120, rewardMax: 180,
+            onDeathSpawn: SkillRegistry.OnDeathSpawn({templateId: templateEmperor, count: 1, prob: 600})
+        }));
+        templateChest = sr.registerTemplate(SkillRegistry.EnemyTemplate({
+            aiId: aiChest, threat: 0, maxHp: 1, power: 0, magic: 0, speed: 1, baseAcc: 0,
+            rewardMin: 150, rewardMax: 250,
+            onDeathSpawn: SkillRegistry.OnDeathSpawn({templateId: templateEmperor, count: 1, prob: 200})
+        }));
+
+        // ---- 敌人表 ----
+        _singleTable(71, templateSoldier); // ① 机神哨岗：士兵群
+        _weightedTable(72, templateSoldier, 60, templateMarshal, 40); // ② 机神行军
+        _weightedTable(73, templateFurnace, 55, templateSoldier, 45); // ③ 魔素炉阵：炉 + 少量士兵
+        _weightedTable(74, templateEmperor, 55, templateSoldier, 45); // ④ 皇帝亲征（变体）
+        _singleTable(75, templateChest); // ④ 王座宝箱（变体）
+
+        // ---- 地下城 D9 ----
+        ce.setDungeon(9, CombatTypes.DungeonConfig({tableId: 71, enemyCount: 3, manaPerTurn: 6, rewardBase: 200, entryFee: 40, rescueFee: 80, turnInterval: 5, battles: 4}));
+        CombatTypes.BattleConfig[] memory bcs = new CombatTypes.BattleConfig[](4);
+        bcs[0] = CombatTypes.BattleConfig({tableId: 71, enemyCount: 3});
+        bcs[1] = CombatTypes.BattleConfig({tableId: 72, enemyCount: 3});
+        bcs[2] = CombatTypes.BattleConfig({tableId: 73, enemyCount: 2});
+        bcs[3] = CombatTypes.BattleConfig({tableId: 75, enemyCount: 1});
+        ce.setDungeonBattles(9, bcs);
+        // ④ 王座大厅变体：85% 宝箱 / 15% 皇帝亲征（独立掷骰；皇帝至少现身概率 = 1-(1-0.6)(1-0.15) ≈ 66%）
+        ce.addBattleVariant(9, 4, 75, 850);
+        ce.addBattleVariant(9, 4, 74, 150);
+    }
+
+    // ---- D10（content-design.md §8.3 占位）：仅 1 场战斗，内容未定，复用一个简单敌人表 ----
+    function _seedD10() internal {
+        _singleTable(101, templateSlime);
+        ce.setDungeon(10, CombatTypes.DungeonConfig({tableId: 101, enemyCount: 2, manaPerTurn: 4, rewardBase: 60, entryFee: 10, rescueFee: 20, turnInterval: 5, battles: 1}));
     }
 
     // ---- 测试辅助 ----

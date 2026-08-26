@@ -14,6 +14,7 @@ library CombatEndLib {
 
     event Victory(uint32 indexed roomId);
     event Defeat(uint32 indexed roomId);
+    event BattleCleared(uint32 indexed roomId, uint8 battleIndex, uint8 totalBattles);
     event RewardDistributed(uint32 indexed roomId, address indexed player, uint256 amount);
     event ManaChanged(uint32 indexed roomId, int32 delta, uint32 pool);
 
@@ -37,6 +38,12 @@ library CombatEndLib {
         uint8 aliveEnemies;
         for (uint8 i; i < r.enemyCount; ++i) if (r.enemies[i].alive) aliveEnemies++;
         if (aliveEnemies == 0) {
+            // 多场地下城：非末场获胜进入 INTERMISSION（队长触发 advanceBattle 后才进入下一场），
+            // 奖励与释放推迟到末场最终胜利；单场地下城（totalBattles ≤ 1）直接进入最终结算。
+            if (r.battleIndex < r.totalBattles) {
+                onBattleCleared(r);
+                return;
+            }
             onVictory(ctx, r);
             return;
         }
@@ -45,6 +52,13 @@ library CombatEndLib {
         if (aliveMembers == 0) {
             onDefeat(ctx, r, dungeons);
         }
+    }
+
+    /// @notice 非末场战斗清场：只切换阶段到 INTERMISSION 并发出事件；不结算奖励、不释放成员、
+    ///         保留跨战斗资源；待队长 advanceBattle 后 spawn 下一场敌人。
+    function onBattleCleared(CombatTypes.Room storage r) internal {
+        r.phase = CombatTypes.PHASE_INTERMISSION;
+        emit BattleCleared(r.id, r.battleIndex, r.totalBattles);
     }
 
     function onVictory(CombatTypes.Ctx memory ctx, CombatTypes.Room storage r) internal {

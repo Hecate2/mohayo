@@ -62,9 +62,11 @@ contract CombatEngine is Ownable {
     uint8 public constant PHASE_LOBBY = 0;
     uint8 public constant PHASE_COMBAT = 1;
     uint8 public constant PHASE_SETTLED = 2;
+    uint8 public constant PHASE_INTERMISSION = 3;
     uint8 public constant MAX_MEMBERS = 10;
     uint8 public constant MAX_ENEMIES = 10;
     uint8 public constant MAX_EFFECTS = 6;
+    uint8 public constant MAX_DIFFICULTY = 10; // 地下城难度上限（D1~D10）
     uint16 public constant MAX_PLAN = 16;
 
     /// @notice 全局命中下限（千分比，官方可调）
@@ -86,8 +88,14 @@ contract CombatEngine is Ownable {
     mapping(uint16 => uint16[]) public enemyTableTemplates;
     mapping(uint16 => uint16[]) public enemyTableWeights;
 
-    /// @notice 变体敌人表：difficulty => (tableId, weight) 数组；开战一次掷骰选表
+    /// @notice 变体敌人表：difficulty => (tableId, weight) 数组；开战一次掷骰选表（第 1 场战斗的默认变体）
     mapping(uint8 => CombatTypes.VariantEntry[]) public dungeonVariants;
+
+    /// @notice 多场地下城的逐场配置：difficulty => [第1场, 第2场, …, 第N场]（0-based 索引）；空 = 单场回退 DungeonConfig
+    mapping(uint8 => CombatTypes.BattleConfig[]) public dungeonBattles;
+
+    /// @notice 逐场变体敌人表：difficulty => battleIndex(1-based) => (tableId, weight) 数组；覆盖 dungeonVariants
+    mapping(uint8 => mapping(uint8 => CombatTypes.VariantEntry[])) public battleVariants;
 
     // ---- 道具金库（引擎内部账本，零 ERC 调用）----
     mapping(uint32 => mapping(address => mapping(uint16 => uint32))) public vault;
@@ -96,7 +104,7 @@ contract CombatEngine is Ownable {
     event RoomCreated(uint32 indexed roomId, address indexed leader, uint8 difficulty);
     event MemberJoined(uint32 indexed roomId, address indexed player, uint256 characterId);
     event MemberLeft(uint32 indexed roomId, address indexed player);
-    event CombatStarted(uint32 indexed roomId, uint32 turnId);
+    event CombatStarted(uint32 indexed roomId, uint32 turnId, uint8 battleIndex);
     event PlanSet(uint32 indexed roomId, address indexed player);
     event TurnAdvanced(uint32 indexed roomId, uint32 turnId);
     event UnitActed(uint32 indexed roomId, uint8 unitType, uint8 unitIndex, uint32 skillId);
@@ -109,6 +117,8 @@ contract CombatEngine is Ownable {
     event ResourceShort(uint32 indexed roomId, uint8 unitType, uint8 unitIndex, uint32 skillId);
     event Victory(uint32 indexed roomId);
     event Defeat(uint32 indexed roomId);
+    event BattleCleared(uint32 indexed roomId, uint8 battleIndex, uint8 totalBattles); // 非末场获胜进入 INTERMISSION
+    event BattleAdvanced(uint32 indexed roomId, uint8 newBattleIndex, uint8 totalBattles); // 队长推进到下一场
     event RewardDistributed(uint32 indexed roomId, address indexed player, uint256 amount);
     event ItemGiven(uint32 indexed roomId, address indexed from, address indexed to, uint16 itemId, uint32 count);
     event TimeoutPenalty(uint32 indexed roomId, uint8 unitType, uint8 unitIndex, uint64 amount);
@@ -147,14 +157,34 @@ contract CombatEngine is Ownable {
     }
 
     function setDungeon(uint8 difficulty, CombatTypes.DungeonConfig calldata cfg) external onlyOwner {
-        require(difficulty >= 1 && difficulty <= 5, "CE: bad difficulty");
+        require(difficulty >= 1 && difficulty <= MAX_DIFFICULTY, "CE: bad difficulty");
         require(enemyTableTemplates[cfg.tableId].length > 0, "CE: unknown table");
         dungeons[difficulty] = cfg;
+    }
+
+    /// @notice 注册多场地下城的逐场配置（长度 = 该地下城总战斗场数；替换式，需与过时单场配置一致）
+    function setDungeonBattles(uint8 difficulty, CombatTypes.BattleConfig[] calldata battles) external onlyOwner {
+        require(difficulty >= 1 && difficulty <= MAX_DIFFICULTY, "CE: bad difficulty");
+        require(battles.length > 0, "CE: empty battles");
+        delete dungeonBattles[difficulty];
+        for (uint256 i; i < battles.length; ++i) {
+            if (battles[i].tableId != 0) require(enemyTableTemplates[battles[i].tableId].length > 0, "CE: unknown table");
+            dungeons[difficulty].battles = uint8(battles.length); // 逐场配置长度即总战斗场数
+            dungeonBattles[difficulty].push(battles[i]);
+        }
     }
 
     function addDungeonVariant(uint8 difficulty, uint16 tableId, uint16 weight) external onlyOwner {
         require(enemyTableTemplates[tableId].length > 0, "CE: unknown table");
         dungeonVariants[difficulty].push(CombatTypes.VariantEntry({tableId: tableId, weight: weight}));
+    }
+
+    /// @notice 逐场变体表：battleIndex 1-based；覆盖第 1 场的默认 dungeonVariants
+    function addBattleVariant(uint8 difficulty, uint8 battleIndex, uint16 tableId, uint16 weight) external onlyOwner {
+        require(difficulty >= 1 && difficulty <= MAX_DIFFICULTY, "CE: bad difficulty");
+        require(battleIndex >= 1, "CE: bad battleIndex");
+        require(enemyTableTemplates[tableId].length > 0, "CE: unknown table");
+        battleVariants[difficulty][battleIndex].push(CombatTypes.VariantEntry({tableId: tableId, weight: weight}));
     }
 
     // ---- 房间生命周期 ----
@@ -168,6 +198,7 @@ contract CombatEngine is Ownable {
         r.difficulty = difficulty;
         r.phase = PHASE_LOBBY;
         r.leader = msg.sender;
+        r.totalBattles = cfg.battles >= 1 ? cfg.battles : 1; // 单场地下城（battles=0）→ 1
         r.manaPerTurn = cfg.manaPerTurn;
         r.turnInterval = cfg.turnInterval;
         r.createdAt = uint32(block.timestamp);
@@ -179,7 +210,7 @@ contract CombatEngine is Ownable {
 
     function joinRoom(uint32 roomId, uint256 characterId) external {
         CombatTypes.Room storage r = rooms[roomId];
-        require(r.phase == PHASE_LOBBY, "CE: not lobby");
+        require(r.phase == PHASE_LOBBY || r.phase == PHASE_INTERMISSION, "CE: not joinable");
         require(r.memberCount < MAX_MEMBERS, "CE: room full");
         require(characterRegistry.ownerOf(characterId) == msg.sender, "CE: not owner");
         CharacterRegistry.Character memory c = characterRegistry.getCharacter(characterId);
@@ -213,11 +244,14 @@ contract CombatEngine is Ownable {
         uint8 idx = CombatLib.findMember(r, msg.sender);
         require(idx != 255, "CE: not in room");
         CombatTypes.RoomMember storage m = r.members[idx];
+        bool wasLeader = (msg.sender == r.leader);
         characterRegistry.setInRoom(m.characterId, 0);
         uint8 last = r.memberCount - 1;
         if (idx != last) r.members[idx] = r.members[last];
         delete r.members[last];
         r.memberCount--;
+        // 队长离开 → 按进入地下城的顺序（数组序）在存活真人中自动接任；傀儡不可当队长
+        if (wasLeader) CombatLib.reassignLeader(r);
         emit MemberLeft(roomId, msg.sender);
     }
 
@@ -226,10 +260,25 @@ contract CombatEngine is Ownable {
         require(msg.sender == r.leader, "CE: not leader");
         require(r.phase == PHASE_LOBBY, "CE: not lobby");
         require(r.memberCount > 0, "CE: no members");
-        CombatLib.spawnEnemies(_ctx(), r, enemyTableTemplates, enemyTableWeights, dungeons, dungeonVariants);
+        r.battleIndex = 1;
+        CombatLib.spawnEnemies(_ctx(), r, enemyTableTemplates, enemyTableWeights, dungeons, dungeonBattles, dungeonVariants, battleVariants, r.battleIndex);
         r.phase = PHASE_COMBAT;
         r.turnId = 1;
-        emit CombatStarted(roomId, r.turnId);
+        emit CombatStarted(roomId, r.turnId, r.battleIndex);
+    }
+
+    /// @notice 多场地下城：一场战斗获胜进入 INTERMISSION 后，由队长发 EVM 交易推进到下一场战斗。
+    ///         战斗间清空本场敌人与怪方效果，保留成员生命/AP/魔素池（跨战斗继承）。
+    function advanceBattle(uint32 roomId) external {
+        CombatTypes.Room storage r = rooms[roomId];
+        require(msg.sender == r.leader, "CE: not leader");
+        require(r.phase == PHASE_INTERMISSION, "CE: not intermission");
+        require(r.battleIndex < r.totalBattles, "CE: last battle done");
+        CombatLib.clearBattleField(r);
+        r.battleIndex++;
+        CombatLib.spawnEnemies(_ctx(), r, enemyTableTemplates, enemyTableWeights, dungeons, dungeonBattles, dungeonVariants, battleVariants, r.battleIndex);
+        r.phase = PHASE_COMBAT;
+        emit BattleAdvanced(roomId, r.battleIndex, r.totalBattles);
     }
 
     // ---- 技能计划 ----

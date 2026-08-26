@@ -215,6 +215,34 @@ contract CharacterRegistry is ERC721, Ownable {
         emit CharacterCreated(tokenId, to, classId, race, characters[tokenId].level);
     }
 
+    /// @notice GM 测试入口：一次调用直接制造任意等级角色（能力值 = 1 级基准 × 等级线性插值；
+    ///         满级 300 → 无加成角色 HP=30,000）。主网物理移除。
+    function gmMintCharacterAtLevel(address to, uint8 classId, uint8 race, uint16[] calldata affixIds_, uint32[] calldata skillIds, uint16 level)
+        external
+        onlyOwner
+        returns (uint256 tokenId)
+    {
+        require(gmEnabled, "CR: GM disabled");
+        require(level >= 1 && level <= MAX_LEVEL, "CR: bad level");
+        require(classDefs[classId].exists, "CR: unknown class");
+        require(race < raceCount, "CR: unknown race");
+        require(affixIds_.length <= 4, "CR: too many affixes");
+        uint16[4] memory affixIds;
+        uint8[4] memory affixTiers;
+        for (uint8 i; i < affixIds_.length; ++i) {
+            require(affixTemplates[affixIds_[i]].exists, "CR: unknown affix");
+            affixIds[i] = affixIds_[i];
+            affixTiers[i] = MAX_AFFIX_TIER;
+        }
+        uint8[4] memory noResources;
+        tokenId = _mintCharacter(to, classId, race, affixIds, affixTiers, noResources, 0, skillIds);
+        Character storage c = characters[tokenId];
+        c.level = level;
+        _computeStats(c, c.classId, c.race);
+        c.hp = c.maxHp;
+        emit CharacterCreated(tokenId, to, classId, race, c.level);
+    }
+
     /// @notice GM 测试入口：设置等级并按等级公式重算属性（满级 = 1 级 × MAX_LEVEL 线性插值；主网物理移除）
     function gmSetLevel(uint256 tokenId, uint16 level) external onlyOwner {
         require(gmEnabled, "CR: GM disabled");

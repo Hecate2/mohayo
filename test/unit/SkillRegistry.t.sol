@@ -10,7 +10,7 @@ contract SkillRegistryTest is BaseTest {
     }
 
     function testRegisterSkillAssignsId() public {
-        assertEq(sr.skillCount(), 44); // 28 基础（23 通用+5 职业技）+ 10 职业技能补齐 + 6 公共自选池
+        assertEq(sr.skillCount(), 56); // 44 基础（职业/种族/公共自选池）+ 12 机神帝座怪技能（_seedD9）
         assertTrue(skillAttack > 0);
         assertTrue(skillIdle > skillAttack);
     }

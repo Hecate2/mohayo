@@ -151,7 +151,85 @@ contract Seed is Script {
         uint16[] memory ws = new uint16[](1);
         ws[0] = 100;
         ce.registerEnemyTable(1, ids, ws);
-        ce.setDungeon(1, CombatTypes.DungeonConfig({tableId: 1, enemyCount: 2, manaPerTurn: 1, rewardBase: 20, entryFee: 5, rescueFee: 10, turnInterval: 5}));
+        ce.setDungeon(1, CombatTypes.DungeonConfig({tableId: 1, enemyCount: 2, manaPerTurn: 1, rewardBase: 20, entryFee: 5, rescueFee: 10, turnInterval: 5, battles: 1}));
+
+        // =====================================================================
+        //  D9 机神帝座（content-design.md §8.2，最难关：四场决战；与 BaseTest._seedD9 同口径）
+        // =====================================================================
+        uint32 skillSparkSaw = _registerSkill(sr, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1300, 0, 950, 0, _emptyEffects(), 0); // 机神士兵·火花锯刃
+        uint32 skillParticleSlash = _registerSkill(sr, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1700, 0, 950, 0, _emptyEffects(), 0); // 机神督军·粒子斩
+        uint32 skillMarshalLeak = _registerSkill(sr, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0, _manaLeakEffect(), 1); // 督军·磁场超载（魔素+100）
+        uint32 skillFurnaceLeak = _registerSkill(sr, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0, _manaLeakEffect(), 1); // 魔素炉·魔素泄漏（+100）
+        uint32 skillFurnaceSiphon = _registerSkill(sr, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0, _manaSiphonEffect(), 1); // 魔素炉·魔素虹吸（-80）
+        uint32 skillEmperorCannon = _registerSkill(sr, 1, 0, 0, 0, 0, 40, 0, 1, 0, 1, 17000, 0, 900, 0, _emptyEffects(), 0); // 皇帝·机神火花炮
+        uint32 skillEmperorWheel = _registerSkill(sr, 2, 0, 0, 0, 0, 12, 0, 3, 0, 4, 6700, 0, 900, 0, _wheelEffects(), 1); // 皇帝·机神幻光轮（4 段）
+        uint32 skillEmperorLeak = _registerSkill(sr, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0, _manaLeakEffect(), 1); // 皇帝·魔素泄漏
+        uint32 skillEmperorSiphon = _registerSkill(sr, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0, _manaSiphonEffect(), 1); // 皇帝·魔素虹吸
+        uint32 skillEmperorPressure = _registerSkill(sr, 3, 0, 0, 0, 0, 2, 0, 4, 0, 0, 0, 0, 1000, 0, _pressureEffects(), 2); // 皇帝·帝王威压
+
+        // AI（士兵/督军/宝箱不依赖召唤技，可先注册）
+        uint16 aiSoldier = sr.registerAI(SkillRegistry.MonsterAI({skillCycle: [uint16(skillSparkSaw), 0, 0, 0, 0, 0, 0, 0], cycleLen: 1}));
+        uint16 aiMarshal = sr.registerAI(SkillRegistry.MonsterAI({skillCycle: [uint16(skillParticleSlash), uint16(skillParticleSlash), uint16(skillMarshalLeak), 0, 0, 0, 0, 0], cycleLen: 3}));
+        uint16 aiChest = sr.registerAI(SkillRegistry.MonsterAI({skillCycle: [uint16(0), 0, 0, 0, 0, 0, 0, 0], cycleLen: 1}));
+
+        // 模板（士兵/督军：引用已注册 AI）
+        uint16 templateSoldier = sr.registerTemplate(SkillRegistry.EnemyTemplate({
+            aiId: aiSoldier, threat: 3, maxHp: 2600, power: 380, magic: 150, speed: 28, baseAcc: 1000,
+            rewardMin: 8, rewardMax: 15,
+            onDeathSpawn: SkillRegistry.OnDeathSpawn({templateId: 0, count: 0, prob: 0})
+        }));
+        uint16 templateMarshal = sr.registerTemplate(SkillRegistry.EnemyTemplate({
+            aiId: aiMarshal, threat: 8, maxHp: 9000, power: 900, magic: 600, speed: 42, baseAcc: 1000,
+            rewardMin: 40, rewardMax: 70,
+            onDeathSpawn: SkillRegistry.OnDeathSpawn({templateId: 0, count: 0, prob: 0})
+        }));
+
+        // 召唤技（须在 templateSoldier 注册后再注册，否则 SummonRule 引用到 0）
+        uint32 skillFurnaceSummon = _registerSummonSkill(sr, templateSoldier);
+        uint32 skillEmperorSummon = _registerSummonSkill(sr, templateSoldier);
+
+        // 炉 / 皇帝 AI（引用召唤技，须在其后注册）
+        uint16 aiFurnace = sr.registerAI(SkillRegistry.MonsterAI({skillCycle: [uint16(skillFurnaceLeak), uint16(skillFurnaceSiphon), uint16(skillFurnaceSummon), uint16(skillFurnaceLeak), uint16(skillFurnaceSiphon), 0, 0, 0], cycleLen: 5}));
+        uint16 aiEmperor = sr.registerAI(SkillRegistry.MonsterAI({skillCycle: [uint16(skillEmperorWheel), uint16(skillEmperorCannon), uint16(skillEmperorPressure), uint16(skillEmperorSummon), uint16(skillEmperorLeak), uint16(skillEmperorCannon), 0, 0], cycleLen: 6}));
+
+        // 皇帝 / 炉 / 宝箱模板（皇帝须先于炉/宝箱注册，供 onDeathSpawn 引用）
+        uint16 templateEmperor = sr.registerTemplate(SkillRegistry.EnemyTemplate({
+            aiId: aiEmperor, threat: 9, maxHp: 60000, power: 3000, magic: 3000, speed: 60, baseAcc: 1000,
+            rewardMin: 300, rewardMax: 450,
+            onDeathSpawn: SkillRegistry.OnDeathSpawn({templateId: 0, count: 0, prob: 0})
+        }));
+        uint16 templateFurnace = sr.registerTemplate(SkillRegistry.EnemyTemplate({
+            aiId: aiFurnace, threat: 4, maxHp: 22000, power: 0, magic: 0, speed: 5, baseAcc: 0,
+            rewardMin: 120, rewardMax: 180,
+            onDeathSpawn: SkillRegistry.OnDeathSpawn({templateId: templateEmperor, count: 1, prob: 600})
+        }));
+        uint16 templateChest = sr.registerTemplate(SkillRegistry.EnemyTemplate({
+            aiId: aiChest, threat: 0, maxHp: 1, power: 0, magic: 0, speed: 1, baseAcc: 0,
+            rewardMin: 150, rewardMax: 250,
+            onDeathSpawn: SkillRegistry.OnDeathSpawn({templateId: templateEmperor, count: 1, prob: 200})
+        }));
+
+        // 敌人表
+        _ceTable(ce, 71, templateSoldier); // ① 机神哨岗
+        _ceWeightedTable(ce, 72, templateSoldier, 60, templateMarshal, 40); // ② 机神行军
+        _ceWeightedTable(ce, 73, templateFurnace, 55, templateSoldier, 45); // ③ 魔素炉阵
+        _ceWeightedTable(ce, 74, templateEmperor, 55, templateSoldier, 45); // ④ 皇帝亲征（变体）
+        _ceTable(ce, 75, templateChest); // ④ 王座宝箱（变体）
+
+        // 地下城 D9（四场决战 + ④ 王座大厅变体：85% 宝箱 / 15% 皇帝亲征）
+        ce.setDungeon(9, CombatTypes.DungeonConfig({tableId: 71, enemyCount: 3, manaPerTurn: 6, rewardBase: 200, entryFee: 40, rescueFee: 80, turnInterval: 5, battles: 4}));
+        CombatTypes.BattleConfig[] memory bcs = new CombatTypes.BattleConfig[](4);
+        bcs[0] = CombatTypes.BattleConfig({tableId: 71, enemyCount: 3});
+        bcs[1] = CombatTypes.BattleConfig({tableId: 72, enemyCount: 3});
+        bcs[2] = CombatTypes.BattleConfig({tableId: 73, enemyCount: 2});
+        bcs[3] = CombatTypes.BattleConfig({tableId: 75, enemyCount: 1});
+        ce.setDungeonBattles(9, bcs);
+        ce.addBattleVariant(9, 4, 75, 850);
+        ce.addBattleVariant(9, 4, 74, 150);
+
+        // ---- D10（content-design.md §8.3 占位）：仅 1 场，内容未定，复用史莱姆表 ----
+        _ceTable(ce, 101, templateSlime);
+        ce.setDungeon(10, CombatTypes.DungeonConfig({tableId: 101, enemyCount: 2, manaPerTurn: 4, rewardBase: 60, entryFee: 10, rescueFee: 20, turnInterval: 5, battles: 1}));
 
         // ---- 测试角色（GM 铸造，固定属性，供 CLI/Bot 联调）----
         address alice = vm.envOr("SEED_ALICE", address(0xA11CE));
@@ -335,5 +413,51 @@ contract Seed is Script {
             effects: effects, effectCount: effectCount,
             summon: summon
         }), classId);
+    }
+
+    // ---- D9 机神帝座技能/表辅助（与 BaseTest._seedD9 同口径）----
+    function _manaLeakEffect() internal pure returns (SkillRegistry.Effect[4] memory e) {
+        e[0] = SkillRegistry.Effect({op: 13, duration: 0, magnitude: 100, scope: 0, prob: 1000});
+    }
+
+    function _manaSiphonEffect() internal pure returns (SkillRegistry.Effect[4] memory e) {
+        e[0] = SkillRegistry.Effect({op: 13, duration: 0, magnitude: 80, scope: 1, prob: 1000});
+    }
+
+    function _wheelEffects() internal pure returns (SkillRegistry.Effect[4] memory e) {
+        e[0] = SkillRegistry.Effect({op: 1, duration: 2, magnitude: 0, scope: 1, prob: 400});
+    }
+
+    function _pressureEffects() internal pure returns (SkillRegistry.Effect[4] memory e) {
+        e[0] = SkillRegistry.Effect({op: 6, duration: 3, magnitude: 300, scope: 3, prob: 1000});
+        e[1] = SkillRegistry.Effect({op: 1, duration: 1, magnitude: 0, scope: 3, prob: 300});
+    }
+
+    /// @notice 怪物侧召唤技：一次性召唤 maxCount 个指定模板的敌人（魔素 0，无头寸限制）
+    function _registerSummonSkill(SkillRegistry sr, uint16 templateId) internal returns (uint32) {
+        return sr.registerSkill(SkillRegistry.Skill({
+            id: 0, kind: 4, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
+            targeting: 9, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
+            effects: _summonEffect(), effectCount: 1,
+            summon: SkillRegistry.SummonRule({templateId: templateId, maxCount: 2, enemyHeadroom: 0})
+        }));
+    }
+
+    function _ceTable(CombatEngine ce, uint16 tableId, uint16 templateId) internal {
+        uint16[] memory ids = new uint16[](1);
+        ids[0] = templateId;
+        uint16[] memory ws = new uint16[](1);
+        ws[0] = 100;
+        ce.registerEnemyTable(tableId, ids, ws);
+    }
+
+    function _ceWeightedTable(CombatEngine ce, uint16 tableId, uint16 t1, uint16 w1, uint16 t2, uint16 w2) internal {
+        uint16[] memory ids = new uint16[](2);
+        ids[0] = t1;
+        ids[1] = t2;
+        uint16[] memory ws = new uint16[](2);
+        ws[0] = w1;
+        ws[1] = w2;
+        ce.registerEnemyTable(tableId, ids, ws);
     }
 }

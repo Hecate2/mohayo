@@ -66,6 +66,7 @@ library CombatTypes {
     uint8 public constant PHASE_LOBBY = 0;
     uint8 public constant PHASE_COMBAT = 1;
     uint8 public constant PHASE_SETTLED = 2;
+    uint8 public constant PHASE_INTERMISSION = 3; // 一场战斗获胜后、下一场开战前（队长触发 advanceBattle 进入下一场）
 
     uint8 public constant MAX_MEMBERS = 10;
     uint8 public constant MAX_ENEMIES = 10;
@@ -122,6 +123,8 @@ library CombatTypes {
         uint32 id;
         uint8 difficulty;
         uint8 phase;
+        uint8 battleIndex; // 当前战斗（1-based；startCombat 后 = 1，advanceBattle 递增）
+        uint8 totalBattles; // 本地下城总战斗场数（≥1；单场地下城 = 1，沿用旧语义直接进入 SETTLED）
         uint32 turnId;
         bytes32 seed;
         uint32 manaPool;
@@ -155,6 +158,13 @@ library CombatTypes {
         uint32 entryFee;
         uint32 rescueFee;
         uint32 turnInterval;
+        uint8 battles; // 本地下城总战斗场数（0/1 = 单场，沿用旧语义）；>1 时逐场用 dungeonBattles
+    }
+
+    /// @notice 单场战斗配置（仅多场地下城用）：每场可覆盖敌人构成表与数量；全零 = 回退 DungeonConfig
+    struct BattleConfig {
+        uint16 tableId; // 本场敌人构成表（0 = 回退 DungeonConfig.tableId）
+        uint8 enemyCount; // 本场敌人数量（0 = 回退 DungeonConfig.enemyCount）
     }
 
     struct VariantEntry {

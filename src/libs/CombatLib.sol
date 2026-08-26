@@ -19,7 +19,7 @@ library CombatLib {
     event RoomCreated(uint32 indexed roomId, address indexed leader, uint8 difficulty);
     event MemberJoined(uint32 indexed roomId, address indexed player, uint256 characterId);
     event MemberLeft(uint32 indexed roomId, address indexed player);
-    event CombatStarted(uint32 indexed roomId, uint32 turnId);
+    event CombatStarted(uint32 indexed roomId, uint32 turnId, uint8 battleIndex);
     event PlanSet(uint32 indexed roomId, address indexed player);
     event TurnAdvanced(uint32 indexed roomId, uint32 turnId);
     event UnitActed(uint32 indexed roomId, uint8 unitType, uint8 unitIndex, uint32 skillId);
@@ -32,6 +32,7 @@ library CombatLib {
     event ResourceShort(uint32 indexed roomId, uint8 unitType, uint8 unitIndex, uint32 skillId);
     event Victory(uint32 indexed roomId);
     event Defeat(uint32 indexed roomId);
+    event BattleCleared(uint32 indexed roomId, uint8 battleIndex, uint8 totalBattles);
     event RewardDistributed(uint32 indexed roomId, address indexed player, uint256 amount);
     event ItemGiven(uint32 indexed roomId, address indexed from, address indexed to, uint16 itemId, uint32 count);
     event TimeoutPenalty(uint32 indexed roomId, uint8 unitType, uint8 unitIndex, uint64 amount);
@@ -44,36 +45,54 @@ library CombatLib {
         mapping(uint16 => uint16[]) storage templates,
         mapping(uint16 => uint16[]) storage weights,
         mapping(uint8 => CombatTypes.DungeonConfig) storage dungeons,
-        mapping(uint8 => CombatTypes.VariantEntry[]) storage variants
+        mapping(uint8 => CombatTypes.BattleConfig[]) storage battleConfigs,
+        mapping(uint8 => CombatTypes.VariantEntry[]) storage variants,
+        mapping(uint8 => mapping(uint8 => CombatTypes.VariantEntry[])) storage battleVariants,
+        uint8 battleIndex
     ) external {
-        uint16 tableId = rollEnemyTable(ctx, r, dungeons, variants);
+        (uint16 tableId, uint8 count) = battleComposition(ctx, r, templates, dungeons, battleConfigs, variants, battleVariants, battleIndex);
         uint16[] storage tpl = templates[tableId];
         uint16[] storage wgt = weights[tableId];
-        CombatTypes.DungeonConfig storage cfg = dungeons[r.difficulty];
-        uint8 count = cfg.enemyCount == 0 ? uint8(tpl.length) : cfg.enemyCount;
         for (uint8 i; i < count && r.enemyCount < CombatTypes.MAX_ENEMIES; ++i) {
             uint16 templateId = weightedPick(tpl, wgt, ctx, r);
             spawnEnemy(ctx, r, templateId);
         }
     }
 
-    function rollEnemyTable(
+    /// @notice 解析某场战斗的敌人构成：优先逐场配置 dungeonsBattles，其次回退 DungeonConfig；
+    ///         变体表优先逐场 battleVariants，其次第 1 场的 dungeonVariants，再回退默认表。
+    function battleComposition(
         CombatTypes.Ctx memory ctx,
         CombatTypes.Room storage r,
+        mapping(uint16 => uint16[]) storage templates,
         mapping(uint8 => CombatTypes.DungeonConfig) storage dungeons,
-        mapping(uint8 => CombatTypes.VariantEntry[]) storage variants
-    ) internal returns (uint16 tableId) {
+        mapping(uint8 => CombatTypes.BattleConfig[]) storage battleConfigs,
+        mapping(uint8 => CombatTypes.VariantEntry[]) storage variants,
+        mapping(uint8 => mapping(uint8 => CombatTypes.VariantEntry[])) storage battleVariants,
+        uint8 battleIndex
+    ) internal returns (uint16 tableId, uint8 count) {
         CombatTypes.DungeonConfig storage cfg = dungeons[r.difficulty];
-        CombatTypes.VariantEntry[] storage v = variants[r.difficulty];
-        if (v.length == 0) return cfg.tableId;
+        CombatTypes.BattleConfig memory bc;
+        uint256 bcLen = battleConfigs[r.difficulty].length;
+        if (bcLen > 0) {
+            uint256 bi = battleIndex == 0 ? 0 : battleIndex - 1;
+            if (bi < bcLen) bc = battleConfigs[r.difficulty][bi];
+        }
+        uint16 defaultTable = bc.tableId != 0 ? bc.tableId : cfg.tableId;
+        count = bc.enemyCount != 0 ? bc.enemyCount : cfg.enemyCount;
+        if (count == 0) count = uint8(templates[defaultTable].length);
+
+        CombatTypes.VariantEntry[] storage v = battleVariants[r.difficulty][battleIndex];
+        if (v.length == 0 && battleIndex == 1) v = variants[r.difficulty];
+        if (v.length == 0) return (defaultTable, count);
         uint256 total;
         for (uint256 i; i < v.length; ++i) total += v[i].weight;
         uint256 roll = CombatTypes.nextRandom(r) % total;
         for (uint256 i; i < v.length; ++i) {
-            if (roll < v[i].weight) return v[i].tableId;
+            if (roll < v[i].weight) return (v[i].tableId, count);
             roll -= v[i].weight;
         }
-        return cfg.tableId;
+        return (defaultTable, count);
     }
 
     function spawnEnemy(CombatTypes.Ctx memory ctx, CombatTypes.Room storage r, uint16 templateId) internal returns (uint8 idx) {
@@ -676,12 +695,46 @@ library CombatLib {
     }
 
     // ---- 死亡结算 ----
+    /// @notice 队长接任：取数组序最小的存活真人成员（非傀儡）为队长；
+    ///         summoned 单位（isSummon）与无主召唤物不参与，即使全部阵亡也保持原队长（房间已宣告Defeat）。
+    function reassignLeader(CombatTypes.Room storage r) external {
+        for (uint8 i; i < r.memberCount; ++i) {
+            CombatTypes.RoomMember storage m = r.members[i];
+            if (m.alive && !m.isSummon && m.player != address(0) && m.characterId != 0) {
+                r.leader = m.player;
+                return;
+            }
+        }
+    }
+
+    /// @notice 战斗间清场：清除本场全部敌人与成员身上跨越战斗不应保留的增益/减益/控制效果；
+    ///         保留成员生命/AP、房间魔素池与累计 rewardPool（跨战斗继承资源）。
+    function clearBattleField(CombatTypes.Room storage r) external {
+        r.enemyCount = 0;
+        for (uint8 i; i < CombatTypes.MAX_ENEMIES; ++i) delete r.enemies[i];
+        for (uint8 i; i < r.memberCount; ++i) {
+            for (uint8 j; j < r.members[i].effectCount; ++j) delete r.members[i].effects[j];
+            r.members[i].effectCount = 0;
+        }
+    }
+
     function onMemberDeath(CombatTypes.Ctx memory ctx, CombatTypes.Room storage r, uint8 mi) internal {
         CombatTypes.RoomMember storage m = r.members[mi];
         if (!m.alive) return;
+        bool wasLeader = !m.isSummon && m.player == r.leader;
         m.alive = false;
         m.effectCount = 0;
         emit UnitDied(r.id, 0, mi);
+        // 队长战死 → 按进入地下城的顺序（数组序）在存活真人中自动接任；傀儡不可当队长
+        if (wasLeader) {
+            for (uint8 i; i < r.memberCount; ++i) {
+                CombatTypes.RoomMember storage nm = r.members[i];
+                if (nm.alive && !nm.isSummon && nm.player != address(0) && nm.characterId != 0) {
+                    r.leader = nm.player;
+                    return;
+                }
+            }
+        }
     }
 
     function onEnemyDeath(CombatTypes.Ctx memory ctx, CombatTypes.Room storage r, uint8 ei) internal {
@@ -711,8 +764,10 @@ library CombatLib {
     // ---- 命中辅助 ----
     function isAllyTargeting(uint8 targeting, bool actorIsEnemy) internal pure returns (bool) {
         if (targeting == CombatTypes.TGT_SELF || targeting == CombatTypes.TGT_ROOM_ALL || targeting == CombatTypes.TGT_MOST_WOUNDED_ALLY) return true;
-        bool targetsEnemy = targeting == CombatTypes.TGT_RAND_SINGLE_ENEMY || targeting == CombatTypes.TGT_RAND_MULTI_ENEMY || targeting == CombatTypes.TGT_RAND_STRIKE_ENEMY || targeting == CombatTypes.TGT_ALL_ENEMY;
-        return actorIsEnemy ? targetsEnemy : !targetsEnemy;
+        // 目标落在施法方侧（我方）= 必中管道（治疗/增益豁免命中掷骰）；否则按 baseAcc 掷骰（可 miss）。
+        // 注意：targeting 枚举以玩家视角命名（ENEMY = 玩家敌人 = 怪物侧）。怪物用 ENEMY 系技能实际命中玩家，
+        // 此时目标在怪物对侧 → 非 allyTargeting → 允许因 baseAcc<1000 而 miss（机神火花炮 baseAcc 900）。
+        return !(targeting == CombatTypes.TGT_RAND_SINGLE_ENEMY || targeting == CombatTypes.TGT_RAND_MULTI_ENEMY || targeting == CombatTypes.TGT_RAND_STRIKE_ENEMY || targeting == CombatTypes.TGT_ALL_ENEMY);
     }
 
     function hasGuarNext(CombatTypes.ActiveEffect[6] storage effects, uint8 effectCount) internal view returns (bool) {

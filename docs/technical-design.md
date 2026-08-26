@@ -634,7 +634,7 @@ contract Economy is AccessControl {
 |------|---------|------|
 | `Economy` | `gmMint(who, amount)` / `gmBurn(who, amount)` | 任意Char铸造/销毁（含直接修复负余额——账本本就支持负数） |
 | `CombatEngine` | `gmGiveItem(playerId, itemId, count)` | 任意道具**直写金库内部账本**（零 ERC 调用，测试玩家立即可用）；需要钱包形态时 GM 经引擎既有 MINTER 角色走 `withdrawItem` 等价路径 |
-| `CharacterRegistry` | `gmMintCharacter(to, classId, race, affixIds[], skillIds[])` | **指定全属性**的角色创建：种族、职业、词条、自选技全部显式指定——**绕过 RNG（不走 AFFIX 随机源）、绕过创建费、绕过每日创建限额与首角色判定**。测试「硬精品构筑」不再需要掷几万次 |
+| `CharacterRegistry` | `gmMintCharacter(to, classId, race, affixIds[], skillIds[])` / `gmMintCharacterAtLevel(to, classId, race, affixIds[], skillIds[], level)` | **指定全属性**的角色创建：种族、职业、词条、自选技全部显式指定——**绕过 RNG（不走 AFFIX 随机源）、绕过创建费、绕过每日创建限额与首角色判定**。测试「硬精品构筑」不再需要掷几万次；`AtLevel` 变体额外显式指定**等级**（≤`MAX_LEVEL=300`，能力值按 `满级基准 × level / 300` 线性回插）——用于直达满级测试（例如 300 级、无加成 HP = 3 万，`content-design.md` §8.2 / `gameplay-design.md` §2.4），也用于测试角色/词条在不同等级下的成长曲线 |
 
 **多人持有**：`GAME_MASTER_ROLE` 是标准 RBAC 角色，`grantRole`/`revokeRole` 可授予任意多地址（测试团队每人一个，或再套一层 GM 多签）；授予/撤销走治理 Timelock（与配置类函数同通道，§6.2）——测试网也建议走短锁，留下授权审计痕迹。
 
