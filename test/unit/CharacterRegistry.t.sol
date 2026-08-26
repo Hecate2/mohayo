@@ -43,6 +43,49 @@ contract CharacterRegistryTest is BaseTest {
         cr.createCharacter(1, skills);
     }
 
+    // ---- 技能绑定强制：跨职业职业技 / 种族技不可自选 ----
+    function testOwnClassSkillAllowed() public {
+        uint32[] memory skills = new uint32[](1);
+        skills[0] = skillMagicSword; // 剑士职业技
+        uint256 tokenId = _createCharacter(alice, 1, skills); // 剑士自选本职业技
+        assertEq(cr.getCharacter(tokenId).skillIds[0], skillMagicSword);
+    }
+
+    function testClassSkillLockedForOtherClass() public {
+        uint32[] memory skills = new uint32[](1);
+        skills[0] = skillMagicSword; // 剑士职业技
+        vm.prank(alice);
+        vm.expectRevert("CR: class skill locked");
+        cr.createCharacter(3, skills); // 火枪手不可选
+    }
+
+    function testClassSkillLockedForClassless() public {
+        uint32[] memory skills = new uint32[](1);
+        skills[0] = skillBurstMagic; // 黑魔法师职业技
+        vm.prank(alice);
+        vm.expectRevert("CR: class skill locked");
+        cr.createCharacter(6, skills); // 无职业不可选任何职业技
+    }
+
+    function testRaceSkillLocked() public {
+        uint32[] memory skills = new uint32[](1);
+        skills[0] = skillBerserk; // 兽人种族技
+        vm.prank(alice);
+        vm.expectRevert("CR: race skill locked");
+        cr.createCharacter(1, skills); // 种族技一律不可手动自选（随种族自动并入）
+    }
+
+    function testRaceSkillAutoMergedStillWorks() public {
+        // GM 铸造兽人剑士：狂暴自动并入，无需手动传入
+        uint32[] memory skills = new uint32[](1);
+        skills[0] = skillAttack;
+        uint256 tokenId = cr.gmMintCharacter(alice, 1, 1, new uint16[](0), skills); // race 1 = 兽人
+        CharacterRegistry.Character memory c = cr.getCharacter(tokenId);
+        assertEq(c.skillIds[0], skillAttack);
+        assertEq(c.skillIds[1], skillBerserk);
+        assertEq(c.skillCount, 2);
+    }
+
     // ---- 种族三层加权（setFixed 强制各层）----
     function testRaceTier0Human() public {
         mockRng.setFixed(0); // 0 < 850 → tier0 → 人类

@@ -240,10 +240,15 @@ contract CharacterRegistry is ERC721, Ownable {
 
     function _mergeSkills(Character storage c, uint8 classId, uint8 race, uint32[] calldata skillIds) private {
         uint8 n = 0;
-        // 职业技（此处由调用方在 skillIds 中提供职业技 id；注册层校验由 SkillRegistry.classSkill 承担）
+        // 自选技校验：仅允许公共池技与本职业技；跨职业职业技拒绝（红线 op 仅本职业可用）；
+        // 种族技一律拒绝（随种族自动并入，手动传入会重复并破坏种族绑定）
         for (uint256 i; i < skillIds.length; ++i) {
-            require(skillRegistry.getSkill(skillIds[i]).id != 0, "CR: unknown skill");
-            c.skillIds[n++] = skillIds[i];
+            uint32 sid = skillIds[i];
+            require(skillRegistry.getSkill(sid).id != 0, "CR: unknown skill");
+            require(!_isRaceSkill(sid), "CR: race skill locked");
+            uint8 boundClass = _isClassSkill(sid);
+            require(boundClass == 0 || boundClass == classId, "CR: class skill locked");
+            c.skillIds[n++] = sid;
         }
         // 种族技并入（天使/恶魔双种族技）
         uint32 raceSkill = raceDefs[race].raceSkillId;
@@ -257,6 +262,23 @@ contract CharacterRegistry is ERC721, Ownable {
             c.skillIds[n++] = raceSkill2;
         }
         c.skillCount = n;
+    }
+
+    /// @notice 技能是否被某职业绑定；返回绑定职业 id，0 = 公共池技
+    function _isClassSkill(uint32 skillId) private view returns (uint8) {
+        for (uint8 i = 1; i <= classCount; ++i) {
+            if (skillRegistry.classSkill(i, skillId)) return i;
+        }
+        return 0;
+    }
+
+    /// @notice 技能是否为任一种族技（种族技只能随种族自动并入，不可自选）
+    function _isRaceSkill(uint32 skillId) private view returns (bool) {
+        for (uint8 i; i < raceCount; ++i) {
+            RaceDef storage rd = raceDefs[i];
+            if (rd.raceSkillId == skillId || rd.raceSkillId2 == skillId) return true;
+        }
+        return false;
     }
 
     // ---- 种族/词条随机 ----

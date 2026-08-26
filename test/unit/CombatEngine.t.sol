@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {BaseTest} from "../BaseTest.sol";
 import {SkillRegistry} from "../../src/core/SkillRegistry.sol";
+import {CharacterRegistry} from "../../src/core/CharacterRegistry.sol";
 import {CombatEngine} from "../../src/core/CombatEngine.sol";
 import {CombatTypes} from "../../src/libs/CombatTypes.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -508,21 +509,106 @@ contract CombatEngineTest is BaseTest {
         assertEq(ce.getRoom(roomId).manaPool, 30);
     }
 
-    // ---- 狂暴 DMG_OUT_MOD/DMG_IN_MOD：双修正同时生效 ----
+    // ---- 狂暴 DMG_OUT_MOD/DMG_IN_MOD：双修正同时生效（种族技随兽人自动并入，不可手动自选）----
     function testBerserkDamageMods() public {
-        uint32[] memory skills = new uint32[](2);
-        skills[0] = skillBerserk; // DMG_OUT_MOD +300 / DMG_IN_MOD +200
-        skills[1] = skillNuke; // 60 → 60×1300/1000 = 78
-        (uint256 charId, uint32 roomId) = _gmSolo(alice, 1, 5, skills); // 坦克 500 HP / 攻 100
-        _setPlan(alice, roomId, skills);
+        uint32[] memory skills = new uint32[](1);
+        skills[0] = skillNuke; // 60 → 60×1300/1000 = 78（狂暴 DMG_OUT_MOD +300）
+        uint256 charId = _gmCharacter(alice, 1, 1, new uint16[](0), skills); // 兽人剑士：狂暴自动并入
+        CharacterRegistry.Character memory c = cr.getCharacter(charId);
+        assertEq(c.skillIds[0], skillNuke);
+        assertEq(c.skillIds[1], skillBerserk, "race skill auto-merged");
+        vm.prank(alice);
+        uint32 roomId = ce.createRoom(5); // 坦克 500 HP / 攻 100
+        vm.prank(alice);
+        ce.joinRoom(roomId, charId);
+        uint32[] memory plan = new uint32[](2);
+        plan[0] = skillBerserk;
+        plan[1] = skillNuke;
+        _setPlan(alice, roomId, plan);
         vm.prank(alice);
         ce.startCombat(roomId);
         vm.prank(alice);
         ce.advanceTurn(roomId); // 狂暴（成员先手）；坦克随后普攻 10×1200/1000=12
         vm.prank(alice);
-        ce.advanceTurn(roomId); // 核弹 78；坦克反击 10×1200/1000=12
-        assertEq(ce.getEnemy(roomId, 0).hp, 500 - 78, "DMG_OUT_MOD applied");
-        assertEq(ce.getMember(roomId, 0).hp, 120 - 12 - 12, "DMG_IN_MOD applied");
+        ce.advanceTurn(roomId); // 核弹 93.6→93；坦克反击 12
+        // 兽人剑士：物攻 30×1.2=36、生命 120×1.1=132（种族直接修正）
+        uint64 nukeDmg = uint64(2000 * 36 / 1000) * 1300 / 1000; // 2000×36/1000=72 → ×1.3=93.6→93
+        uint64 tankHit = 10 * 1200 / 1000; // 100×100/1000=10 → ×1.2（狂暴 DMG_IN_MOD）=12
+        assertEq(ce.getEnemy(roomId, 0).hp, 500 - nukeDmg, "DMG_OUT_MOD applied");
+        assertEq(ce.getMember(roomId, 0).hp, 132 - tankHit - tankHit, "DMG_IN_MOD applied");
+    }
+
+    // ---- 计划层锁定：计划只能排角色已习得技能（防绕过创建层绑定）----
+    function testPlanRejectsUnOwnedSkill() public {
+        uint32[] memory skills = new uint32[](1);
+        skills[0] = skillAttack;
+        (uint256 charId, uint32 roomId) = _gmSolo(alice, 1, 4, skills); // 剑士只有普攻
+        uint16[16] memory plan;
+        plan[0] = uint16(skillBurstMagic); // 黑法职业技，未习得
+        vm.prank(alice);
+        vm.expectRevert("CE: skill not owned");
+        ce.setPlan(roomId, plan, 1);
+    }
+
+    function testPlanAllowsOwnedRaceSkill() public {
+        uint32[] memory skills = new uint32[](1);
+        skills[0] = skillAttack;
+        uint256 charId = _gmCharacter(alice, 1, 1, new uint16[](0), skills); // 兽人剑士（狂暴自动并入）
+        vm.prank(alice);
+        uint32 roomId = ce.createRoom(4);
+        vm.prank(alice);
+        ce.joinRoom(roomId, charId);
+        uint16[16] memory plan;
+        plan[0] = uint16(skillBerserk); // 已习得种族技，可排
+        vm.prank(alice);
+        ce.setPlan(roomId, plan, 1);
+        assertEq(ce.getMember(roomId, 0).plan[0], skillBerserk);
+    }
+
+    // ---- 公共池进攻锚点验收：无职业人类 solo D1（属性双弱 + 加强毒刃）----
+    function testClasslessHumanSoloD1PoisonBlade() public {
+        uint32[] memory skills = new uint32[](2);
+        skills[0] = skillDot; // 加强毒刃：直伤 4 + 流血 18×3
+        skills[1] = skillAttack; // 攒 AP（毒刃 8 AP 门槛）
+        (uint256 charId, uint32 roomId) = _gmSolo(alice, 6, 1, skills); // 无职业人类 + D1（2 史莱姆）
+        uint32[] memory plan = new uint32[](3);
+        plan[0] = skillAttack;
+        plan[1] = skillAttack;
+        plan[2] = skillDot;
+        _setPlan(alice, roomId, plan);
+        vm.prank(alice);
+        ce.startCombat(roomId);
+        uint8 turns;
+        while (ce.getRoom(roomId).phase == ce.PHASE_COMBAT() && turns < 40) {
+            vm.prank(alice);
+            ce.advanceTurn(roomId);
+            turns++;
+        }
+        assertEq(ce.getRoom(roomId).phase, ce.PHASE_SETTLED(), "classless human clears D1 with poison blade");
+        assertLt(turns, 40);
+    }
+
+    // ---- 公共池进攻锚点验收：无职业人类 solo D1（暴风剑爆发）----
+    function testClasslessHumanSoloD1StormBlade() public {
+        uint32[] memory skills = new uint32[](2);
+        skills[0] = skillStormBlade; // 暴风剑：20 AP 四连斩
+        skills[1] = skillAttack; // 攒 AP（20 AP 门槛）
+        (uint256 charId, uint32 roomId) = _gmSolo(alice, 6, 1, skills);
+        uint32[] memory plan = new uint32[](3);
+        plan[0] = skillAttack;
+        plan[1] = skillAttack;
+        plan[2] = skillStormBlade;
+        _setPlan(alice, roomId, plan);
+        vm.prank(alice);
+        ce.startCombat(roomId);
+        uint8 turns;
+        while (ce.getRoom(roomId).phase == ce.PHASE_COMBAT() && turns < 40) {
+            vm.prank(alice);
+            ce.advanceTurn(roomId);
+            turns++;
+        }
+        assertEq(ce.getRoom(roomId).phase, ce.PHASE_SETTLED(), "classless human clears D1 with storm blade");
+        assertLt(turns, 40);
     }
 
     // ---- 变体敌人表：开战一次掷骰选表 ----

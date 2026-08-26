@@ -42,7 +42,7 @@ contract Seed is Script {
         uint32 skillStun = _registerSkill(sr, 1, 10, 0, 0, 0, 0, 0, 1, 0, 0, 50, 0, 1000, 0, _stunEffect(), 1);
         uint32 skillSmoke = _registerSkill(sr, 3, 0, 0, 0, 0, 5, 0, 8, 0, 0, 0, 0, 1000, 0, _smokeEffect(), 1);
         uint32 skillManaBurst = _registerSkill(sr, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0, _manaBurstEffect(), 1);
-        uint32 skillDot = _registerSkill(sr, 2, 0, 0, 0, 0, 5, 0, 1, 0, 0, 30, 0, 1000, 0, _dotEffect(), 1);
+        uint32 skillDot = _registerSkill(sr, 1, 8, 0, 0, 0, 0, 0, 1, 0, 0, 200, 0, 950, 0, _dotEffect(), 1);
         uint32 skillTaunt = _registerSkill(sr, 3, 0, 0, 0, 0, 3, 0, 1, 0, 0, 0, 0, 1000, 0, _tauntEffect(), 1);
         uint32 skillBerserk = _registerSkill(sr, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0, _berserkEffects(), 2); // 兽人
         uint32 skillStoneBody = _registerSkill(sr, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0, _stoneBodyEffects(), 1); // 巨人
@@ -59,6 +59,8 @@ contract Seed is Script {
         _registerClassSkill(sr, 3, 3, 5, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0, _guarNextEffect(), 1);
         // 一闪：公共自选池（原剑士职业技移入）
         uint32 skillFlash = _registerSkill(sr, 1, 5, 0, 0, 0, 0, 0, 1, 0, 0, 350, 350, 650, 0, _emptyEffects(), 0);
+        // 暴风剑：公共自选池·爆发（高命中四连斩、随机目标多段、高 AP 消耗）
+        uint32 skillStormBlade = _registerSkill(sr, 1, 20, 0, 0, 0, 0, 0, 3, 0, 4, 250, 0, 900, 0, _emptyEffects(), 0);
         // 魔法剑：剑士职业技（魔攻输出 + 少量魔素 + 少量 AP）
         uint32 skillMagicSword = _registerClassSkill(sr, 1, 2, 0, 10, 0, 0, 5, 0, 1, 0, 0, 200, 0, 1000, 0, _emptyEffects(), 0);
         // 左轮弹雨：火枪手职业技（铅弹 ammoId=1，命中后少量 AP）
@@ -206,7 +208,7 @@ contract Seed is Script {
     }
 
     function _dotEffect() internal pure returns (SkillRegistry.Effect[4] memory e) {
-        e[0] = SkillRegistry.Effect({op: 8, duration: 3, magnitude: 10, scope: 1, prob: 1000});
+        e[0] = SkillRegistry.Effect({op: 8, duration: 3, magnitude: 18, scope: 1, prob: 1000});
     }
 
     function _tauntEffect() internal pure returns (SkillRegistry.Effect[4] memory e) {

@@ -236,11 +236,25 @@ contract CombatEngine is Ownable {
         CombatTypes.Room storage r = rooms[roomId];
         uint8 idx = CombatLib.findMember(r, msg.sender);
         require(idx != 255, "CE: not in room");
+        // 计划条目必须是角色已习得技能（公共池技/本职业技/种族技），0 = 空过占位；
+        // 否则「创建时职业/种族技锁定」可被计划层绕过（直接排爆裂魔法/鹰眼/种族技）
+        if (len > 0) {
+            CharacterRegistry.Character memory c = characterRegistry.getCharacter(r.members[idx].characterId);
+            for (uint8 i; i < len; ++i) {
+                if (plan[i] == 0) continue;
+                if (!_hasSkill(c.skillIds, c.skillCount, plan[i])) revert("CE: skill not owned");
+            }
+        }
         CombatTypes.RoomMember storage m = r.members[idx];
         for (uint8 i; i < len; ++i) m.plan[i] = plan[i];
         m.planLen = len;
         m.planStart = 0;
         emit PlanSet(roomId, msg.sender);
+    }
+
+    function _hasSkill(uint32[8] memory ids, uint8 n, uint16 skillId) internal pure returns (bool) {
+        for (uint8 i; i < n; ++i) if (ids[i] == skillId) return true;
+        return false;
     }
 
     function cancelPlan(uint32 roomId) external {

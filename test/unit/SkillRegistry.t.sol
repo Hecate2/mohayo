@@ -10,7 +10,7 @@ contract SkillRegistryTest is BaseTest {
     }
 
     function testRegisterSkillAssignsId() public {
-        assertEq(sr.skillCount(), 27); // 22 通用 + 5 职业技（鹰眼/魔法剑/左轮弹雨/龙击弹/爆裂魔法）
+        assertEq(sr.skillCount(), 28); // 23 通用（含暴风剑）+ 5 职业技（鹰眼/魔法剑/左轮弹雨/龙击弹/爆裂魔法）
         assertTrue(skillAttack > 0);
         assertTrue(skillIdle > skillAttack);
     }
@@ -21,6 +21,31 @@ contract SkillRegistryTest is BaseTest {
         assertEq(s.kind, 1);
         assertEq(s.power, 100);
         assertEq(s.targeting, 1);
+    }
+
+    // ---- 公共池进攻锚点数据：加强毒刃（物理 + 固定 DOT）----
+    function testPoisonBladeEnhancedData() public {
+        SkillRegistry.Skill memory s = sr.getSkill(skillDot);
+        assertEq(s.kind, 1, "physical (poison blade is physical)");
+        assertEq(s.apCost, 8);
+        assertEq(s.power, 200);
+        assertEq(s.baseAcc, 950);
+        assertEq(s.effectCount, 1);
+        assertEq(s.effects[0].op, 8); // DOT
+        assertEq(s.effects[0].magnitude, 18);
+        assertEq(s.effects[0].duration, 3);
+    }
+
+    // ---- 公共池进攻锚点数据：暴风剑（高命中四连斩 + 高 AP 消耗）----
+    function testStormBladeData() public {
+        SkillRegistry.Skill memory s = sr.getSkill(skillStormBlade);
+        assertEq(s.kind, 1);
+        assertEq(s.apCost, 20);
+        assertEq(s.apGain, 0);
+        assertEq(s.targeting, 3); // RAND_STRIKE_ENEMY
+        assertEq(s.targetCount, 4);
+        assertEq(s.power, 250);
+        assertEq(s.baseAcc, 900);
     }
 
     function testEffectCountCap() public {

@@ -48,6 +48,7 @@ contract BaseTest is Test {
     uint32 skillIdle; // 待机怪空技能
     // 本轮新增（用户定案）
     uint32 public skillFlash; // 一闪（公共自选池）
+    uint32 public skillStormBlade; // 暴风剑（公共自选池·爆发）
     uint32 public skillMagicSword; // 魔法剑（剑士职业技）
     uint32 public skillRevolverRain; // 左轮弹雨（火枪手职业技）
     uint32 public skillDragonBullet; // 龙击弹（火枪手职业技）
@@ -225,11 +226,12 @@ contract BaseTest is Test {
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
-        // 灼烧：DOT 效果
+        // 毒刃：单体物理斩击 + 固定值持续流血（公共自选池·输出·保底——本轮加强：DOT 不随属性缩放，
+        //       低攻角色（无职业/白法）的稳定清场手段；直伤随物攻成长、流血固定，随等级相对衰减不威胁职业招牌）
         skillDot = sr.registerSkill(SkillRegistry.Skill({
-            id: 0, kind: 2, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 5, hpCost: 0,
-            targeting: 1, weightMode: 0, targetCount: 0, power: 30, damageCap: 0, baseAcc: 1000, flags: 0,
-            effects: [SkillRegistry.Effect({op: 8, duration: 3, magnitude: 10, scope: 1, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
+            id: 0, kind: 1, apCost: 8, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
+            targeting: 1, weightMode: 0, targetCount: 0, power: 200, damageCap: 0, baseAcc: 950, flags: 0,
+            effects: [SkillRegistry.Effect({op: 8, duration: 3, magnitude: 18, scope: 1, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
@@ -333,6 +335,15 @@ contract BaseTest is Test {
         skillFlash = sr.registerSkill(SkillRegistry.Skill({
             id: 0, kind: 1, apCost: 5, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
             targeting: 1, weightMode: 0, targetCount: 0, power: 350, damageCap: 350, baseAcc: 650, flags: 0,
+            effects: [SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
+            effectCount: 0, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
+        }));
+
+        // 暴风剑：高命中四连斩、随机目标多段、消耗大量 AP（公共自选池·输出·爆发——总伤与斩铁剑同级但
+        //       随机分摊，聚焦击杀弱于职业招牌；20 AP 门槛 + AP 上限天然封顶爆发频率）
+        skillStormBlade = sr.registerSkill(SkillRegistry.Skill({
+            id: 0, kind: 1, apCost: 20, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
+            targeting: 3, weightMode: 0, targetCount: 4, power: 250, damageCap: 0, baseAcc: 900, flags: 0,
             effects: [SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 0, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
