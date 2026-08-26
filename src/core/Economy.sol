@@ -3,9 +3,9 @@ pragma solidity ^0.8.24;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-/// @title Economy - 游戏币（烬晶）内部账本 + 烬晶娱乐模块总线
+/// @title Economy - 游戏币（Char）内部账本 + Char娱乐模块总线
 /// @notice 游戏币只存在于合约内部 mapping，无 transfer 接口、禁止 P2P 转账、支持无上限负数
-///         （技术设计 §2.1 / 玩法设计 §7.1）。烬晶娱乐模块总线（技术设计 §5.5）：
+///         （技术设计 §2.1 / 玩法设计 §7.1）。Char娱乐模块总线（技术设计 §5.5）：
 ///         托管级（tier 1）零铸造、结算分配强制抽水销毁；铸销级（tier 2）可 mint/burn，
 ///         每次 mint 走「逐模块日预算 + 全局合计预算」双闸门。
 contract Economy is Ownable {
@@ -31,7 +31,7 @@ contract Economy is Ownable {
     mapping(address => uint256) public dailyUsdMinted;
     mapping(address => uint256) public lastUsdDay;
 
-    // ---- 烬晶娱乐模块总线 ----
+    // ---- Char娱乐模块总线 ----
     struct ModuleGrant {
         uint8 tier; // 0=禁用 1=托管级 2=铸销级
         uint32 minRakeBps; // 托管级强制最低抽水（基点，结算时扣除销毁）
@@ -142,7 +142,7 @@ contract Economy is Ownable {
         emit UsdMinted(player, coinAmount);
     }
 
-    // ---- 烬晶娱乐模块总线 ----
+    // ---- Char娱乐模块总线 ----
     function registerModule(address module, uint8 tier, uint32 minRakeBps, uint96 dailyBudget) external onlyOwner {
         require(tier <= 2, "Economy: bad tier");
         if (tier == 1) {
@@ -156,7 +156,7 @@ contract Economy is Ownable {
         modules[module].tier = 0;
     }
 
-    /// @notice 托管级：玩家烬晶划入模块托管（零铸造）
+    /// @notice 托管级：玩家Char划入模块托管（零铸造）
     function moduleEscrow(address module, address player, uint256 amount) external {
         require(msg.sender == module, "Economy: not module");
         require(modules[module].tier >= 1, "Economy: module disabled");

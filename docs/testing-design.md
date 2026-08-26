@@ -117,7 +117,7 @@ Anvil 是 Foundry 自带的本地节点，作为私链测试的默认底座，�
 
 对经济与状态不变量做长期随机序列验证（`invariant` 目标函数 + `handler` 随机调用）：
 
-- **烬晶总量守恒**：mint/burn/销毁路径下，`总铸造 − 总销毁` 恒等于账本余额之和。
+- **Char总量守恒**：mint/burn/销毁路径下，`总铸造 − 总销毁` 恒等于账本余额之和。
 - **房间状态有界**：任意随机操作序列下，房间数、单位数、事件数不超硬上限。
 - **角色属性不溢出**：任意升级/词条组合下，三维属性在 uint 范围内且受种族上限约束。
 
@@ -184,7 +184,7 @@ Hardhat 配置 `paths.sources` 指向 `../src`、`paths.artifacts` 指向 `../ou
 | `bot-fund` | 给 L1 中继 Bot 钱包充值 CFX |
 | `pause` / `unpause` | 紧急暂停/恢复（Pausable） |
 | `set-config` | 修改难度参数/限额/RNG 路由（走时间锁） |
-| `register-module` | 烬晶娱乐模块总线注册 |
+| `register-module` | Char娱乐模块总线注册 |
 | `post-price` | （若采用推送模型）价格上链 |
 | `advance-turn` | 手动推进指定房间回合（Keeper 兜底） |
 

@@ -121,8 +121,8 @@ contract SkillRegistry is Ownable {
         uint64 magic;
         uint64 speed;
         uint16 baseAcc;
-        uint16 rewardMin; // 掉落烬晶下限
-        uint16 rewardMax; // 掉落烬晶上限
+        uint16 rewardMin; // 掉落Char下限
+        uint16 rewardMax; // 掉落Char上限
         OnDeathSpawn onDeathSpawn;
     }
 
