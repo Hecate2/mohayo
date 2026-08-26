@@ -54,6 +54,7 @@ contract CombatEngine is Ownable {
     uint8 public constant WT_THREAT_ENEMY = 2;
     uint8 public constant FLAG_GUARANTEED_HIT = 1;
     uint8 public constant FLAG_MANA_ALL = 2;
+    uint8 public constant FLAG_SUMMON_ALLY = 4;
     uint8 public constant SCOPE_SELF = 0;
     uint8 public constant SCOPE_TARGET = 1;
     uint8 public constant SCOPE_ALL_ALLY = 2;
@@ -111,6 +112,7 @@ contract CombatEngine is Ownable {
     event RewardDistributed(uint32 indexed roomId, address indexed player, uint256 amount);
     event ItemGiven(uint32 indexed roomId, address indexed from, address indexed to, uint16 itemId, uint32 count);
     event TimeoutPenalty(uint32 indexed roomId, uint8 unitType, uint8 unitIndex, uint64 amount);
+    event MemberSummoned(uint32 indexed roomId, uint8 memberIndex, uint16 templateId);
 
     constructor(SkillRegistry skillRegistry_, CharacterRegistry characterRegistry_, Economy economy_) Ownable(msg.sender) {
         skillRegistry = skillRegistry_;

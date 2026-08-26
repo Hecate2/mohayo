@@ -80,6 +80,27 @@ async function main() {
   await reg(sr.registerClassSkill, mkSkill({ kind: 1, ammoId: 2, ammoCost: 1, targeting: 1, power: 300, effects: [eff(13, 0, 1, 0), ...emptyEffects().slice(1)], effectCount: 1 }), 3); // 龙击弹：火枪手 classId=2
   await reg(sr.registerClassSkill, mkSkill({ kind: 2, apCost: 2, manaCost: 0, targeting: 4, power: 500, flags: 3, effects: [eff(1, 3, 0, 0), ...emptyEffects().slice(1)], effectCount: 1 }), 4); // 爆裂魔法：黑魔法师 classId=4
 
+  // ---- 职业技能补齐（content-design.md §4；类内自动发放）----
+  await reg(sr.registerClassSkill, mkSkill({ kind: 1, apCost: 1, apGain: 2, targeting: 3, targetCount: 3, power: 50 }), 1); // 快速剑：剑士 classId=1
+  await reg(sr.registerClassSkill, mkSkill({ kind: 1, apCost: 10, targeting: 1, power: 800 }), 1); // 斩铁剑：剑士 classId=1
+  await reg(sr.registerClassSkill, mkSkill({ kind: 1, apCost: 3, targeting: 1, power: 80, effects: [eff(1, 2, 0, 1, 400), eff(11, 2, 0, 1), ...emptyEffects().slice(2)], effectCount: 2 }), 2); // 盾击：守卫 classId=2
+  await reg(sr.registerClassSkill, mkSkill({ kind: 3, manaCost: 1, targeting: 9, effects: [eff(4, 3, 150, 0), ...emptyEffects().slice(1)], effectCount: 1 }), 2); // 盾墙：守卫 classId=2
+  await reg(sr.registerClassSkill, mkSkill({ kind: 3, manaCost: 1, targeting: 9, effects: [eff(5, 3, 300, 0), ...emptyEffects().slice(1)], effectCount: 1 }), 2); // 回避：守卫 classId=2
+  await reg(sr.registerClassSkill, mkSkill({ kind: 1, hpCost: 50, targeting: 3, targetCount: 2, power: 120, effects: [eff(13, 0, 1, 0), ...emptyEffects().slice(1)], effectCount: 1 }), 4); // 献祭：黑魔法师 classId=4
+  await reg(sr.registerClassSkill, mkSkill({ kind: 3, manaCost: 1, targeting: 4, effects: [eff(6, 2, 200, 3), ...emptyEffects().slice(1)], effectCount: 1 }), 4); // 黑幕：黑魔法师 classId=4
+  await reg(sr.registerClassSkill, mkSkill({ kind: 2, manaCost: 1, targeting: 2, targetCount: 4, power: 80 }), 5); // 光弹：白魔法师 classId=5
+  await reg(sr.registerClassSkill, mkSkill({ kind: 3, manaCost: 1, targeting: 6, weightMode: 1, targetCount: 3, power: 90, effects: [eff(13, 0, 1, 0), ...emptyEffects().slice(1)], effectCount: 1 }), 5); // 圣泉：白魔法师 classId=5
+  const templateDecoy = await reg(sr.registerTemplate, { aiId: 0, threat: 0, maxHp: 120, power: 0, magic: 0, speed: 0, baseAcc: 0, rewardMin: 0, rewardMax: 0, onDeathSpawn: { templateId: 0, count: 0, prob: 0 } });
+  await reg(sr.registerClassSkill, mkSkill({ kind: 4, manaCost: 1, targeting: 9, flags: 4, effects: [eff(14, 0, 0, 0), ...emptyEffects().slice(1)], effectCount: 1, summon: { templateId: templateDecoy, maxCount: 1, enemyHeadroom: 0 } }), 5); // 替身人偶：白魔法师 classId=5
+
+  // ---- 自选池补齐（content-design.md §5；公共池技）----
+  await reg(sr.registerSkill, mkSkill({ kind: 3, manaCost: 1, targeting: 5, weightMode: 1, power: 60 })); // 急救包扎
+  await reg(sr.registerSkill, mkSkill({ kind: 3, manaCost: 1, targeting: 1, effects: [eff(6, 2, 250, 0), eff(6, 2, 400, 1), ...emptyEffects().slice(2)], effectCount: 2 })); // 致盲粉
+  await reg(sr.registerSkill, mkSkill({ kind: 3, manaCost: 1, targeting: 9, effects: [eff(4, 3, 60, 0), ...emptyEffects().slice(1)], effectCount: 1 })); // 岩石壁垒
+  await reg(sr.registerSkill, mkSkill({ kind: 2, manaCost: 1, targeting: 9, power: 1000, baseAcc: 1000, effects: [eff(4, 3, 0, 0), ...emptyEffects().slice(1)], effectCount: 1 })); // 魔力护盾
+  await reg(sr.registerSkill, mkSkill({ kind: 2, manaCost: 2, targeting: 2, targetCount: 2, power: 70 })); // 龙息
+  await reg(sr.registerSkill, mkSkill({ kind: 2, manaCost: 2, targeting: 4, power: 60 })); // 魔爆术
+
   // ---- 种族（content-design.md §3：常见四 + 略稀有二 + 最稀有二，含种族技）----
   await cr.registerRace(0, { statMods: [0, 0, 0], hpMod: 0, raceSkillId: 0, raceSkillId2: 0, selfSelectBonus: 2, exists: true }); // 人类：基准，自选 +2
   await cr.registerRace(1, { statMods: [200, -200, -100], hpMod: 100, raceSkillId: skillBerserk, raceSkillId2: 0, selfSelectBonus: 0, exists: true }); // 兽人：物攻+20%/魔攻-20%/敏捷-10%/生命+10%

@@ -41,7 +41,7 @@ library CombatEndLib {
             return;
         }
         uint8 aliveMembers;
-        for (uint8 i; i < r.memberCount; ++i) if (r.members[i].alive) aliveMembers++;
+        for (uint8 i; i < r.memberCount; ++i) if (r.members[i].alive && !r.members[i].isSummon) aliveMembers++;
         if (aliveMembers == 0) {
             onDefeat(ctx, r, dungeons);
         }
@@ -51,22 +51,25 @@ library CombatEndLib {
         r.phase = CombatTypes.PHASE_SETTLED;
         emit Victory(r.id);
         uint8 n = CombatLib.aliveMemberCount(r);
-        if (n > 0 && r.rewardPool > 0) {
+        uint8 realN = 0;
+        for (uint8 i; i < r.memberCount; ++i) if (r.members[i].alive && !r.members[i].isSummon) realN++;
+        if (realN > 0 && r.rewardPool > 0) {
             uint256 totalW;
             uint256[10] memory weights;
             uint8 k;
             for (uint8 i; i < r.memberCount; ++i) {
-                if (!r.members[i].alive) continue;
+                if (!r.members[i].alive || r.members[i].isSummon) continue;
                 uint256 w = 1 + (CombatTypes.nextRandom(r) % 1000);
                 weights[k++] = w;
                 totalW += w;
             }
             uint256 distributed;
             for (uint8 i; i < k; ++i) {
+                address pl = r.members[i].player;
                 uint256 share = uint256(r.rewardPool) * weights[i] / totalW;
-                ctx.economy.mint(r.members[i].player, share);
+                ctx.economy.mint(pl, share);
                 distributed += share;
-                emit RewardDistributed(r.id, r.members[i].player, share);
+                emit RewardDistributed(r.id, pl, share);
             }
             if (distributed < r.rewardPool) {
                 ctx.economy.mint(r.leader, r.rewardPool - distributed);
@@ -86,7 +89,7 @@ library CombatEndLib {
         CombatTypes.DungeonConfig storage cfg = dungeons[r.difficulty];
         if (cfg.rescueFee > 0) {
             for (uint8 i; i < r.memberCount; ++i) {
-                if (r.members[i].characterId != 0) ctx.economy.chargeRescueFee(r.members[i].player, cfg.rescueFee);
+                if (r.members[i].characterId != 0 && !r.members[i].isSummon) ctx.economy.chargeRescueFee(r.members[i].player, cfg.rescueFee);
             }
         }
         releaseAll(ctx, r);

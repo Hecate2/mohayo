@@ -71,6 +71,42 @@ contract Seed is Script {
         // 爆裂魔法：黑魔法师职业技（耗光魔素 + 固有绝对命中 + 自晕）
         uint32 skillBurstMagic = _registerClassSkill(sr, 4, 2, 0, 0, 0, 0, 0, 0, 4, 0, 0, 500, 0, 1000, 3, _burstMagicEffects(), 1);
 
+        // ---- 职业技能补齐（content-design.md §4；类内自动发放）----
+        // 剑士：快速剑（三连轻击，AP1 产 2）、斩铁剑（贵而稳的重击，AP 10）
+        uint32 skillRapidStrike = _registerClassSkill(sr, 1, 1, 1, 2, 0, 0, 0, 0, 3, 0, 3, 50, 0, 1000, 0, _emptyEffects(), 0);
+        uint32 skillIronCleave = _registerClassSkill(sr, 1, 1, 10, 0, 0, 0, 0, 0, 1, 0, 0, 800, 0, 1000, 0, _emptyEffects(), 0);
+        // 守卫：盾击（单体 + 概率眩晕 + 嘲讽）、盾墙（高额护盾）、回避（纯加法命中）
+        uint32 skillShieldBash = _registerClassSkill(sr, 2, 1, 3, 0, 0, 0, 0, 0, 1, 0, 0, 80, 0, 1000, 0, _shieldBashEffects(), 2);
+        uint32 skillShieldWall = _registerClassSkill(sr, 2, 3, 0, 0, 0, 0, 1, 0, 9, 0, 0, 0, 0, 1000, 0, _shield150Effect(), 1);
+        uint32 skillGuardEvade = _registerClassSkill(sr, 2, 3, 0, 0, 0, 0, 1, 0, 9, 0, 0, 0, 0, 1000, 0, _evadeEffect(), 1);
+        // 黑魔法师：献祭（以命换多段随机攻击 + 产魔素）、黑幕（降敌方全体命中）
+        uint32 skillSacrifice = _registerClassSkill(sr, 4, 1, 0, 0, 0, 0, 0, 50, 3, 0, 2, 120, 0, 1000, 0, _manaBurstEffect(), 1);
+        uint32 skillBlackVeil = _registerClassSkill(sr, 4, 3, 0, 0, 0, 0, 1, 0, 4, 0, 0, 0, 0, 1000, 0, _accDownAllEffect(), 1);
+        // 白魔法师：光弹（弹着数固定的多目标圣光弹）、圣泉（按亏空加权小治疗 + 回魔）、替身人偶（召唤己方假目标）
+        uint32 skillLightOrb = _registerClassSkill(sr, 5, 2, 0, 0, 0, 0, 1, 0, 2, 0, 4, 80, 0, 1000, 0, _emptyEffects(), 0);
+        uint32 skillHolySpring = _registerClassSkill(sr, 5, 3, 0, 0, 0, 0, 1, 0, 6, 1, 3, 90, 0, 1000, 0, _manaBurstEffect(), 1);
+        uint16 templateDecoy = sr.registerTemplate(SkillRegistry.EnemyTemplate({
+            aiId: 0, threat: 0, maxHp: 120, power: 0, magic: 0, speed: 0, baseAcc: 0,
+            rewardMin: 0, rewardMax: 0,
+            onDeathSpawn: SkillRegistry.OnDeathSpawn({templateId: 0, count: 0, prob: 0})
+        }));
+        uint32 skillDecoyDoll = _registerClassSkillSummon(sr, 5, 4, 0, 0, 0, 0, 1, 0, 9, 0, 0, 0, 0, 1000, 4, _summonEffect(), 1,
+            SkillRegistry.SummonRule({templateId: templateDecoy, maxCount: 1, enemyHeadroom: 0}));
+
+        // ---- 自选池补齐（content-design.md §5；公共池技）----
+        // 急救包扎：小额治疗随机我方
+        uint32 skillFirstAid = _registerSkill(sr, 3, 0, 0, 0, 0, 1, 0, 5, 1, 0, 60, 0, 1000, 0, _emptyEffects(), 0);
+        // 致盲粉：大幅降低自己与单个随机敌人命中（双刃）
+        uint32 skillBlindingPowder = _registerSkill(sr, 3, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1000, 0, _blindingEffects(), 2);
+        // 岩石壁垒：小额护盾
+        uint32 skillRockBulwark = _registerSkill(sr, 3, 0, 0, 0, 0, 1, 0, 9, 0, 0, 0, 0, 1000, 0, _shield60Effect(), 1);
+        // 魔力护盾：护盾量 = power × 魔攻（kind=MAGIC 走魔法缩放路径）
+        uint32 skillMagicShield = _registerSkill(sr, 2, 0, 0, 0, 0, 1, 0, 9, 0, 0, 1000, 0, 1000, 0, _shieldEffect(), 1);
+        // 龙息：多目标魔法吐息
+        uint32 skillDragonBreath = _registerSkill(sr, 2, 0, 0, 0, 0, 2, 0, 2, 0, 2, 70, 0, 1000, 0, _emptyEffects(), 0);
+        // 魔爆术：全体魔法（低伤，法系基础清场）
+        uint32 skillManaClap = _registerSkill(sr, 2, 0, 0, 0, 0, 2, 0, 4, 0, 0, 60, 0, 1000, 0, _emptyEffects(), 0);
+
         // ---- 种族（content-design.md §3：常见四 + 略稀有二 + 最稀有二，含种族技）----
         cr.registerRace(0, CharacterRegistry.RaceDef({statMods: [int16(0), 0, 0], hpMod: int16(0), raceSkillId: 0, raceSkillId2: 0, selfSelectBonus: 2, exists: true})); // 人类：基准，自选 +2
         cr.registerRace(1, CharacterRegistry.RaceDef({statMods: [int16(200), -200, -100], hpMod: int16(100), raceSkillId: skillBerserk, raceSkillId2: 0, selfSelectBonus: 0, exists: true})); // 兽人：物攻+20%/魔攻-20%/敏捷-10%/生命+10%
@@ -258,5 +294,46 @@ contract Seed is Script {
 
     function _burstMagicEffects() internal pure returns (SkillRegistry.Effect[4] memory e) {
         e[0] = SkillRegistry.Effect({op: 1, duration: 3, magnitude: 0, scope: 0, prob: 1000});
+    }
+
+    function _shieldBashEffects() internal pure returns (SkillRegistry.Effect[4] memory e) {
+        e[0] = SkillRegistry.Effect({op: 1, duration: 2, magnitude: 0, scope: 1, prob: 400});
+        e[1] = SkillRegistry.Effect({op: 11, duration: 2, magnitude: 0, scope: 1, prob: 1000});
+    }
+
+    function _shield150Effect() internal pure returns (SkillRegistry.Effect[4] memory e) {
+        e[0] = SkillRegistry.Effect({op: 4, duration: 3, magnitude: 150, scope: 0, prob: 1000});
+    }
+
+    function _shield60Effect() internal pure returns (SkillRegistry.Effect[4] memory e) {
+        e[0] = SkillRegistry.Effect({op: 4, duration: 3, magnitude: 60, scope: 0, prob: 1000});
+    }
+
+    function _evadeEffect() internal pure returns (SkillRegistry.Effect[4] memory e) {
+        e[0] = SkillRegistry.Effect({op: 5, duration: 3, magnitude: 300, scope: 0, prob: 1000});
+    }
+
+    function _accDownAllEffect() internal pure returns (SkillRegistry.Effect[4] memory e) {
+        e[0] = SkillRegistry.Effect({op: 6, duration: 2, magnitude: 200, scope: 3, prob: 1000});
+    }
+
+    function _blindingEffects() internal pure returns (SkillRegistry.Effect[4] memory e) {
+        e[0] = SkillRegistry.Effect({op: 6, duration: 2, magnitude: 250, scope: 0, prob: 1000});
+        e[1] = SkillRegistry.Effect({op: 6, duration: 2, magnitude: 400, scope: 1, prob: 1000});
+    }
+
+    /// @notice 召唤型职业技注册：额外携带 summon 规则（替身人偶等己方召唤用 flags bit2）
+    function _registerClassSkillSummon(
+        SkillRegistry sr, uint8 classId,
+        uint8 kind, uint16 apCost, uint16 apGain, uint16 ammoId, uint16 ammoCost, uint32 manaCost, uint16 hpCost,
+        uint8 targeting, uint8 weightMode, uint8 targetCount, uint64 power, uint64 damageCap, uint16 baseAcc, uint8 flags,
+        SkillRegistry.Effect[4] memory effects, uint8 effectCount, SkillRegistry.SummonRule memory summon
+    ) internal returns (uint32) {
+        return sr.registerClassSkill(SkillRegistry.Skill({
+            id: 0, kind: kind, apCost: apCost, apGain: apGain, ammoId: ammoId, ammoCost: ammoCost, manaCost: manaCost, hpCost: hpCost,
+            targeting: targeting, weightMode: weightMode, targetCount: targetCount, power: power, damageCap: damageCap, baseAcc: baseAcc, flags: flags,
+            effects: effects, effectCount: effectCount,
+            summon: summon
+        }), classId);
     }
 }

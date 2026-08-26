@@ -249,6 +249,7 @@ contract CharacterRegistry is ERC721, Ownable {
         }
         c.resourceCount = resourceCount_;
         _computeStats(c, classId, race);
+        // 统一严格路径：职业/种族专属技自动并入，自选技仅限公共池且受槽数上限约束
         _mergeSkills(c, classId, race, skillIds);
         c.hp = c.maxHp;
     }
@@ -303,19 +304,17 @@ contract CharacterRegistry is ERC721, Ownable {
         return uint64(v);
     }
 
+    /// @dev 技能合并（统一严格路径）：先自动并入职业专属技（createCharacter 与 GM 铸造共用同一规则，
+    ///     GM 只任意指定种族/词条等属性，技能合并无宽松路径），再并入种族技；
+    ///     自选技仅允许公共池技（任何职业/种族专属技均自动发放，自选重复即拒绝），
+    ///     数量受自选槽上限约束（职业 skillSlots + 人类 selfSelectBonus）。
     function _mergeSkills(Character storage c, uint8 classId, uint8 race, uint32[] calldata skillIds) private {
         uint8 n = 0;
-        // 自选技校验：仅允许公共池技与本职业技；跨职业职业技拒绝；
-        // 种族技一律拒绝（随种族自动并入，手动传入会重复并破坏种族绑定）
-        for (uint256 i; i < skillIds.length; ++i) {
-            uint32 sid = skillIds[i];
-            require(skillRegistry.getSkill(sid).id != 0, "CR: unknown skill");
-            require(!_isRaceSkill(sid), "CR: race skill locked");
-            uint8 boundClass = _isClassSkill(sid);
-            require(boundClass == 0 || boundClass == classId, "CR: class skill locked");
-            c.skillIds[n++] = sid;
+        uint32[] memory cls = skillRegistry.getClassSkillIds(classId);
+        for (uint256 i; i < cls.length; ++i) {
+            require(skillRegistry.getSkill(cls[i]).id != 0, "CR: unknown class skill");
+            c.skillIds[n++] = cls[i];
         }
-        // 种族技并入（天使/恶魔双种族技）
         uint32 raceSkill = raceDefs[race].raceSkillId;
         if (raceSkill != 0) {
             require(skillRegistry.getSkill(raceSkill).id != 0, "CR: unknown race skill");
@@ -325,6 +324,15 @@ contract CharacterRegistry is ERC721, Ownable {
         if (raceSkill2 != 0) {
             require(skillRegistry.getSkill(raceSkill2).id != 0, "CR: unknown race skill");
             c.skillIds[n++] = raceSkill2;
+        }
+        uint16 selfSelectMax = uint16(classDefs[classId].skillSlots) + uint16(raceDefs[race].selfSelectBonus);
+        require(skillIds.length <= selfSelectMax, "CR: too many skills");
+        for (uint256 i; i < skillIds.length; ++i) {
+            uint32 sid = skillIds[i];
+            require(skillRegistry.getSkill(sid).id != 0, "CR: unknown skill");
+            require(!_isRaceSkill(sid), "CR: race skill locked");
+            require(_isClassSkill(sid) == 0, "CR: class skill auto");
+            c.skillIds[n++] = sid;
         }
         c.skillCount = n;
     }

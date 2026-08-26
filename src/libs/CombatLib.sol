@@ -35,6 +35,7 @@ library CombatLib {
     event RewardDistributed(uint32 indexed roomId, address indexed player, uint256 amount);
     event ItemGiven(uint32 indexed roomId, address indexed from, address indexed to, uint16 itemId, uint32 count);
     event TimeoutPenalty(uint32 indexed roomId, uint8 unitType, uint8 unitIndex, uint64 amount);
+    event MemberSummoned(uint32 indexed roomId, uint8 memberIndex, uint16 templateId);
 
     // ---- 敌人生成 ----
     function spawnEnemies(
@@ -439,7 +440,7 @@ library CombatLib {
                 uint256 pr = CombatTypes.nextRandom(r) % 1000;
                 if (pr >= e.prob) continue;
             }
-            applySkillEffect(ctx, r, actorEffects, actorEffectCount, actorType, actorIndex, s, t, tEffects, tEffectCount, e, dealt, actorPlayer);
+            applySkillEffect(ctx, r, actorEffects, actorEffectCount, actorType, actorIndex, s, t, tEffects, tEffectCount, attack, magic, e, dealt, actorPlayer);
             // 刷新计数：同一技能多个效果可能作用于同一单位，计数需与存储同步（否则后效果覆盖前效果）
             actorEffectCount = (actorType == 0) ? r.members[actorIndex].effectCount : r.enemies[actorIndex].effectCount;
             tEffectCount = (t.kind == 0) ? r.members[t.index].effectCount : r.enemies[t.index].effectCount;
@@ -463,6 +464,8 @@ library CombatLib {
         CombatTypes.Target memory t,
         CombatTypes.ActiveEffect[6] storage tEffects,
         uint8 tEffectCount,
+        uint64 attack,
+        uint64 magic,
         SkillRegistry.Effect memory e,
         uint64 dealt,
         address actorPlayer
@@ -471,6 +474,11 @@ library CombatLib {
         uint8 duration = e.duration;
         uint16 magnitude = e.magnitude;
         uint8 scope = e.scope;
+
+        // 魔力护盾：kind=MAGIC 的 SHIELD 盾量 = power × 魔攻 / 1000（法系越强盾越厚）
+        if (op == CombatTypes.OP_SHIELD && s.kind == CombatTypes.KIND_MAGIC) {
+            magnitude = uint16(uint256(s.power) * magic / 1000);
+        }
 
         if (op == CombatTypes.OP_HEAL) {
             if (scope == CombatTypes.SCOPE_SELF) {
@@ -529,16 +537,45 @@ library CombatLib {
     }
 
     function doSummon(CombatTypes.Ctx memory ctx, CombatTypes.Room storage r, SkillRegistry.Skill memory s, uint8 actorType, uint8 actorIndex) internal {
-        uint8 e = aliveEnemyCount(r);
-        uint8 p = aliveMemberCount(r);
         SkillRegistry.SummonRule memory rule = s.summon;
         if (rule.templateId == 0) return;
+        if ((s.flags & CombatTypes.FLAG_SUMMON_ALLY) != 0) {
+            doSummonAllied(ctx, r, rule);
+            return;
+        }
+        uint8 e = aliveEnemyCount(r);
+        uint8 p = aliveMemberCount(r);
         if (e >= p + rule.enemyHeadroom || r.enemyCount >= CombatTypes.MAX_ENEMIES) return;
         uint8 toSpawn = rule.maxCount;
         uint8 headroom = p + rule.enemyHeadroom > e ? p + rule.enemyHeadroom - e : 0;
         if (toSpawn > headroom) toSpawn = headroom;
         for (uint8 i; i < toSpawn && r.enemyCount < CombatTypes.MAX_ENEMIES; ++i) {
             spawnEnemy(ctx, r, rule.templateId);
+        }
+    }
+
+    /// @dev 玩家侧召唤（替身人偶）：有血量、无行动的己方假目标，计入我方随机目标集、
+    ///     不参与收益分配、无主（player=0）、无法被 setPlan；上限 MAX_MEMBERS 封顶 gas。
+    function doSummonAllied(CombatTypes.Ctx memory ctx, CombatTypes.Room storage r, SkillRegistry.SummonRule memory rule) internal {
+        uint8 toSpawn = rule.maxCount;
+        for (uint8 i; i < toSpawn && r.memberCount < CombatTypes.MAX_MEMBERS; ++i) {
+            SkillRegistry.EnemyTemplate memory t = ctx.skillRegistry.getTemplate(rule.templateId);
+            CombatTypes.RoomMember storage m = r.members[r.memberCount];
+            m.characterId = 0;
+            m.player = address(0); // 无主召唤物，不参与收益分配
+            m.hp = t.maxHp;
+            m.maxHp = t.maxHp;
+            m.attack = t.power;
+            m.magic = t.magic;
+            m.speed = t.speed;
+            m.ap = 0;
+            m.classId = 0;
+            m.effectCount = 0;
+            m.planLen = 0;
+            m.alive = true;
+            m.isSummon = true;
+            r.memberCount++;
+            emit MemberSummoned(r.id, r.memberCount - 1, rule.templateId);
         }
     }
 

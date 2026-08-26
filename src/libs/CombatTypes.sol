@@ -54,6 +54,7 @@ library CombatTypes {
 
     uint8 public constant FLAG_GUARANTEED_HIT = 1;
     uint8 public constant FLAG_MANA_ALL = 2; // 耗光房间魔素池，伤害 = power × 消耗魔素 / 1000（爆裂魔法）
+    uint8 public constant FLAG_SUMMON_ALLY = 4; // bit2：SUMMON 召唤己方单位（替身人偶；默认 0 = 敌方召唤）
 
     // ---- Effect scope ----
     uint8 public constant SCOPE_SELF = 0;

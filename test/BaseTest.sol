@@ -62,6 +62,25 @@ contract BaseTest is Test {
     uint32 public skillAngelJudgment; // 天使雷击（天使）
     uint32 public skillSoulDrain; // 汲魂（恶魔）
     uint32 public skillAbyssWhisper; // 深渊低语（恶魔）
+    // 职业技能（本轮新增；类内自动发放）
+    uint32 public skillRapidStrike; // 快速剑（剑士）
+    uint32 public skillIronCleave; // 斩铁剑（剑士）
+    uint32 public skillShieldBash; // 盾击（守卫）
+    uint32 public skillShieldWall; // 盾墙（守卫）
+    uint32 public skillGuardEvade; // 回避（守卫）
+    uint32 public skillSacrifice; // 献祭（黑魔法师）
+    uint32 public skillBlackVeil; // 黑幕（黑魔法师）
+    uint32 public skillLightOrb; // 光弹（白魔法师）
+    uint32 public skillHolySpring; // 圣泉（白魔法师）
+    uint32 public skillDecoyDoll; // 替身人偶（白魔法师）
+    // 自选池（本轮新增）
+    uint32 public skillFirstAid; // 急救包扎
+    uint32 public skillBlindingPowder; // 致盲粉
+    uint32 public skillRockBulwark; // 岩石壁垒
+    uint32 public skillMagicShield; // 魔力护盾
+    uint32 public skillDragonBreath; // 龙息
+    uint32 public skillManaClap; // 魔爆术
+    uint16 public templateDecoy; // 替身人偶靶子模板
     uint16 aiSlime;
     uint16 public aiBoss;
     uint16 public templateSlime;
@@ -81,7 +100,7 @@ contract BaseTest is Test {
         rng.setGlobalProvider(address(mockRng));
         rng.setCategoryProvider(CAT_AFFIX, address(mockRng));
 
-        economy = new Economy();
+        economy = new Economy(true); // gmEnabled = true（测试网语义）
         sr = new SkillRegistry();
         cr = new CharacterRegistry(rng, sr, true); // gmEnabled = true（测试网语义）
         ce = new CombatEngine(sr, cr, economy);
@@ -370,6 +389,136 @@ contract BaseTest is Test {
             effects: [SkillRegistry.Effect({op: 1, duration: 3, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }), 4); // 黑魔法师 classId=4
+
+        _registerSkills();
+    }
+
+    /// @dev 新增技能集中注册：拆分为两个小函数，避免 via_ir 单个函数体过大造成栈布局失败
+    function _registerSkills() internal {
+        _registerClassSkills();
+        _registerPoolSkills();
+    }
+
+    function _registerClassSkills() internal {
+        // ---- 职业技能补齐（content-design.md §4；类内自动发放）----
+        // 快速剑（剑士）：三连轻击，消耗 1 产 2（攒点基本功）
+        SkillRegistry.Skill memory s = _base(1, 0, 3, 3, 50, 1000, 0);
+        s.apCost = 1; s.apGain = 2;
+        skillRapidStrike = sr.registerClassSkill(s, 1);
+        // 斩铁剑（剑士）：贵而稳的单体重击（高 AP）
+        s = _base(1, 0, 1, 0, 800, 1000, 0);
+        s.apCost = 10;
+        skillIronCleave = sr.registerClassSkill(s, 1);
+        // 盾击（守卫）：单体 + 概率眩晕 + 嘲讽
+        s = _base(1, 0, 1, 0, 80, 1000, 0);
+        s.apCost = 3;
+        s.effects[0] = _eff(1, 2, 0, 1, 400); // STUN 概率 40%（scope TARGET）
+        s.effects[1] = _eff(11, 2, 0, 1, 1000); // TAUNT
+        s.effectCount = 2;
+        skillShieldBash = sr.registerClassSkill(s, 2);
+        // 盾墙（守卫）：高额护盾（事件型吸收）
+        s = _base(3, 1, 9, 0, 0, 1000, 0);
+        s.effects[0] = _eff(4, 3, 150, 0, 1000);
+        s.effectCount = 1;
+        skillShieldWall = sr.registerClassSkill(s, 2);
+        // 回避（守卫）：只提自身回避（纯加法命中管线）
+        s = _base(3, 1, 9, 0, 0, 1000, 0);
+        s.effects[0] = _eff(5, 3, 300, 0, 1000);
+        s.effectCount = 1;
+        skillGuardEvade = sr.registerClassSkill(s, 2);
+        // 献祭（黑魔法师）：以命换多段随机攻击，每段命中为房间魔素池产魔素
+        s = _base(1, 0, 3, 2, 120, 1000, 0);
+        s.hpCost = 50;
+        s.effects[0] = _eff(13, 0, 1, 0, 1000); // MANA_DELTA 正向
+        s.effectCount = 1;
+        skillSacrifice = sr.registerClassSkill(s, 4);
+        // 黑幕（黑魔法师）：降敌方全体命中
+        s = _base(3, 1, 4, 0, 0, 1000, 0);
+        s.effects[0] = _eff(6, 2, 200, 3, 1000);
+        s.effectCount = 1;
+        skillBlackVeil = sr.registerClassSkill(s, 4);
+        // 光弹（白魔法师）：弹着数固定的多目标圣光弹
+        s = _base(2, 1, 2, 4, 80, 1000, 0);
+        skillLightOrb = sr.registerClassSkill(s, 5);
+        // 圣泉（白魔法师）：按血量亏空加权多次小治疗 + 回魔
+        s = _base(3, 1, 6, 3, 90, 1000, 0);
+        s.weightMode = 1;
+        s.effects[0] = _eff(13, 0, 1, 0, 1000);
+        s.effectCount = 1;
+        skillHolySpring = sr.registerClassSkill(s, 5);
+        // 替身人偶（白魔法师）：召唤己方无行动假目标（flags bit2 = 玩家侧召唤）
+        templateDecoy = sr.registerTemplate(SkillRegistry.EnemyTemplate({
+            aiId: 0, threat: 0, maxHp: 120, power: 0, magic: 0, speed: 0, baseAcc: 0,
+            rewardMin: 0, rewardMax: 0,
+            onDeathSpawn: SkillRegistry.OnDeathSpawn({templateId: 0, count: 0, prob: 0})
+        }));
+        s = _base(4, 1, 9, 0, 0, 1000, 4);
+        s.effects[0] = _eff(14, 0, 0, 0, 1000);
+        s.effectCount = 1;
+        s.summon = SkillRegistry.SummonRule({templateId: templateDecoy, maxCount: 1, enemyHeadroom: 0});
+        skillDecoyDoll = sr.registerClassSkill(s, 5);
+    }
+
+    function _registerPoolSkills() internal {
+        // ---- 自选池补齐（content-design.md §5）----
+        // 急救包扎：小额治疗随机我方
+        SkillRegistry.Skill memory s = _base(3, 1, 5, 0, 60, 1000, 0);
+        s.weightMode = 1;
+        skillFirstAid = sr.registerSkill(s);
+        // 致盲粉：大幅降低自己与单个随机敌人命中（双刃）
+        s = _base(3, 1, 1, 0, 0, 1000, 0);
+        s.effects[0] = _eff(6, 2, 250, 0, 1000); // 自身 ACC_DOWN
+        s.effects[1] = _eff(6, 2, 400, 1, 1000); // 目标 ACC_DOWN
+        s.effectCount = 2;
+        skillBlindingPowder = sr.registerSkill(s);
+        // 岩石壁垒：小额护盾
+        s = _base(3, 1, 9, 0, 0, 1000, 0);
+        s.effects[0] = _eff(4, 3, 60, 0, 1000);
+        s.effectCount = 1;
+        skillRockBulwark = sr.registerSkill(s);
+        // 魔力护盾：护盾量 = power × 魔攻（kind=MAGIC 走魔法缩放路径）
+        s = _base(2, 1, 9, 0, 1000, 1000, 0);
+        s.effects[0] = _eff(4, 3, 0, 0, 1000);
+        s.effectCount = 1;
+        skillMagicShield = sr.registerSkill(s);
+        // 龙息：多目标魔法吐息
+        s = _base(2, 2, 2, 2, 70, 1000, 0);
+        skillDragonBreath = sr.registerSkill(s);
+        // 魔爆术：全体魔法（低伤，法系基础清场）
+        s = _base(2, 2, 4, 0, 60, 1000, 0);
+        skillManaClap = sr.registerSkill(s);
+    }
+
+    // ---- 技能构造辅助（低参字段式构建，压低 via_ir 内联进继承方 setUp 的峰值栈压）----
+    function _eff(uint8 op, uint8 duration, uint16 magnitude, uint8 scope, uint16 prob) internal pure returns (SkillRegistry.Effect memory) {
+        return SkillRegistry.Effect({op: op, duration: duration, magnitude: magnitude, scope: scope, prob: prob});
+    }
+
+    function _emptyEff() internal pure returns (SkillRegistry.Effect memory) {
+        return SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000});
+    }
+
+    /// @dev 返回带默认字段（零 AP/费用/无效果/无召唤）的技能，调用方按需覆盖字段
+    function _base(uint8 kind, uint32 manaCost, uint8 targeting, uint8 targetCount, uint64 power, uint16 baseAcc, uint8 flags) internal pure returns (SkillRegistry.Skill memory s) {
+        s.kind = kind;
+        s.manaCost = manaCost;
+        s.targeting = targeting;
+        s.targetCount = targetCount;
+        s.power = power;
+        s.baseAcc = baseAcc;
+        s.flags = flags;
+        s.apCost = 0;
+        s.apGain = 0;
+        s.ammoId = 0;
+        s.ammoCost = 0;
+        s.hpCost = 0;
+        s.damageCap = 0;
+        s.weightMode = 0;
+        s.effectCount = 0;
+        for (uint8 i; i < 4; ++i) {
+            s.effects[i] = SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000});
+        }
+        s.summon = SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0});
     }
 
     // ---- 怪物 AI 与敌人模板 ----

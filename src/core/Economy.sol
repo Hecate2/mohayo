@@ -9,6 +9,11 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 ///         托管级（tier 1）零铸造、结算分配强制抽水销毁；铸销级（tier 2）可 mint/burn，
 ///         每次 mint 走「逐模块日预算 + 全局合计预算」双闸门。
 contract Economy is Ownable {
+    /// @notice GM 超级权限总开关：immutable 构造参数，主网传 false 后 GM 入口物理移除（技术设计 §6.7）
+    bool public immutable gmEnabled;
+
+    /// @notice 游戏币铸造监督事件（GM 入口发事件可审计）
+    event GmMint(address indexed player, uint256 amount);
     /// @notice 玩家游戏币余额（int256，允许负数）
     mapping(address => int256) public balances;
 
@@ -52,7 +57,16 @@ contract Economy is Ownable {
     event ModuleBurn(address indexed module, address indexed player, uint256 amount);
     event ModuleBudgetTripped(address indexed module, uint256 day);
 
-    constructor() Ownable(msg.sender) {}
+    constructor(bool gmEnabled_) Ownable(msg.sender) {
+        gmEnabled = gmEnabled_;
+    }
+
+    /// @notice GM 超级权限：任意铸造游戏币给指定玩家（测试网全功能、主网传 false 物理移除，技术设计 §6.7）
+    function gmMintCoins(address player, uint256 amount) external onlyOwner {
+        require(gmEnabled, "Economy: GM disabled");
+        balances[player] += int256(amount);
+        emit GmMint(player, amount);
+    }
 
     // ---- 权限 ----
     function setMinter(address who, bool ok) external onlyOwner {

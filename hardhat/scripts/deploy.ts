@@ -25,7 +25,7 @@ async function main() {
   await (await rng.setCategoryProvider(ethers.keccak256(ethers.toUtf8Bytes("AFFIX")), await blockRng.getAddress())).wait();
 
   // ---- 3. 经济 + 技能注册表 ----
-  const economy = await deployContract(deployer, "Economy");
+  const economy = await deployContract(deployer, "Economy", [gmEnabled]);
   const sr = await deployContract(deployer, "SkillRegistry");
 
   // ---- 4. 角色注册表（gmEnabled 由环境变量控制，主网传 false）----

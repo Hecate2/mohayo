@@ -49,6 +49,7 @@ contract SkillRegistry is Ownable {
     // ---- flags 位掩码 ----
     uint8 public constant FLAG_GUARANTEED_HIT = 1; // bit0
     uint8 public constant FLAG_MANA_ALL = 2; // bit1：耗光房间魔素池，伤害 = power × 消耗魔素 / 1000（爆裂魔法）
+    uint8 public constant FLAG_SUMMON_ALLY = 4; // bit2：SUMMON 召唤己方单位（替身人偶；默认 0 = 敌方召唤）
 
     // ---- Effect scope ----
     uint8 public constant SCOPE_SELF = 0;
@@ -138,6 +139,8 @@ contract SkillRegistry is Ownable {
 
     /// @notice 职业绑定技能表：classId => skillId => allowed（红线 op 仅此表可配）
     mapping(uint8 => mapping(uint32 => bool)) public classSkill;
+    /// @notice 职业技能枚举：classId => 技能 id 列表（CharacterRegistry 据此在创建时自动发放职业专属技）
+    mapping(uint8 => uint32[]) public classSkillIds;
 
     event SkillRegistered(uint32 indexed id, uint8 kind);
     event AIRegistered(uint16 indexed id);
@@ -154,11 +157,12 @@ contract SkillRegistry is Ownable {
         emit SkillRegistered(id, s.kind);
     }
 
-    /// @notice 职业绑定注册：允许红线 op，并记录 classSkill 白名单
+    /// @notice 职业绑定注册：允许红线 op，并记录 classSkill 白名单 + 枚举列表
     function registerClassSkill(Skill calldata s, uint8 classId) external onlyOwner returns (uint32 id) {
         _validateSkill(s);
         id = _storeSkill(s);
         classSkill[classId][id] = true;
+        _pushClassSkill(classId, id);
         emit SkillRegistered(id, s.kind);
         emit ClassSkillBound(classId, id, true);
     }
@@ -166,7 +170,22 @@ contract SkillRegistry is Ownable {
     function bindClassSkill(uint8 classId, uint32 skillId, bool allowed) external onlyOwner {
         require(skills[skillId].id != 0, "SR: unknown skill");
         classSkill[classId][skillId] = allowed;
+        if (allowed) _pushClassSkill(classId, skillId);
         emit ClassSkillBound(classId, skillId, allowed);
+    }
+
+    /// @dev 追加职业技 id 到枚举列表（注册期首次出现才追加；重复绑定允许=true 时幂等跳过）
+    function _pushClassSkill(uint8 classId, uint32 skillId) private {
+        uint32[] storage list = classSkillIds[classId];
+        for (uint256 i; i < list.length; ++i) {
+            if (list[i] == skillId) return;
+        }
+        list.push(skillId);
+    }
+
+    /// @notice 返回某职业已绑定的技能 id 列表（创建时自动发放职业专属技）
+    function getClassSkillIds(uint8 classId) external view returns (uint32[] memory) {
+        return classSkillIds[classId];
     }
 
     function registerAI(MonsterAI calldata ai) external onlyOwner returns (uint16 id) {

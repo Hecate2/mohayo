@@ -51,20 +51,25 @@ contract CharacterRegistryTest is BaseTest {
         cr.createCharacter(1, skills);
     }
 
-    // ---- 技能绑定强制：跨职业职业技 / 种族技不可自选 ----
-    function testOwnClassSkillAllowed() public {
+    // ---- 技能绑定强制：职业/种族技自动发放，跨职业/种族技不可自选 ----
+    function testOwnClassSkillAutoGranted() public {
         mockRng.setSeed(7);
-        uint32[] memory skills = new uint32[](1);
-        skills[0] = skillMagicSword; // 剑士职业技
-        uint256 tokenId = _createCharacter(alice, 1, skills); // 剑士自选本职业技
-        assertEq(cr.getCharacter(tokenId).skillIds[0], skillMagicSword);
+        uint256 tokenId = _createCharacter(alice, 1, new uint32[](0)); // 剑士
+        CharacterRegistry.Character memory c = cr.getCharacter(tokenId);
+        // 剑士职业技自动并入，无需手动传入
+        assertTrue(_hasSkill(c, skillMagicSword), "magic sword auto-granted");
+    }
+
+    function _hasSkill(CharacterRegistry.Character memory c, uint32 sid) internal pure returns (bool) {
+        for (uint8 i; i < c.skillCount; ++i) if (c.skillIds[i] == sid) return true;
+        return false;
     }
 
     function testClassSkillLockedForOtherClass() public {
         uint32[] memory skills = new uint32[](1);
         skills[0] = skillMagicSword; // 剑士职业技
         vm.prank(alice);
-        vm.expectRevert("CR: class skill locked");
+        vm.expectRevert("CR: class skill auto");
         cr.createCharacter(3, skills); // 火枪手不可选
     }
 
@@ -72,7 +77,7 @@ contract CharacterRegistryTest is BaseTest {
         uint32[] memory skills = new uint32[](1);
         skills[0] = skillBurstMagic; // 黑魔法师职业技
         vm.prank(alice);
-        vm.expectRevert("CR: class skill locked");
+        vm.expectRevert("CR: class skill auto");
         cr.createCharacter(6, skills); // 无职业不可选任何职业技
     }
 
@@ -85,14 +90,25 @@ contract CharacterRegistryTest is BaseTest {
     }
 
     function testRaceSkillAutoMergedStillWorks() public {
-        // GM 铸造兽人剑士：狂暴自动并入，无需手动传入
+        // GM 铸造兽人剑士：狂暴自动并入，无需手动传入；剑士职业技同样自动发放
         uint32[] memory skills = new uint32[](1);
-        skills[0] = skillAttack;
-        uint256 tokenId = cr.gmMintCharacter(alice, 1, 1, new uint16[](0), skills); // race 1 = 兽人
+        skills[0] = skillGuardEvade; // 守卫职业技（剑士不可自选 → 必须被拒）
+        // gmMintCharacter 为 onlyOwner，测试合约即 owner，无需 prank
+        vm.expectRevert("CR: class skill auto");
+        cr.gmMintCharacter(alice, 1, 1, new uint16[](0), skills);
+    }
+
+    function testAutoGrantKeepsOrder() public {
+        // GM 铸造兽人剑士（race 1 = 兽人），自选仅限公共技
+        uint32[] memory skills = new uint32[](1);
+        skills[0] = skillAttack; // 公共自选池技
+        uint256 tokenId = cr.gmMintCharacter(alice, 1, 1, new uint16[](0), skills);
         CharacterRegistry.Character memory c = cr.getCharacter(tokenId);
-        assertEq(c.skillIds[0], skillAttack);
-        assertEq(c.skillIds[1], skillBerserk);
-        assertEq(c.skillCount, 2);
+        assertEq(c.skillCount, 5); // 剑士职业技 3（魔法剑/快速剑/斩铁剑）+ 兽人技 1 + 自选 1
+        assertTrue(_hasSkill(c, skillMagicSword), "auto class magic sword");
+        assertTrue(_hasSkill(c, skillBerserk), "auto race berserk");
+        assertTrue(_hasSkill(c, skillAttack), "self-select attack");
+        assertTrue(!_hasSkill(c, skillGuardEvade), "no foreign class skill");
     }
 
     // ---- 种族三层加权（setFixed 强制各层）----

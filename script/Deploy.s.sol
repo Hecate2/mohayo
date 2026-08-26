@@ -27,12 +27,12 @@ contract Deploy is Script {
         rng.setGlobalProvider(address(blockRng));
         rng.setCategoryProvider(keccak256("AFFIX"), address(blockRng));
 
-        // ---- 2. 经济 + 技能注册表 ----
-        Economy economy = new Economy();
+        // ---- 2. 经济 + 技能注册表（gmEnabled 由环境变量控制，主网传 false 使全部 GM 入口物理移除）----
+        bool gmEnabled = vm.envOr("GM_ENABLED", true);
+        Economy economy = new Economy(gmEnabled);
         SkillRegistry sr = new SkillRegistry();
 
-        // ---- 3. 角色注册表（gmEnabled 由环境变量控制，主网传 false）----
-        bool gmEnabled = vm.envOr("GM_ENABLED", true);
+        // ---- 3. 角色注册表 ----
         CharacterRegistry cr = new CharacterRegistry(rng, sr, gmEnabled);
 
         // ---- 4. 战斗结算器 ----
