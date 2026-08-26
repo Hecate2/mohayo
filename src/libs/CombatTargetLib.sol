@@ -14,6 +14,15 @@ library CombatTargetLib {
             out[count++] = CombatTypes.Target({kind: actorType, index: actorIndex});
             return (count, out);
         }
+        if (targeting == CombatTypes.TGT_MOST_WOUNDED_ALLY) {
+            uint8 best = pickMostWoundedAlly(r);
+            if (best == 255) {
+                if (actorType == 0) best = actorIndex; // 全员满血 → 施放者自己（空转）
+                else return (count, out);
+            }
+            out[count++] = CombatTypes.Target({kind: 0, index: best});
+            return (count, out);
+        }
         if (targeting == CombatTypes.TGT_ROOM_ALL) {
             for (uint8 i; i < r.memberCount; ++i) if (r.members[i].alive) out[count++] = CombatTypes.Target({kind: 0, index: i});
             for (uint8 i; i < r.enemyCount; ++i) if (r.enemies[i].alive) out[count++] = CombatTypes.Target({kind: 1, index: i});
@@ -95,6 +104,41 @@ library CombatTargetLib {
             }
         }
         return 255;
+    }
+
+    /// @notice 治疗血量亏空比例最高者：比例 → 绝对亏空 → 加入序（线性 argmax，零 RNG）
+    function pickMostWoundedAlly(CombatTypes.Room storage r) internal view returns (uint8) {
+        uint8 best = 255;
+        uint256 bestRatioNum;
+        uint256 bestRatioDen;
+        uint64 bestDeficit;
+        for (uint8 i; i < r.memberCount; ++i) {
+            CombatTypes.RoomMember storage m = r.members[i];
+            if (!m.alive) continue;
+            uint64 deficit = m.maxHp - m.hp;
+            if (deficit == 0) continue; // 满血跳过
+            uint256 ratioNum = uint256(deficit) * 1000;
+            uint256 ratioDen = m.maxHp;
+            if (best == 255) {
+                best = i;
+                bestRatioNum = ratioNum;
+                bestRatioDen = ratioDen;
+                bestDeficit = deficit;
+                continue;
+            }
+            if (ratioNum * bestRatioDen > bestRatioNum * ratioDen) {
+                best = i;
+                bestRatioNum = ratioNum;
+                bestRatioDen = ratioDen;
+                bestDeficit = deficit;
+            } else if (ratioNum * bestRatioDen == bestRatioNum * ratioDen && deficit > bestDeficit) {
+                best = i;
+                bestRatioNum = ratioNum;
+                bestRatioDen = ratioDen;
+                bestDeficit = deficit;
+            }
+        }
+        return best;
     }
 
     function aliveMemberCount(CombatTypes.Room storage r) internal view returns (uint8) {

@@ -18,13 +18,14 @@ library CombatEndLib {
     event ManaChanged(uint32 indexed roomId, int32 delta, uint32 pool);
 
     function regenMana(CombatTypes.Ctx memory ctx, CombatTypes.Room storage r) external {
-        uint32 gain = r.manaPerTurn;
+        // int32 算术：manaGainBonus 可为负（散魔/好战本能），避免 uint32 下溢回退
+        int32 gain = int32(uint32(r.manaPerTurn));
         for (uint8 i; i < r.memberCount; ++i) {
-            if (r.members[i].alive) gain += r.members[i].manaGainBonus;
+            if (r.members[i].alive) gain += int32(r.members[i].manaGainBonus);
         }
         if (gain > 0) {
-            r.manaPool += gain;
-            emit ManaChanged(r.id, int32(gain), r.manaPool);
+            r.manaPool += uint32(gain);
+            emit ManaChanged(r.id, gain, r.manaPool);
         }
     }
 

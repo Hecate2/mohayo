@@ -61,7 +61,7 @@ contract CombatEngineTest is BaseTest {
         uint16[] memory ws3 = new uint16[](1);
         ws3[0] = 100;
         ce.registerEnemyTable(3, ids3, ws3);
-        ce.setDungeon(3, CombatTypes.DungeonConfig({tableId: 3, enemyCount: 1, manaPerTurn: 0, rewardBase: 0, entryFee: 0, rescueFee: 0, turnInterval: 0}));
+        ce.setDungeon(3, CombatTypes.DungeonConfig({tableId: 3, enemyCount: 1, manaPerTurn: 10, rewardBase: 0, entryFee: 0, rescueFee: 0, turnInterval: 0}));
 
         // 单史莱姆地下城（difficulty 4）：确定性目标测试用（房间级 PRNG 下目标选择随机）
         uint16[] memory ids4 = new uint16[](1);
@@ -169,7 +169,7 @@ contract CombatEngineTest is BaseTest {
         uint32[] memory skills = new uint32[](2);
         skills[0] = skillMagicNuke;
         skills[1] = skillMagicNuke;
-        (uint256 charId, uint32 roomId) = _gmSolo(alice, 3, 4, skills); // 黑魔法师 magic 35，单史莱姆
+        (uint256 charId, uint32 roomId) = _gmSolo(alice, 4, 4, skills); // 黑魔法师 magic 35，单史莱姆
         _setPlan(alice, roomId, skills);
         vm.prank(alice);
         ce.startCombat(roomId);
@@ -190,7 +190,7 @@ contract CombatEngineTest is BaseTest {
         uint32[] memory skills = new uint32[](2);
         skills[0] = skillHealBig;
         skills[1] = skillHealBig;
-        (uint256 charId, uint32 roomId) = _gmSolo(alice, 3, 1, skills); // 黑魔法师 80 HP magic 35，heal = 2000×35/1000 = 70
+        (uint256 charId, uint32 roomId) = _gmSolo(alice, 4, 1, skills); // 黑魔法师 80 HP magic 35，heal = 2000×35/1000 = 70
         _setPlan(alice, roomId, skills);
         vm.prank(alice);
         ce.startCombat(roomId);
@@ -261,7 +261,7 @@ contract CombatEngineTest is BaseTest {
         skills[1] = skillIdle;
         skills[2] = skillIdle;
         skills[3] = skillIdle; // 无限循环：每 4 回合才重挂 DOT，让 DOT 自然到期
-        (uint256 charId, uint32 roomId) = _gmSolo(alice, 3, 4, skills); // 单史莱姆
+        (uint256 charId, uint32 roomId) = _gmSolo(alice, 4, 4, skills); // 单史莱姆
         _setPlan(alice, roomId, skills);
         vm.prank(alice);
         ce.startCombat(roomId);
@@ -481,7 +481,7 @@ contract CombatEngineTest is BaseTest {
         skills[0] = skillAttack; // AP +10
         skills[1] = skillEagleEye; // GUAR_NEXT，AP -5（火枪手职业技）
         skills[2] = lowAcc; // 依赖 GUAR_NEXT 必中
-        (uint256 charId, uint32 roomId) = _gmSolo(alice, 2, 4, skills); // 火枪手
+        (uint256 charId, uint32 roomId) = _gmSolo(alice, 3, 4, skills); // 火枪手
         _setPlan(alice, roomId, skills);
         vm.prank(alice);
         ce.startCombat(roomId);
@@ -498,7 +498,7 @@ contract CombatEngineTest is BaseTest {
     function testManaBurstInjectsMana() public {
         uint32[] memory skills = new uint32[](1);
         skills[0] = skillManaBurst; // MANA_DELTA +20
-        (uint256 charId, uint32 roomId) = _gmSolo(alice, 3, 4, skills); // 黑魔法师
+        (uint256 charId, uint32 roomId) = _gmSolo(alice, 4, 4, skills); // 黑魔法师
         _setPlan(alice, roomId, skills);
         vm.prank(alice);
         ce.startCombat(roomId);

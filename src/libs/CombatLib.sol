@@ -154,6 +154,12 @@ library CombatLib {
                 if (m.hp == 0) onMemberDeath(ctx, r, u);
                 if (!m.alive) continue;
                 if (isStunned(m.effects, m.effectCount)) continue;
+                // 好战本能：每回合 AP 加成（行动前结算，受个人上限钳制；被控时暂停）
+                if (m.apBonus > 0) {
+                    m.ap += m.apBonus;
+                    uint16 cap = ctx.apCapBase + m.apCapBonus;
+                    if (m.ap > cap) m.ap = cap;
+                }
                 if (m.planLen == 0) continue;
                 uint16 skillId = m.plan[m.planStart];
                 m.planStart = (m.planStart + 1) % m.planLen; // 无限循环：队列走完回到队首
@@ -653,7 +659,7 @@ library CombatLib {
 
     // ---- 命中辅助 ----
     function isAllyTargeting(uint8 targeting, bool actorIsEnemy) internal pure returns (bool) {
-        if (targeting == CombatTypes.TGT_SELF || targeting == CombatTypes.TGT_ROOM_ALL) return true;
+        if (targeting == CombatTypes.TGT_SELF || targeting == CombatTypes.TGT_ROOM_ALL || targeting == CombatTypes.TGT_MOST_WOUNDED_ALLY) return true;
         bool targetsEnemy = targeting == CombatTypes.TGT_RAND_SINGLE_ENEMY || targeting == CombatTypes.TGT_RAND_MULTI_ENEMY || targeting == CombatTypes.TGT_RAND_STRIKE_ENEMY || targeting == CombatTypes.TGT_ALL_ENEMY;
         return actorIsEnemy ? targetsEnemy : !targetsEnemy;
     }

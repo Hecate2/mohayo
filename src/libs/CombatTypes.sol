@@ -14,6 +14,7 @@ library CombatTypes {
         CharacterRegistry characterRegistry;
         Economy economy;
         uint16 minHitRate;
+        uint16 apCapBase; // 全局基础 AP 上限（个人上限 = apCapBase + apCapBonus）
     }
     // ---- Effect op 枚举 ----
     uint8 public constant OP_STUN = 1;
@@ -44,6 +45,7 @@ library CombatTypes {
     uint8 public constant TGT_ALL_ALLY = 7;
     uint8 public constant TGT_ROOM_ALL = 8;
     uint8 public constant TGT_SELF = 9;
+    uint8 public constant TGT_MOST_WOUNDED_ALLY = 10; // 治疗血量亏空比例最高者（圣愈之光）
 
     // ---- weightMode ----
     uint8 public constant WT_UNIFORM = 0;
@@ -86,8 +88,9 @@ library CombatTypes {
         uint16 ap;
         uint16 manaDiscount;
         uint16 apBonus;
+        int16 manaGainBonus;
+        uint16 apCapBonus;
         uint8 classId;
-        uint16 manaGainBonus;
         ActiveEffect[6] effects;
         uint8 effectCount;
         uint16[16] plan;

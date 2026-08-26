@@ -48,6 +48,7 @@ contract CombatEngine is Ownable {
     uint8 public constant TGT_ALL_ALLY = 7;
     uint8 public constant TGT_ROOM_ALL = 8;
     uint8 public constant TGT_SELF = 9;
+    uint8 public constant TGT_MOST_WOUNDED_ALLY = 10;
     uint8 public constant WT_UNIFORM = 0;
     uint8 public constant WT_HP_DEFICIT_ALLY = 1;
     uint8 public constant WT_THREAT_ENEMY = 2;
@@ -66,6 +67,9 @@ contract CombatEngine is Ownable {
 
     /// @notice 全局命中下限（千分比，官方可调）
     uint16 public minHitRate = 50;
+
+    /// @notice 全局基础 AP 上限（个人上限 = apCapBase + 角色 apCapBonus；官方可调）
+    uint16 public apCapBase = 110;
 
     // ---- 运行时状态 ----
     mapping(uint32 => CombatTypes.Room) public rooms;
@@ -113,12 +117,16 @@ contract CombatEngine is Ownable {
     }
 
     function _ctx() private view returns (CombatTypes.Ctx memory) {
-        return CombatTypes.Ctx({skillRegistry: skillRegistry, characterRegistry: characterRegistry, economy: economy, minHitRate: minHitRate});
+        return CombatTypes.Ctx({skillRegistry: skillRegistry, characterRegistry: characterRegistry, economy: economy, minHitRate: minHitRate, apCapBase: apCapBase});
     }
 
     function setMinHitRate(uint16 rate) external onlyOwner {
         require(rate <= 1000, "CE: bad rate");
         minHitRate = rate;
+    }
+
+    function setApCapBase(uint16 cap) external onlyOwner {
+        apCapBase = cap;
     }
 
     // ---- 地下城配置 ----
@@ -187,6 +195,8 @@ contract CombatEngine is Ownable {
         m.ap = 0; // 加入房间时初始化 0（跨战斗继承从加入起算）
         m.manaDiscount = c.manaDiscount;
         m.apBonus = c.apBonus;
+        m.manaGainBonus = c.manaGainBonus;
+        m.apCapBonus = c.apCapBonus;
         m.classId = c.classId;
         m.alive = true;
         r.memberCount++;

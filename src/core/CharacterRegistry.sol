@@ -8,7 +8,7 @@ import {SkillRegistry} from "./SkillRegistry.sol";
 
 /// @title CharacterRegistry - 角色 CRUD + 种族/词条随机 + ERC-721 转移钩子
 /// @notice 创建流程：职业 → 种族三层加权（85/12/3）→ 词条（方向 20/68/12 → 词条 → 档位）。
-///         种族创建时随机生成、永久不可改；种族修正各属性上限 min(种族上限表, 基础公式)。
+///         种族创建时随机生成、永久不可改；种族/词条以直接修正（千分比）作用于基础属性，无任何封顶。
 ///         资源流词条（默诵 manaDiscount / 好战本能 apBonus）每角色 ≤2 条。
 ///         ERC-721 transfer 钩子：等级重置 + 房间内锁定（技术设计 §2.1 / §6.0）。
 contract CharacterRegistry is ERC721, Ownable {
@@ -24,10 +24,13 @@ contract CharacterRegistry is ERC721, Ownable {
 
     // ---- 种族/词条方向常量（与 SkillRegistry 对齐；本地定义避免跨合约常量解析）----
     uint8 public constant RACE_HUMAN = 0;
-    uint8 public constant RACE_ELF = 1;
-    uint8 public constant RACE_DRAGONKIN = 2;
-    uint8 public constant RACE_ANGEL = 3;
-    uint8 public constant RACE_DEMON = 4;
+    uint8 public constant RACE_ORC = 1;
+    uint8 public constant RACE_GIANT = 2;
+    uint8 public constant RACE_DWARF = 3;
+    uint8 public constant RACE_ELF = 4;
+    uint8 public constant RACE_DRAGONKIN = 5;
+    uint8 public constant RACE_ANGEL = 6;
+    uint8 public constant RACE_DEMON = 7;
     uint8 public constant AFFIX_POSITIVE = 0;
     uint8 public constant AFFIX_DOUBLE_EDGED = 1;
     uint8 public constant AFFIX_NEGATIVE = 2;
@@ -52,6 +55,8 @@ contract CharacterRegistry is ERC721, Ownable {
         uint64 speed;
         uint16 manaDiscount; // 默诵
         uint16 apBonus; // 好战本能
+        int16 manaGainBonus; // 聚魔/好战本能/散魔：房间魔素池每回合增量修正（可为负）
+        uint16 apCapBonus; // 斗魂：个人 AP 上限加成
         uint32 roomId; // 所在房间（0 = 不在房间）
     }
     mapping(uint256 => Character) public characters;
@@ -68,19 +73,23 @@ contract CharacterRegistry is ERC721, Ownable {
     uint8 public classCount;
 
     struct RaceDef {
-        uint16[3] capPermille; // 攻击/魔法/速度 上限乘区（1200 = ×1.2）
-        uint16 capHpPermille; // HP 上限乘区
-        uint32 raceSkillId; // 种族技（0 = 无，人类）
+        int16[3] statMods; // 攻击/魔法/速度 直接修正（千分比，可为负）
+        int16 hpMod; // HP 直接修正（千分比）
+        uint32 raceSkillId; // 种族技 1（0 = 无，人类）
+        uint32 raceSkillId2; // 种族技 2（仅天使/恶魔双种族技；0 = 无）
         uint8 selfSelectBonus; // 人类 +2 自选槽
+        bool exists; // 注册标记（人类全零修正时用于区分未注册）
     }
     mapping(uint8 => RaceDef) public raceDefs;
     uint8 public raceCount;
 
     struct AffixTemplate {
         uint8 direction; // AFFIX_*（正面/双刃/负面）
-        uint8 resourceType; // 0=无 1=manaDiscount 2=apBonus
+        uint8 resourceType; // 0=非资源流 1=资源流（魔素/AP 类，受 ≤2 条上限约束）
         uint16 manaDiscount; // 默诵：魔素折扣
         uint16 apBonus; // 好战本能：每回合 AP 加成
+        int16 manaGainBonus; // 聚魔/好战本能/散魔：房间魔素池每回合增量修正（可为负）
+        uint16 apCapBonus; // 斗魂：个人 AP 上限加成
         int64[3] statMods; // 攻击/魔法/速度 修正（千分比，可为负）
         int64 hpMod; // HP 修正（千分比）
         uint16[5] tierWeights; // 档位 1~5 权重（千分比）
@@ -119,8 +128,9 @@ contract CharacterRegistry is ERC721, Ownable {
 
     function registerRace(uint8 race, RaceDef calldata def) external onlyOwner {
         require(race < MAX_RACES, "CR: bad race");
-        require(raceDefs[race].capHpPermille == 0, "CR: race exists");
+        require(!raceDefs[race].exists, "CR: race exists");
         raceDefs[race] = def;
+        raceDefs[race].exists = true;
         if (race >= raceCount) raceCount = race + 1;
         emit RaceRegistered(race);
     }
@@ -195,35 +205,33 @@ contract CharacterRegistry is ERC721, Ownable {
     function _computeStats(Character storage c, uint8 classId, uint8 race, uint16[4] memory affixIds, uint8 affixCount_) private {
         ClassDef memory def = classDefs[classId];
         RaceDef memory rd = raceDefs[race];
-        int64[3] memory mods = [int64(0), int64(0), int64(0)];
-        int64 hpMod = 0;
+        int64[3] memory mods = [int64(rd.statMods[0]), int64(rd.statMods[1]), int64(rd.statMods[2])];
+        int64 hpMod = int64(rd.hpMod);
         uint8 resourceCount;
         for (uint8 i; i < affixCount_; ++i) {
             AffixTemplate memory t = affixTemplates[affixIds[i]];
             for (uint8 j; j < 3; ++j) mods[j] += t.statMods[j];
             hpMod += t.hpMod;
-            if (t.resourceType == 1) {
+            if (t.resourceType != 0) {
                 c.manaDiscount += t.manaDiscount;
-                resourceCount++;
-            } else if (t.resourceType == 2) {
                 c.apBonus += t.apBonus;
+                c.manaGainBonus += t.manaGainBonus;
+                c.apCapBonus += t.apCapBonus;
                 resourceCount++;
             }
         }
         // 资源流词条 ≤2 条（创建时已保证，此处冗余防御）
         require(resourceCount <= MAX_AFFIX_PER_CHAR, "CR: resource affix cap");
 
-        c.maxHp = _applyCap(def.baseHp, hpMod, rd.capHpPermille);
-        c.attack = _applyCap(def.baseAttack, mods[0], rd.capPermille[0]);
-        c.magic = _applyCap(def.baseMagic, mods[1], rd.capPermille[1]);
-        c.speed = _applyCap(def.baseSpeed, mods[2], rd.capPermille[2]);
+        c.maxHp = _calcStat(def.baseHp, hpMod);
+        c.attack = _calcStat(def.baseAttack, mods[0]);
+        c.magic = _calcStat(def.baseMagic, mods[1]);
+        c.speed = _calcStat(def.baseSpeed, mods[2]);
     }
 
-    function _applyCap(uint64 base, int64 mod, uint16 capPermille) private pure returns (uint64) {
+    function _calcStat(uint64 base, int64 mod) private pure returns (uint64) {
         int256 v = int256(uint256(base)) * (1000 + mod) / 1000;
         if (v < 0) v = 0;
-        uint256 cap = uint256(base) * capPermille / 1000;
-        if (uint256(v) > cap) v = int256(cap);
         return uint64(uint256(v));
     }
 
@@ -234,11 +242,16 @@ contract CharacterRegistry is ERC721, Ownable {
             require(skillRegistry.getSkill(skillIds[i]).id != 0, "CR: unknown skill");
             c.skillIds[n++] = skillIds[i];
         }
-        // 种族技并入
+        // 种族技并入（天使/恶魔双种族技）
         uint32 raceSkill = raceDefs[race].raceSkillId;
         if (raceSkill != 0) {
             require(skillRegistry.getSkill(raceSkill).id != 0, "CR: unknown race skill");
             c.skillIds[n++] = raceSkill;
+        }
+        uint32 raceSkill2 = raceDefs[race].raceSkillId2;
+        if (raceSkill2 != 0) {
+            require(skillRegistry.getSkill(raceSkill2).id != 0, "CR: unknown race skill");
+            c.skillIds[n++] = raceSkill2;
         }
         c.skillCount = n;
     }
@@ -253,9 +266,14 @@ contract CharacterRegistry is ERC721, Ownable {
         if (roll < w[0]) tier = 0;
         else if (roll < w[0] + w[1]) tier = 1;
         else tier = 2;
-        // 层内均匀：tier0=人类；tier1=精灵/龙人；tier2=天使/恶魔
+        // 层内均匀：tier0=人类/兽人/巨人/矮人；tier1=精灵/龙人；tier2=天使/恶魔
         uint256 sub = rng.next(CATEGORY_AFFIX, keccak256(abi.encodePacked("raceSub", context))) % 100;
-        if (tier == 0) return RACE_HUMAN;
+        if (tier == 0) {
+            if (sub < 25) return RACE_HUMAN;
+            if (sub < 50) return RACE_ORC;
+            if (sub < 75) return RACE_GIANT;
+            return RACE_DWARF;
+        }
         if (tier == 1) return sub < 50 ? RACE_ELF : RACE_DRAGONKIN;
         return sub < 50 ? RACE_ANGEL : RACE_DEMON;
     }

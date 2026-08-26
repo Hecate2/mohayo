@@ -43,9 +43,18 @@ contract BaseTest is Test {
     uint32 public skillManaBurst;
     uint32 public skillDot;
     uint32 public skillTaunt;
-    uint32 public skillBerserk;
+    uint32 public skillBerserk; // 兽人种族技
     uint32 public skillSummon;
     uint32 skillIdle; // 待机怪空技能
+    // 种族技（8 种族）
+    uint32 public skillStoneBody; // 磐石之躯（巨人）
+    uint32 public skillSpiritReturn; // 烈酒回魂（矮人）
+    uint32 public skillStorm; // 暴风术（精灵）
+    uint32 public skillDragonScale; // 龙鳞（龙人）
+    uint32 public skillHolyLight; // 圣愈之光（天使）
+    uint32 public skillAngelJudgment; // 天使雷击（天使）
+    uint32 public skillSoulDrain; // 汲魂（恶魔）
+    uint32 public skillAbyssWhisper; // 深渊低语（恶魔）
     uint16 aiSlime;
     uint16 public aiBoss;
     uint16 public templateSlime;
@@ -77,49 +86,59 @@ contract BaseTest is Test {
 
         // ---- 播种测试数据 ----
         _seedClasses();
+        _seedSkills(); // 先注册技能（种族技 id 供 _seedRaces 引用）
         _seedRaces();
         _seedAffixes();
-        _seedSkills();
         _seedAIAndTemplates();
         _seedDungeons();
     }
 
-    // ---- 职业 ----
+    // ---- 职业（content-design.md §4：剑士/守卫/火枪手/黑魔法师/白魔法师 + 无职业）----
     function _seedClasses() internal {
-        cr.registerClass(1, CharacterRegistry.ClassDef({baseHp: 120, baseAttack: 30, baseMagic: 10, baseSpeed: 10, skillSlots: 1})); // 战士
-        cr.registerClass(2, CharacterRegistry.ClassDef({baseHp: 90, baseAttack: 28, baseMagic: 8, baseSpeed: 22, skillSlots: 1})); // 火枪手
-        cr.registerClass(3, CharacterRegistry.ClassDef({baseHp: 80, baseAttack: 10, baseMagic: 35, baseSpeed: 12, skillSlots: 1})); // 黑魔法师
-        cr.registerClass(4, CharacterRegistry.ClassDef({baseHp: 95, baseAttack: 12, baseMagic: 28, baseSpeed: 14, skillSlots: 1})); // 白魔法师
-        cr.registerClass(5, CharacterRegistry.ClassDef({baseHp: 100, baseAttack: 20, baseMagic: 20, baseSpeed: 15, skillSlots: 3})); // 无职业
+        cr.registerClass(1, CharacterRegistry.ClassDef({baseHp: 120, baseAttack: 30, baseMagic: 10, baseSpeed: 10, skillSlots: 1})); // 剑士
+        cr.registerClass(2, CharacterRegistry.ClassDef({baseHp: 135, baseAttack: 18, baseMagic: 8, baseSpeed: 8, skillSlots: 1})); // 守卫
+        cr.registerClass(3, CharacterRegistry.ClassDef({baseHp: 90, baseAttack: 28, baseMagic: 8, baseSpeed: 22, skillSlots: 1})); // 火枪手
+        cr.registerClass(4, CharacterRegistry.ClassDef({baseHp: 80, baseAttack: 10, baseMagic: 35, baseSpeed: 12, skillSlots: 1})); // 黑魔法师
+        cr.registerClass(5, CharacterRegistry.ClassDef({baseHp: 95, baseAttack: 12, baseMagic: 28, baseSpeed: 14, skillSlots: 1})); // 白魔法师
+        cr.registerClass(6, CharacterRegistry.ClassDef({baseHp: 100, baseAttack: 20, baseMagic: 20, baseSpeed: 15, skillSlots: 3})); // 无职业
     }
 
-    // ---- 种族（上限乘区 + 种族技 + 自选槽加成）----
+    // ---- 种族（content-design.md §3：常见四 + 略稀有二 + 最稀有二，含种族技）----
     function _seedRaces() internal {
-        cr.registerRace(0, CharacterRegistry.RaceDef({capPermille: [1000, 1000, 1000], capHpPermille: 1000, raceSkillId: 0, selfSelectBonus: 2})); // 人类
-        cr.registerRace(1, CharacterRegistry.RaceDef({capPermille: [900, 1300, 1100], capHpPermille: 900, raceSkillId: 0, selfSelectBonus: 0})); // 精灵
-        cr.registerRace(2, CharacterRegistry.RaceDef({capPermille: [1100, 900, 900], capHpPermille: 1200, raceSkillId: 0, selfSelectBonus: 0})); // 龙人
-        cr.registerRace(3, CharacterRegistry.RaceDef({capPermille: [1200, 1200, 1200], capHpPermille: 1200, raceSkillId: 0, selfSelectBonus: 0})); // 天使
-        cr.registerRace(4, CharacterRegistry.RaceDef({capPermille: [1300, 1300, 1100], capHpPermille: 1000, raceSkillId: 0, selfSelectBonus: 0})); // 恶魔
+        cr.registerRace(0, CharacterRegistry.RaceDef({statMods: [int16(0), 0, 0], hpMod: int16(0), raceSkillId: 0, raceSkillId2: 0, selfSelectBonus: 2, exists: true})); // 人类：基准，自选 +2
+        cr.registerRace(1, CharacterRegistry.RaceDef({statMods: [int16(200), -200, -100], hpMod: int16(100), raceSkillId: skillBerserk, raceSkillId2: 0, selfSelectBonus: 0, exists: true})); // 兽人：物攻+20%/魔攻-20%/敏捷-10%/生命+10%
+        cr.registerRace(2, CharacterRegistry.RaceDef({statMods: [int16(100), -200, -300], hpMod: int16(300), raceSkillId: skillStoneBody, raceSkillId2: 0, selfSelectBonus: 0, exists: true})); // 巨人：生命+30%/物攻+10%/魔攻-20%/敏捷-30%
+        cr.registerRace(3, CharacterRegistry.RaceDef({statMods: [int16(100), -200, -100], hpMod: int16(150), raceSkillId: skillSpiritReturn, raceSkillId2: 0, selfSelectBonus: 0, exists: true})); // 矮人：生命+15%/物攻+10%/魔攻-20%/敏捷-10%
+        cr.registerRace(4, CharacterRegistry.RaceDef({statMods: [int16(-100), 200, 300], hpMod: int16(-100), raceSkillId: skillStorm, raceSkillId2: 0, selfSelectBonus: 0, exists: true})); // 精灵：敏捷+30%/魔攻+20%/生命-10%/物攻-10%
+        cr.registerRace(5, CharacterRegistry.RaceDef({statMods: [int16(200), 200, -100], hpMod: int16(-100), raceSkillId: skillDragonScale, raceSkillId2: 0, selfSelectBonus: 0, exists: true})); // 龙人：物攻+20%/魔攻+20%/生命-10%/敏捷-10%
+        cr.registerRace(6, CharacterRegistry.RaceDef({statMods: [int16(-200), 300, -50], hpMod: int16(100), raceSkillId: skillHolyLight, raceSkillId2: skillAngelJudgment, selfSelectBonus: 0, exists: true})); // 天使：魔攻+30%/生命+10%/物攻-20%/敏捷-5%
+        cr.registerRace(7, CharacterRegistry.RaceDef({statMods: [int16(300), -100, 200], hpMod: int16(-150), raceSkillId: skillSoulDrain, raceSkillId2: skillAbyssWhisper, selfSelectBonus: 0, exists: true})); // 恶魔：物攻+30%/敏捷+20%/魔攻-10%/生命-15%
     }
 
-    // ---- 词条模板（方向 × 档位；资源流词条 ≤2 条）----
+    // ---- 词条模板（content-design.md §6.2：18 条可实现；方向 × 档位；资源流 ≤2 条）----
     function _seedAffixes() internal {
-        // 正面：攻击 +10%
-        cr.registerAffixTemplate(1, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [int64(100), 0, 0], hpMod: 0, tierWeights: [300, 250, 200, 150, 100]}));
-        // 正面：HP +15%
-        cr.registerAffixTemplate(2, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [int64(0), 0, 0], hpMod: 150, tierWeights: [300, 250, 200, 150, 100]}));
-        // 双刃：攻击 +25% 速度 -10%
-        cr.registerAffixTemplate(3, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [int64(250), 0, -100], hpMod: 0, tierWeights: [uint16(200), 200, 200, 200, 200]}));
-        // 双刃：速度 +20% 攻击 -5%
-        cr.registerAffixTemplate(4, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [int64(-50), 0, 200], hpMod: 0, tierWeights: [uint16(200), 200, 200, 200, 200]}));
-        // 双刃：魔攻 +30% HP -10%（资源流：默诵 manaDiscount）
-        cr.registerAffixTemplate(5, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 1, manaDiscount: 5, apBonus: 0, statMods: [int64(0), 300, 0], hpMod: -100, tierWeights: [uint16(200), 200, 200, 200, 200]}));
-        // 双刃：攻击 +20% 速度 -15%（资源流：好战本能 apBonus）
-        cr.registerAffixTemplate(6, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 2, manaDiscount: 0, apBonus: 3, statMods: [int64(200), 0, -150], hpMod: 0, tierWeights: [uint16(200), 200, 200, 200, 200]}));
-        // 负面：攻击 -10%
-        cr.registerAffixTemplate(7, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [int64(-100), 0, 0], hpMod: 0, tierWeights: [uint16(200), 200, 200, 200, 200]}));
-        // 负面：HP -10%
-        cr.registerAffixTemplate(8, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 0, manaDiscount: 0, apBonus: 0, statMods: [int64(0), 0, 0], hpMod: -100, tierWeights: [uint16(200), 200, 200, 200, 200]}));
+        uint16[5] memory tier = [uint16(450), 300, 160, 75, 15]; // 档位 1~5 长尾（≈45/30/16/7.5/1.5%）
+        // 正面（5）：纯增益
+        cr.registerAffixTemplate(1, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(100), 0, 0], hpMod: 0, tierWeights: tier})); // 巨力：物攻↑
+        cr.registerAffixTemplate(2, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 100, 0], hpMod: 0, tierWeights: tier})); // 魔性：魔攻↑
+        cr.registerAffixTemplate(3, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 150, tierWeights: tier})); // 铁躯：生命↑
+        cr.registerAffixTemplate(4, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 100], hpMod: 0, tierWeights: tier})); // 迅捷：敏捷↑
+        cr.registerAffixTemplate(5, CharacterRegistry.AffixTemplate({direction: 0, resourceType: 1, manaDiscount: 0, apBonus: 0, manaGainBonus: 1, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 0, tierWeights: tier})); // 聚魔：房间魔素池每回合 +1
+        // 双刃（9）：一好一坏
+        cr.registerAffixTemplate(6, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 300, 0], hpMod: -100, tierWeights: tier})); // 玻璃法杖：魔攻↑/生命↓
+        cr.registerAffixTemplate(7, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(-50), 0, 200], hpMod: 0, tierWeights: tier})); // 轻装突袭：敏捷↑/物攻↓
+        cr.registerAffixTemplate(8, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(250), -150, 0], hpMod: 0, tierWeights: tier})); // 蛮力觉醒：物攻↑/魔攻↓
+        cr.registerAffixTemplate(9, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(-150), 250, 0], hpMod: 0, tierWeights: tier})); // 贤者血脉：魔攻↑/物攻↓
+        cr.registerAffixTemplate(10, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, -100], hpMod: 200, tierWeights: tier})); // 磐石骨架：生命↑/敏捷↓
+        cr.registerAffixTemplate(11, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 200], hpMod: -100, tierWeights: tier})); // 疾风之躯：敏捷↑/生命↓
+        cr.registerAffixTemplate(12, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 1, manaDiscount: 1, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, -100], hpMod: 0, tierWeights: tier})); // 默诵：魔素消耗-1/敏捷↓
+        cr.registerAffixTemplate(13, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 1, manaDiscount: 0, apBonus: 1, manaGainBonus: -1, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 0, tierWeights: tier})); // 好战本能：AP+1/池-1
+        cr.registerAffixTemplate(14, CharacterRegistry.AffixTemplate({direction: 1, resourceType: 1, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 5, statMods: [int64(0), -100, 0], hpMod: 0, tierWeights: tier})); // 斗魂：AP上限+5/魔攻↓
+        // 负面（4）：纯减益
+        cr.registerAffixTemplate(15, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: -100, tierWeights: tier})); // 脆弱：生命↓
+        cr.registerAffixTemplate(16, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), 0, -100], hpMod: 0, tierWeights: tier})); // 迟钝：敏捷↓
+        cr.registerAffixTemplate(17, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 1, manaDiscount: 0, apBonus: 0, manaGainBonus: -1, apCapBonus: 0, statMods: [int64(0), 0, 0], hpMod: 0, tierWeights: tier})); // 散魔：房间魔素池每回合 -1
+        cr.registerAffixTemplate(18, CharacterRegistry.AffixTemplate({direction: 2, resourceType: 0, manaDiscount: 0, apBonus: 0, manaGainBonus: 0, apCapBonus: 0, statMods: [int64(0), -100, 0], hpMod: 0, tierWeights: tier})); // 魔素蚀体：魔攻↓
     }
 
     // ---- 技能 ----
@@ -186,7 +205,7 @@ contract BaseTest is Test {
             targeting: 9, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
             effects: [SkillRegistry.Effect({op: 7, duration: 2, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
-        }), 2); // 火枪手 classId=2
+        }), 3); // 火枪手 classId=3
 
         // 魔素爆发：MANA_DELTA 注入（圣泉）
         skillManaBurst = sr.registerSkill(SkillRegistry.Skill({
@@ -212,12 +231,76 @@ contract BaseTest is Test {
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
-        // 狂暴：DMG_OUT_MOD + DMG_IN_MOD（种族技）
+        // 狂暴：DMG_OUT_MOD + DMG_IN_MOD（兽人种族技）
         skillBerserk = sr.registerSkill(SkillRegistry.Skill({
             id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
             targeting: 9, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
             effects: [SkillRegistry.Effect({op: 2, duration: 2, magnitude: 300, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 3, duration: 2, magnitude: 200, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 2, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
+        }));
+
+        // 磐石之躯：自施护盾，持续更久（巨人种族技）
+        skillStoneBody = sr.registerSkill(SkillRegistry.Skill({
+            id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
+            targeting: 9, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
+            effects: [SkillRegistry.Effect({op: 4, duration: 4, magnitude: 80, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
+            effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
+        }));
+
+        // 烈酒回魂：净化自身负面 + 少量回血（矮人种族技）
+        skillSpiritReturn = sr.registerSkill(SkillRegistry.Skill({
+            id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
+            targeting: 9, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
+            effects: [SkillRegistry.Effect({op: 10, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 9, duration: 0, magnitude: 30, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
+            effectCount: 2, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
+        }));
+
+        // 暴风术：多段魔法攻击，每段概率眩晕（精灵种族技）
+        skillStorm = sr.registerSkill(SkillRegistry.Skill({
+            id: 0, kind: 2, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 10, hpCost: 0,
+            targeting: 3, weightMode: 0, targetCount: 3, power: 60, damageCap: 0, baseAcc: 1000, flags: 0,
+            effects: [SkillRegistry.Effect({op: 1, duration: 1, magnitude: 0, scope: 1, prob: 300}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
+            effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
+        }));
+
+        // 龙鳞：自施护盾 + 提升自身造成伤害（龙人种族技）
+        skillDragonScale = sr.registerSkill(SkillRegistry.Skill({
+            id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
+            targeting: 9, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
+            effects: [SkillRegistry.Effect({op: 4, duration: 3, magnitude: 60, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 2, duration: 3, magnitude: 150, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
+            effectCount: 2, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
+        }));
+
+        // 圣愈之光：确定性治疗血量亏空比例最高者（天使种族技 1）
+        skillHolyLight = sr.registerSkill(SkillRegistry.Skill({
+            id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 5, hpCost: 0,
+            targeting: 10, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
+            effects: [SkillRegistry.Effect({op: 9, duration: 0, magnitude: 100, scope: 1, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
+            effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
+        }));
+
+        // 天使雷击：多段随机雷电魔法（天使种族技 2）
+        skillAngelJudgment = sr.registerSkill(SkillRegistry.Skill({
+            id: 0, kind: 2, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 10, hpCost: 0,
+            targeting: 3, weightMode: 0, targetCount: 4, power: 80, damageCap: 0, baseAcc: 1000, flags: 0,
+            effects: [SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
+            effectCount: 0, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
+        }));
+
+        // 汲魂：单体攻击并按伤害比例吸血（恶魔种族技 1）
+        skillSoulDrain = sr.registerSkill(SkillRegistry.Skill({
+            id: 0, kind: 1, apCost: 0, apGain: 10, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
+            targeting: 1, weightMode: 0, targetCount: 0, power: 100, damageCap: 0, baseAcc: 1000, flags: 0,
+            effects: [SkillRegistry.Effect({op: 12, duration: 0, magnitude: 300, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
+            effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
+        }));
+
+        // 深渊低语：降低敌方全体命中（恶魔种族技 2）
+        skillAbyssWhisper = sr.registerSkill(SkillRegistry.Skill({
+            id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 5, hpCost: 0,
+            targeting: 4, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
+            effects: [SkillRegistry.Effect({op: 6, duration: 2, magnitude: 200, scope: 3, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
+            effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
         // 召唤（怪物侧）：SUMMON

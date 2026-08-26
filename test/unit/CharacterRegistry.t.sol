@@ -6,7 +6,7 @@ import {CharacterRegistry} from "../../src/core/CharacterRegistry.sol";
 
 /// @title CharacterRegistryTest - 角色创建/种族词条随机/ERC-721 钩子/GM 入口
 /// @notice 用 MockRNG.setFixed 强制特定掷骰结果，验证种族三层加权、词条方向分布、
-///         资源流词条上限、种族属性上限、转移锁定与等级重置、首角色重掷计数器。
+///         资源流词条上限、种族/词条直接修正、转移锁定与等级重置、首角色重掷计数器。
 contract CharacterRegistryTest is BaseTest {
     function setUp() public override {
         super.setUp();
@@ -21,7 +21,7 @@ contract CharacterRegistryTest is BaseTest {
         assertEq(cr.ownerOf(tokenId), alice);
         CharacterRegistry.Character memory c = cr.getCharacter(tokenId);
         assertEq(c.classId, 1);
-        assertTrue(c.race < 5); // 种族必为合法值
+        assertTrue(c.race < 8); // 种族必为合法值（8 种族）
         assertEq(c.level, 1);
         assertEq(c.affixCount, 2);
         assertEq(c.hp, c.maxHp);
@@ -87,46 +87,47 @@ contract CharacterRegistryTest is BaseTest {
         assertEq(cr.getAffixTemplate(c.affixIds[1]).direction, cr.AFFIX_NEGATIVE());
     }
 
-    // ---- 属性计算与种族上限 ----
-    function testStatsCappedByHumanCap() public {
+    // ---- 属性计算与直接修正（无封顶）----
+    function testStatsNoCapHumanPositiveAffixes() public {
         mockRng.setFixed(0); // 人类 + 正面词条 1（攻击 +10%）
         uint256 tokenId = _createCharacter(alice, 1, new uint32[](0));
         (uint64 hp, uint64 maxHp, uint64 attack, uint64 magic, uint64 speed) = cr.getStats(tokenId);
-        // 战士 base：120/30/10/10；双词条攻击 +20% → 36，但人类上限 ×1.0 → 30
+        // 剑士 base：120/30/10/10；双词条攻击 +20% → 36（人类无修正、无封顶）
         assertEq(maxHp, 120);
-        assertEq(attack, 30);
+        assertEq(attack, 36);
         assertEq(magic, 10);
         assertEq(speed, 10);
         assertEq(hp, maxHp);
     }
 
-    function testStatsDemonHigherAttackCap() public {
-        // GM 铸造：恶魔（攻击上限 ×1.3）+ 双刃词条 3（攻击 +25% 速度 -10%）
+    function testStatsDemonDirectModifiers() public {
+        // GM 铸造：恶魔（物攻+30%/魔攻-10%/敏捷+20%/生命-15%）+ 双刃词条 8（蛮力觉醒：攻击 +25% 魔攻 -15%）
         uint16[] memory affixes = new uint16[](1);
-        affixes[0] = 3;
+        affixes[0] = 8;
         uint32[] memory skills = new uint32[](0);
-        uint256 tokenId = cr.gmMintCharacter(alice, 1, 4, affixes, skills);
+        uint256 tokenId = cr.gmMintCharacter(alice, 1, 7, affixes, skills);
         (,, uint64 attack,, uint64 speed) = cr.getStats(tokenId);
-        // 攻击 = 30×1.25 = 37（上限 30×1.3 = 39）；速度 = 10×0.9 = 9（上限 10×1.1 = 11）
-        assertEq(attack, 37);
-        assertEq(speed, 9);
+        // 攻击 = 30×(1+0.30+0.25) = 46；速度 = 10×(1+0.20) = 12（直接修正叠加，无封顶）
+        assertEq(attack, 46);
+        assertEq(speed, 12);
     }
 
     // ---- 资源流词条（默诵/好战本能）----
     function testResourceAffixManaDiscount() public {
-        mockRng.setFixed(682); // 双刃方向；682 % 4 = 2 → 词条 5（默诵 manaDiscount=5）
+        mockRng.setFixed(204); // 双刃方向；204 % 9 = 6 → 词条 12（默诵 manaDiscount=1）
         uint256 tokenId = _createCharacter(alice, 1, new uint32[](0));
         CharacterRegistry.Character memory c = cr.getCharacter(tokenId);
-        assertEq(c.manaDiscount, 10); // 两槽都是词条 5 → 5+5
+        assertEq(c.manaDiscount, 2); // 两槽都是词条 12 → 1+1
         assertEq(c.apBonus, 0);
     }
 
     function testResourceAffixApBonus() public {
-        mockRng.setFixed(683); // 683 % 4 = 3 → 词条 6（好战本能 apBonus=3）
+        mockRng.setFixed(205); // 205 % 9 = 7 → 词条 13（好战本能 apBonus=1）
         uint256 tokenId = _createCharacter(alice, 1, new uint32[](0));
         CharacterRegistry.Character memory c = cr.getCharacter(tokenId);
-        assertEq(c.apBonus, 6);
+        assertEq(c.apBonus, 2); // 两槽都是词条 13 → 1+1
         assertEq(c.manaDiscount, 0);
+        assertEq(c.manaGainBonus, -2); // 好战本能池修正 -1 × 2
     }
 
     // ---- GM 入口 ----
@@ -142,8 +143,9 @@ contract CharacterRegistryTest is BaseTest {
         assertEq(c.race, 4);
         assertEq(c.affixCount, 1);
         assertEq(c.affixIds[0], 3);
-        assertEq(c.skillCount, 1);
+        assertEq(c.skillCount, 2); // 自选技 + 精灵种族技（暴风术）
         assertEq(c.skillIds[0], skillAttack);
+        assertEq(c.skillIds[1], skillStorm);
         assertEq(cr.freeRerolls(bob), 0); // GM 铸造不触发首角色福利
     }
 
@@ -218,15 +220,16 @@ contract CharacterRegistryTest is BaseTest {
 
     // ---- 模糊测试：任意职业创建不变量 ----
     function testFuzzCreateCharacterInvariants(uint8 classId) public {
-        classId = uint8(bound(classId, 1, 5));
+        classId = uint8(bound(classId, 1, 6));
         uint256 tokenId = _createCharacter(alice, classId, new uint32[](0));
         CharacterRegistry.Character memory c = cr.getCharacter(tokenId);
-        assertTrue(c.race < 5);
+        assertTrue(c.race < 8);
         assertEq(c.affixCount, 2);
         assertEq(c.level, 1);
         assertLe(c.hp, c.maxHp);
-        // 属性不超种族上限（上限乘区 ≤1300）
-        assertLe(c.attack, cr.getClassDef(classId).baseAttack * 13 / 10);
-        assertLe(c.magic, cr.getClassDef(classId).baseMagic * 13 / 10);
+        // 无封顶：直接修正叠加，仅保证非负（_calcStat 钳制）
+        assertGe(c.attack, 0);
+        assertGe(c.magic, 0);
+        assertGe(c.speed, 0);
     }
 }

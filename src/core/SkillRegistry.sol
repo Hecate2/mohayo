@@ -39,6 +39,7 @@ contract SkillRegistry is Ownable {
     uint8 public constant TGT_ALL_ALLY = 7;
     uint8 public constant TGT_ROOM_ALL = 8;
     uint8 public constant TGT_SELF = 9;
+    uint8 public constant TGT_MOST_WOUNDED_ALLY = 10; // 治疗血量亏空比例最高者（圣愈之光）
 
     // ---- weightMode（加权随机目标抽取）----
     uint8 public constant WT_UNIFORM = 0;
@@ -61,10 +62,13 @@ contract SkillRegistry is Ownable {
 
     // ---- 种族（CharacterRegistry 复用）----
     uint8 public constant RACE_HUMAN = 0;
-    uint8 public constant RACE_ELF = 1;
-    uint8 public constant RACE_DRAGONKIN = 2;
-    uint8 public constant RACE_ANGEL = 3;
-    uint8 public constant RACE_DEMON = 4;
+    uint8 public constant RACE_ORC = 1;
+    uint8 public constant RACE_GIANT = 2;
+    uint8 public constant RACE_DWARF = 3;
+    uint8 public constant RACE_ELF = 4;
+    uint8 public constant RACE_DRAGONKIN = 5;
+    uint8 public constant RACE_ANGEL = 6;
+    uint8 public constant RACE_DEMON = 7;
 
     struct Effect {
         uint8 op; // OP_* 枚举
@@ -189,7 +193,7 @@ contract SkillRegistry is Ownable {
         require(s.effectCount <= 4, "SR: too many effects");
         require(s.targetCount <= 8, "SR: targetCount cap");
         require(s.baseAcc <= 1000, "SR: baseAcc cap");
-        require(s.targeting >= 1 && s.targeting <= 9, "SR: bad targeting");
+        require(s.targeting >= 1 && s.targeting <= 10, "SR: bad targeting");
         require(s.weightMode <= 2, "SR: bad weightMode");
         for (uint8 i; i < s.effectCount; ++i) {
             require(s.effects[i].op >= 1 && s.effects[i].op <= 14, "SR: bad op");
