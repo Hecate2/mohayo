@@ -23,11 +23,11 @@ contract SkillRegistryTest is BaseTest {
         assertEq(s.targeting, 1);
     }
 
-    // ---- 公共池进攻锚点数据：加强毒刃（物理 + 固定 DOT）----
+    // ---- 公共池进攻锚点数据：加强毒刃（物理 + 固定 DOT，小技能 AP 2）----
     function testPoisonBladeEnhancedData() public {
         SkillRegistry.Skill memory s = sr.getSkill(skillDot);
         assertEq(s.kind, 1, "physical (poison blade is physical)");
-        assertEq(s.apCost, 8);
+        assertEq(s.apCost, 2);
         assertEq(s.power, 200);
         assertEq(s.baseAcc, 950);
         assertEq(s.effectCount, 1);
@@ -36,11 +36,11 @@ contract SkillRegistryTest is BaseTest {
         assertEq(s.effects[0].duration, 3);
     }
 
-    // ---- 公共池进攻锚点数据：暴风剑（高命中四连斩 + 高 AP 消耗）----
+    // ---- 公共池进攻锚点数据：暴风剑（高命中四连斩，中等技能 AP 5）----
     function testStormBladeData() public {
         SkillRegistry.Skill memory s = sr.getSkill(skillStormBlade);
         assertEq(s.kind, 1);
-        assertEq(s.apCost, 20);
+        assertEq(s.apCost, 5);
         assertEq(s.apGain, 0);
         assertEq(s.targeting, 3); // RAND_STRIKE_ENEMY
         assertEq(s.targetCount, 4);

@@ -70,7 +70,8 @@ contract CombatEngine is Ownable {
     uint16 public minHitRate = 50;
 
     /// @notice 全局基础 AP 上限（个人上限 = apCapBase + 角色 apCapBonus；官方可调）
-    uint16 public apCapBase = 110;
+    /// @dev 数量级（用户定案）：大技能 AP 消耗 10（斩铁剑）→ 上限 = 2×10 + 余量 2 = 22
+    uint16 public apCapBase = 22;
 
     // ---- 运行时状态 ----
     mapping(uint32 => CombatTypes.Room) public rooms;

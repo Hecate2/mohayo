@@ -101,13 +101,15 @@ contract BaseTest is Test {
     }
 
     // ---- 职业（content-design.md §4：剑士/守卫/火枪手/黑魔法师/白魔法师 + 无职业）----
+    // 千分比**增量**（与种族/词条同约定：1000+mod 为乘数）：剑士 hp +200‰(×1.2)、攻 +2000‰(×3.0) …
+    // 1 级能力值 = 基准 × (1000+职业+种族+词条)/1000（与原口径 1 级职业值一致）
     function _seedClasses() internal {
-        cr.registerClass(1, CharacterRegistry.ClassDef({baseHp: 120, baseAttack: 30, baseMagic: 10, baseSpeed: 10, skillSlots: 1})); // 剑士
-        cr.registerClass(2, CharacterRegistry.ClassDef({baseHp: 135, baseAttack: 18, baseMagic: 8, baseSpeed: 8, skillSlots: 1})); // 守卫
-        cr.registerClass(3, CharacterRegistry.ClassDef({baseHp: 90, baseAttack: 28, baseMagic: 8, baseSpeed: 22, skillSlots: 1})); // 火枪手
-        cr.registerClass(4, CharacterRegistry.ClassDef({baseHp: 80, baseAttack: 10, baseMagic: 35, baseSpeed: 12, skillSlots: 1})); // 黑魔法师
-        cr.registerClass(5, CharacterRegistry.ClassDef({baseHp: 95, baseAttack: 12, baseMagic: 28, baseSpeed: 14, skillSlots: 1})); // 白魔法师
-        cr.registerClass(6, CharacterRegistry.ClassDef({baseHp: 100, baseAttack: 20, baseMagic: 20, baseSpeed: 15, skillSlots: 3})); // 无职业
+        cr.registerClass(1, CharacterRegistry.ClassDef({baseHpPct: 200, baseAttackPct: 2000, baseMagicPct: 0, baseSpeedPct: 0, skillSlots: 1, exists: true})); // 剑士
+        cr.registerClass(2, CharacterRegistry.ClassDef({baseHpPct: 350, baseAttackPct: 800, baseMagicPct: -200, baseSpeedPct: -200, skillSlots: 1, exists: true})); // 守卫
+        cr.registerClass(3, CharacterRegistry.ClassDef({baseHpPct: -100, baseAttackPct: 1800, baseMagicPct: -200, baseSpeedPct: 1200, skillSlots: 1, exists: true})); // 火枪手
+        cr.registerClass(4, CharacterRegistry.ClassDef({baseHpPct: -200, baseAttackPct: 0, baseMagicPct: 2500, baseSpeedPct: 200, skillSlots: 1, exists: true})); // 黑魔法师
+        cr.registerClass(5, CharacterRegistry.ClassDef({baseHpPct: -50, baseAttackPct: 200, baseMagicPct: 1800, baseSpeedPct: 400, skillSlots: 1, exists: true})); // 白魔法师
+        cr.registerClass(6, CharacterRegistry.ClassDef({baseHpPct: 0, baseAttackPct: 1000, baseMagicPct: 1000, baseSpeedPct: 500, skillSlots: 3, exists: true})); // 无职业
     }
 
     // ---- 种族（content-design.md §3：常见四 + 略稀有二 + 最稀有二，含种族技）----
@@ -154,90 +156,91 @@ contract BaseTest is Test {
 
     // ---- 技能 ----
     function _seedSkills() internal {
-        // 普攻：物理单目标，apCost 0，命中后 +10 AP
+        // 普攻：物理单目标，apCost 0，命中后 +1 AP（数量级：AP 以 1 为单位）
         skillAttack = sr.registerSkill(SkillRegistry.Skill({
-            id: 0, kind: 1, apCost: 0, apGain: 10, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
+            id: 0, kind: 1, apCost: 0, apGain: 1, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
             targeting: 1, weightMode: 0, targetCount: 0, power: 100, damageCap: 0, baseAcc: 1000, flags: 0,
             effects: [SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 0, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
-        // 魔弹：魔法单目标
+        // 魔弹：魔法单目标（小技能：魔素 1）
         skillMagicBolt = sr.registerSkill(SkillRegistry.Skill({
-            id: 0, kind: 2, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 5, hpCost: 0,
+            id: 0, kind: 2, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 1, hpCost: 0,
             targeting: 1, weightMode: 0, targetCount: 0, power: 150, damageCap: 0, baseAcc: 1000, flags: 0,
             effects: [SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 0, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
-        // 治疗：我方单目标，HEAL 效果
+        // 治疗：我方单目标，HEAL 效果（小技能：魔素 1）
         skillHeal = sr.registerSkill(SkillRegistry.Skill({
-            id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 5, hpCost: 0,
+            id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 1, hpCost: 0,
             targeting: 5, weightMode: 1, targetCount: 0, power: 100, damageCap: 0, baseAcc: 1000, flags: 0,
             effects: [SkillRegistry.Effect({op: 9, duration: 0, magnitude: 0, scope: 1, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
-        // 三连击：多段连击（3 段独立目标）
+        // 三连击：多段连击（3 段独立目标）——攒点基本功：耗 1 产 2（净 +1/轮）
         skillStrike3 = sr.registerSkill(SkillRegistry.Skill({
-            id: 0, kind: 1, apCost: 10, apGain: 15, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
+            id: 0, kind: 1, apCost: 1, apGain: 2, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
             targeting: 3, weightMode: 0, targetCount: 3, power: 50, damageCap: 0, baseAcc: 1000, flags: 0,
             effects: [SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 0, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
-        // 护盾：SHIELD 效果（盾量 = power × 魔攻）
+        // 护盾：SHIELD 效果（盾量 = power × 魔攻）（小技能：魔素 1）
         skillShield = sr.registerSkill(SkillRegistry.Skill({
-            id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 5, hpCost: 0,
+            id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 1, hpCost: 0,
             targeting: 9, weightMode: 0, targetCount: 0, power: 100, damageCap: 0, baseAcc: 1000, flags: 0,
             effects: [SkillRegistry.Effect({op: 4, duration: 3, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
-        // 眩晕：STUN 效果（对敌单体）
+        // 眩晕：STUN 效果（对敌单体）（中等技能：AP 3）
         skillStun = sr.registerSkill(SkillRegistry.Skill({
-            id: 0, kind: 1, apCost: 10, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
+            id: 0, kind: 1, apCost: 3, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
             targeting: 1, weightMode: 0, targetCount: 0, power: 50, damageCap: 0, baseAcc: 1000, flags: 0,
             effects: [SkillRegistry.Effect({op: 1, duration: 2, magnitude: 0, scope: 1, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
-        // 烟幕：ROOM_ALL 全体 ACC_DOWN
+        // 烟幕：ROOM_ALL 全体 ACC_DOWN（小技能：魔素 1）
         skillSmoke = sr.registerSkill(SkillRegistry.Skill({
-            id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 5, hpCost: 0,
+            id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 1, hpCost: 0,
             targeting: 8, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
             effects: [SkillRegistry.Effect({op: 6, duration: 2, magnitude: 200, scope: 2, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
-        // 鹰眼：GUAR_NEXT（职业绑定，仅火枪手）
+        // 鹰眼：GUAR_NEXT（职业绑定，仅火枪手）（小技能：AP 1——行动成本是真正的代价）
         skillEagleEye = sr.registerClassSkill(SkillRegistry.Skill({
-            id: 0, kind: 3, apCost: 5, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
+            id: 0, kind: 3, apCost: 1, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
             targeting: 9, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
             effects: [SkillRegistry.Effect({op: 7, duration: 2, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }), 3); // 火枪手 classId=3
 
-        // 魔素爆发：MANA_DELTA 注入（圣泉）
+        // 魔素爆发：MANA_DELTA 注入（圣泉）（数量级：魔素以 1 为单位）
         skillManaBurst = sr.registerSkill(SkillRegistry.Skill({
             id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
             targeting: 9, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
-            effects: [SkillRegistry.Effect({op: 13, duration: 0, magnitude: 20, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
+            effects: [SkillRegistry.Effect({op: 13, duration: 0, magnitude: 1, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
         // 毒刃：单体物理斩击 + 固定值持续流血（公共自选池·输出·保底——本轮加强：DOT 不随属性缩放，
         //       低攻角色（无职业/白法）的稳定清场手段；直伤随物攻成长、流血固定，随等级相对衰减不威胁职业招牌）
+        //       小技能：AP 2
         skillDot = sr.registerSkill(SkillRegistry.Skill({
-            id: 0, kind: 1, apCost: 8, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
+            id: 0, kind: 1, apCost: 2, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
             targeting: 1, weightMode: 0, targetCount: 0, power: 200, damageCap: 0, baseAcc: 950, flags: 0,
             effects: [SkillRegistry.Effect({op: 8, duration: 3, magnitude: 18, scope: 1, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
-        // 嘲讽：TAUNT（对敌单体）
+        // 嘲讽：TAUNT（对敌单体）（小技能：魔素 1）
         skillTaunt = sr.registerSkill(SkillRegistry.Skill({
-            id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 3, hpCost: 0,
+            id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 1, hpCost: 0,
             targeting: 1, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
             effects: [SkillRegistry.Effect({op: 11, duration: 2, magnitude: 0, scope: 1, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
@@ -267,9 +270,9 @@ contract BaseTest is Test {
             effectCount: 2, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
-        // 暴风术：多段魔法攻击，每段概率眩晕（精灵种族技）
+        // 暴风术：多段魔法攻击，每段概率眩晕（精灵种族技）（中等技能：魔素 3）
         skillStorm = sr.registerSkill(SkillRegistry.Skill({
-            id: 0, kind: 2, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 10, hpCost: 0,
+            id: 0, kind: 2, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 3, hpCost: 0,
             targeting: 3, weightMode: 0, targetCount: 3, power: 60, damageCap: 0, baseAcc: 1000, flags: 0,
             effects: [SkillRegistry.Effect({op: 1, duration: 1, magnitude: 0, scope: 1, prob: 300}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
@@ -283,41 +286,41 @@ contract BaseTest is Test {
             effectCount: 2, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
-        // 圣愈之光：确定性治疗血量亏空比例最高者（天使种族技 1）
+        // 圣愈之光：确定性治疗血量亏空比例最高者（天使种族技 1）（小技能：魔素 1）
         skillHolyLight = sr.registerSkill(SkillRegistry.Skill({
-            id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 5, hpCost: 0,
+            id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 1, hpCost: 0,
             targeting: 10, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
             effects: [SkillRegistry.Effect({op: 9, duration: 0, magnitude: 100, scope: 1, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
-        // 天使雷击：多段随机雷电魔法（天使种族技 2）
+        // 天使雷击：多段随机雷电魔法（天使种族技 2）（中等技能：魔素 3）
         skillAngelJudgment = sr.registerSkill(SkillRegistry.Skill({
-            id: 0, kind: 2, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 10, hpCost: 0,
+            id: 0, kind: 2, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 3, hpCost: 0,
             targeting: 3, weightMode: 0, targetCount: 4, power: 80, damageCap: 0, baseAcc: 1000, flags: 0,
             effects: [SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 0, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
-        // 汲魂：单体攻击并按伤害比例吸血（恶魔种族技 1）
+        // 汲魂：单体攻击并按伤害比例吸血（恶魔种族技 1）（命中产出 AP 1）
         skillSoulDrain = sr.registerSkill(SkillRegistry.Skill({
-            id: 0, kind: 1, apCost: 0, apGain: 10, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
+            id: 0, kind: 1, apCost: 0, apGain: 1, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
             targeting: 1, weightMode: 0, targetCount: 0, power: 100, damageCap: 0, baseAcc: 1000, flags: 0,
             effects: [SkillRegistry.Effect({op: 12, duration: 0, magnitude: 300, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
-        // 深渊低语：降低敌方全体命中（恶魔种族技 2）
+        // 深渊低语：降低敌方全体命中（恶魔种族技 2）（小技能：魔素 1）
         skillAbyssWhisper = sr.registerSkill(SkillRegistry.Skill({
-            id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 5, hpCost: 0,
+            id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 1, hpCost: 0,
             targeting: 4, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
             effects: [SkillRegistry.Effect({op: 6, duration: 2, magnitude: 200, scope: 3, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
-        // 召唤（怪物侧）：SUMMON
+        // 召唤（怪物侧）：SUMMON（中等技能：魔素 3）
         skillSummon = sr.registerSkill(SkillRegistry.Skill({
-            id: 0, kind: 4, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 10, hpCost: 0,
+            id: 0, kind: 4, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 3, hpCost: 0,
             targeting: 9, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
             effects: [SkillRegistry.Effect({op: 14, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 1, enemyHeadroom: 2})
@@ -331,44 +334,44 @@ contract BaseTest is Test {
             effectCount: 0, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
-        // 一闪：低 AP、难命中、命中即大伤害（公共自选池，原剑士职业技移入）
+        // 一闪：低 AP、难命中、命中即大伤害（公共自选池，原剑士职业技移入）（小技能：AP 1）
         skillFlash = sr.registerSkill(SkillRegistry.Skill({
-            id: 0, kind: 1, apCost: 5, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
+            id: 0, kind: 1, apCost: 1, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
             targeting: 1, weightMode: 0, targetCount: 0, power: 350, damageCap: 350, baseAcc: 650, flags: 0,
             effects: [SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 0, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
         // 暴风剑：高命中四连斩、随机目标多段、消耗大量 AP（公共自选池·输出·爆发——总伤与斩铁剑同级但
-        //       随机分摊，聚焦击杀弱于职业招牌；20 AP 门槛 + AP 上限天然封顶爆发频率）
+        //       随机分摊，聚焦击杀弱于职业招牌；AP 上限天然封顶爆发频率）（中等技能：AP 5）
         skillStormBlade = sr.registerSkill(SkillRegistry.Skill({
-            id: 0, kind: 1, apCost: 20, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
+            id: 0, kind: 1, apCost: 5, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 0, hpCost: 0,
             targeting: 3, weightMode: 0, targetCount: 4, power: 250, damageCap: 0, baseAcc: 900, flags: 0,
             effects: [SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 0, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
-        // 魔法剑：魔攻输出 + 少量魔素消耗 + 少量 AP 产出（剑士职业技）
+        // 魔法剑：魔攻输出 + 少量魔素消耗 + 少量 AP 产出（剑士职业技）（小技能：魔素 1、AP 产出 1）
         skillMagicSword = sr.registerClassSkill(SkillRegistry.Skill({
-            id: 0, kind: 2, apCost: 0, apGain: 10, ammoId: 0, ammoCost: 0, manaCost: 5, hpCost: 0,
+            id: 0, kind: 2, apCost: 0, apGain: 1, ammoId: 0, ammoCost: 0, manaCost: 1, hpCost: 0,
             targeting: 1, weightMode: 0, targetCount: 0, power: 200, damageCap: 0, baseAcc: 1000, flags: 0,
             effects: [SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 0, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }), 1); // 剑士 classId=1
 
-        // 左轮弹雨：铅弹 ×3 连射、命中率不高，命中后产出少量 AP（火枪手职业技）
+        // 左轮弹雨：铅弹 ×3 连射、命中率不高，命中后产出少量 AP（火枪手职业技）（AP 产出 1）
         skillRevolverRain = sr.registerClassSkill(SkillRegistry.Skill({
-            id: 0, kind: 1, apCost: 0, apGain: 10, ammoId: 1, ammoCost: 3, manaCost: 0, hpCost: 0,
+            id: 0, kind: 1, apCost: 0, apGain: 1, ammoId: 1, ammoCost: 3, manaCost: 0, hpCost: 0,
             targeting: 3, weightMode: 0, targetCount: 3, power: 60, damageCap: 0, baseAcc: 700, flags: 0,
             effects: [SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 0, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }), 3); // 火枪手 classId=3
 
-        // 龙击弹：昂贵单体重击，命中后为房间魔素池注入少量魔素（火枪手职业技）
+        // 龙击弹：昂贵单体重击，命中后为房间魔素池注入少量魔素（火枪手职业技）（魔素产出 1）
         skillDragonBullet = sr.registerClassSkill(SkillRegistry.Skill({
             id: 0, kind: 1, apCost: 0, apGain: 0, ammoId: 2, ammoCost: 1, manaCost: 0, hpCost: 0,
             targeting: 1, weightMode: 0, targetCount: 0, power: 300, damageCap: 0, baseAcc: 1000, flags: 0,
-            effects: [SkillRegistry.Effect({op: 13, duration: 0, magnitude: 5, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
+            effects: [SkillRegistry.Effect({op: 13, duration: 0, magnitude: 1, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }), 3); // 火枪手 classId=3
 
@@ -422,7 +425,7 @@ contract BaseTest is Test {
         ws[0] = 100;
         ce.registerEnemyTable(1, ids, ws);
         ce.setDungeon(1, CombatTypes.DungeonConfig({
-            tableId: 1, enemyCount: 2, manaPerTurn: 10, rewardBase: 20, entryFee: 5, rescueFee: 10, turnInterval: 5
+            tableId: 1, enemyCount: 2, manaPerTurn: 1, rewardBase: 20, entryFee: 5, rescueFee: 10, turnInterval: 5
         }));
     }
 

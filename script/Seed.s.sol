@@ -26,46 +26,47 @@ contract Seed is Script {
         CombatEngine ce = CombatEngine(abi.decode(vm.parseJson(json, ".contracts.CombatEngine"), (address)));
 
         // ---- 职业（content-design.md §4：剑士/守卫/火枪手/黑魔法师/白魔法师 + 无职业）----
-        cr.registerClass(1, CharacterRegistry.ClassDef({baseHp: 120, baseAttack: 30, baseMagic: 10, baseSpeed: 10, skillSlots: 1})); // 剑士
-        cr.registerClass(2, CharacterRegistry.ClassDef({baseHp: 135, baseAttack: 18, baseMagic: 8, baseSpeed: 8, skillSlots: 1})); // 守卫
-        cr.registerClass(3, CharacterRegistry.ClassDef({baseHp: 90, baseAttack: 28, baseMagic: 8, baseSpeed: 22, skillSlots: 1})); // 火枪手
-        cr.registerClass(4, CharacterRegistry.ClassDef({baseHp: 80, baseAttack: 10, baseMagic: 35, baseSpeed: 12, skillSlots: 1})); // 黑魔法师
-        cr.registerClass(5, CharacterRegistry.ClassDef({baseHp: 95, baseAttack: 12, baseMagic: 28, baseSpeed: 14, skillSlots: 1})); // 白魔法师
-        cr.registerClass(6, CharacterRegistry.ClassDef({baseHp: 100, baseAttack: 20, baseMagic: 20, baseSpeed: 15, skillSlots: 3})); // 无职业
+        // 千分比**增量**（与种族/词条同约定：1000+mod 为乘数）；1 级职业值与原口径一致（与 BaseTest 同口径）
+        cr.registerClass(1, CharacterRegistry.ClassDef({baseHpPct: 200, baseAttackPct: 2000, baseMagicPct: 0, baseSpeedPct: 0, skillSlots: 1, exists: true})); // 剑士
+        cr.registerClass(2, CharacterRegistry.ClassDef({baseHpPct: 350, baseAttackPct: 800, baseMagicPct: -200, baseSpeedPct: -200, skillSlots: 1, exists: true})); // 守卫
+        cr.registerClass(3, CharacterRegistry.ClassDef({baseHpPct: -100, baseAttackPct: 1800, baseMagicPct: -200, baseSpeedPct: 1200, skillSlots: 1, exists: true})); // 火枪手
+        cr.registerClass(4, CharacterRegistry.ClassDef({baseHpPct: -200, baseAttackPct: 0, baseMagicPct: 2500, baseSpeedPct: 200, skillSlots: 1, exists: true})); // 黑魔法师
+        cr.registerClass(5, CharacterRegistry.ClassDef({baseHpPct: -50, baseAttackPct: 200, baseMagicPct: 1800, baseSpeedPct: 400, skillSlots: 1, exists: true})); // 白魔法师
+        cr.registerClass(6, CharacterRegistry.ClassDef({baseHpPct: 0, baseAttackPct: 1000, baseMagicPct: 1000, baseSpeedPct: 500, skillSlots: 3, exists: true})); // 无职业
 
-        // ---- 技能（先注册：种族技 id 供 _seedRaces 引用；与 BaseTest 同口径）----
-        uint32 skillAttack = _registerSkill(sr, 1, 0, 10, 0, 0, 0, 0, 1, 0, 0, 100, 0, 1000, 0, _emptyEffects(), 0);
-        uint32 skillMagicBolt = _registerSkill(sr, 2, 0, 0, 0, 0, 5, 0, 1, 0, 0, 150, 0, 1000, 0, _emptyEffects(), 0);
-        uint32 skillHeal = _registerSkill(sr, 3, 0, 0, 0, 0, 5, 0, 5, 1, 0, 100, 0, 1000, 0, _healEffect(), 1);
-        uint32 skillStrike3 = _registerSkill(sr, 1, 10, 15, 0, 0, 0, 0, 3, 0, 3, 50, 0, 1000, 0, _emptyEffects(), 0);
-        uint32 skillShield = _registerSkill(sr, 3, 0, 0, 0, 0, 5, 0, 9, 0, 0, 100, 0, 1000, 0, _shieldEffect(), 1);
-        uint32 skillStun = _registerSkill(sr, 1, 10, 0, 0, 0, 0, 0, 1, 0, 0, 50, 0, 1000, 0, _stunEffect(), 1);
-        uint32 skillSmoke = _registerSkill(sr, 3, 0, 0, 0, 0, 5, 0, 8, 0, 0, 0, 0, 1000, 0, _smokeEffect(), 1);
+        // ---- 技能（先注册：种族技 id 供 _seedRaces 引用；与 BaseTest 同口径；资源以 1 为单位：小 1-3 / 中 3-5 / 大 10）----
+        uint32 skillAttack = _registerSkill(sr, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 100, 0, 1000, 0, _emptyEffects(), 0);
+        uint32 skillMagicBolt = _registerSkill(sr, 2, 0, 0, 0, 0, 1, 0, 1, 0, 0, 150, 0, 1000, 0, _emptyEffects(), 0);
+        uint32 skillHeal = _registerSkill(sr, 3, 0, 0, 0, 0, 1, 0, 5, 1, 0, 100, 0, 1000, 0, _healEffect(), 1);
+        uint32 skillStrike3 = _registerSkill(sr, 1, 1, 2, 0, 0, 0, 0, 3, 0, 3, 50, 0, 1000, 0, _emptyEffects(), 0);
+        uint32 skillShield = _registerSkill(sr, 3, 0, 0, 0, 0, 1, 0, 9, 0, 0, 100, 0, 1000, 0, _shieldEffect(), 1);
+        uint32 skillStun = _registerSkill(sr, 1, 3, 0, 0, 0, 0, 0, 1, 0, 0, 50, 0, 1000, 0, _stunEffect(), 1);
+        uint32 skillSmoke = _registerSkill(sr, 3, 0, 0, 0, 0, 1, 0, 8, 0, 0, 0, 0, 1000, 0, _smokeEffect(), 1);
         uint32 skillManaBurst = _registerSkill(sr, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0, _manaBurstEffect(), 1);
-        uint32 skillDot = _registerSkill(sr, 1, 8, 0, 0, 0, 0, 0, 1, 0, 0, 200, 0, 950, 0, _dotEffect(), 1);
-        uint32 skillTaunt = _registerSkill(sr, 3, 0, 0, 0, 0, 3, 0, 1, 0, 0, 0, 0, 1000, 0, _tauntEffect(), 1);
+        uint32 skillDot = _registerSkill(sr, 1, 2, 0, 0, 0, 0, 0, 1, 0, 0, 200, 0, 950, 0, _dotEffect(), 1);
+        uint32 skillTaunt = _registerSkill(sr, 3, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1000, 0, _tauntEffect(), 1);
         uint32 skillBerserk = _registerSkill(sr, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0, _berserkEffects(), 2); // 兽人
         uint32 skillStoneBody = _registerSkill(sr, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0, _stoneBodyEffects(), 1); // 巨人
         uint32 skillSpiritReturn = _registerSkill(sr, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0, _spiritReturnEffects(), 2); // 矮人
-        uint32 skillStorm = _registerSkill(sr, 2, 0, 0, 0, 0, 10, 0, 3, 0, 3, 60, 0, 1000, 0, _stormEffects(), 1); // 精灵
+        uint32 skillStorm = _registerSkill(sr, 2, 0, 0, 0, 0, 3, 0, 3, 0, 3, 60, 0, 1000, 0, _stormEffects(), 1); // 精灵
         uint32 skillDragonScale = _registerSkill(sr, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0, _dragonScaleEffects(), 2); // 龙人
-        uint32 skillHolyLight = _registerSkill(sr, 3, 0, 0, 0, 0, 5, 0, 10, 0, 0, 0, 0, 1000, 0, _holyLightEffects(), 1); // 天使 1
-        uint32 skillAngelJudgment = _registerSkill(sr, 2, 0, 0, 0, 0, 10, 0, 3, 0, 4, 80, 0, 1000, 0, _emptyEffects(), 0); // 天使 2
-        uint32 skillSoulDrain = _registerSkill(sr, 1, 0, 10, 0, 0, 0, 0, 1, 0, 0, 100, 0, 1000, 0, _soulDrainEffects(), 1); // 恶魔 1
-        uint32 skillAbyssWhisper = _registerSkill(sr, 3, 0, 0, 0, 0, 5, 0, 4, 0, 0, 0, 0, 1000, 0, _abyssWhisperEffects(), 1); // 恶魔 2
-        uint32 skillSummon = _registerSkill(sr, 4, 0, 0, 0, 0, 10, 0, 9, 0, 0, 0, 0, 1000, 0, _summonEffect(), 1);
+        uint32 skillHolyLight = _registerSkill(sr, 3, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, 0, 1000, 0, _holyLightEffects(), 1); // 天使 1
+        uint32 skillAngelJudgment = _registerSkill(sr, 2, 0, 0, 0, 0, 3, 0, 3, 0, 4, 80, 0, 1000, 0, _emptyEffects(), 0); // 天使 2
+        uint32 skillSoulDrain = _registerSkill(sr, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 100, 0, 1000, 0, _soulDrainEffects(), 1); // 恶魔 1
+        uint32 skillAbyssWhisper = _registerSkill(sr, 3, 0, 0, 0, 0, 1, 0, 4, 0, 0, 0, 0, 1000, 0, _abyssWhisperEffects(), 1); // 恶魔 2
+        uint32 skillSummon = _registerSkill(sr, 4, 0, 0, 0, 0, 3, 0, 9, 0, 0, 0, 0, 1000, 0, _summonEffect(), 1);
         uint32 skillIdle = _registerSkill(sr, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0, _emptyEffects(), 0);
-        // 鹰眼：职业绑定（火枪手 classId=3）
-        _registerClassSkill(sr, 3, 3, 5, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0, _guarNextEffect(), 1);
-        // 一闪：公共自选池（原剑士职业技移入）
-        uint32 skillFlash = _registerSkill(sr, 1, 5, 0, 0, 0, 0, 0, 1, 0, 0, 350, 350, 650, 0, _emptyEffects(), 0);
-        // 暴风剑：公共自选池·爆发（高命中四连斩、随机目标多段、高 AP 消耗）
-        uint32 skillStormBlade = _registerSkill(sr, 1, 20, 0, 0, 0, 0, 0, 3, 0, 4, 250, 0, 900, 0, _emptyEffects(), 0);
-        // 魔法剑：剑士职业技（魔攻输出 + 少量魔素 + 少量 AP）
-        uint32 skillMagicSword = _registerClassSkill(sr, 1, 2, 0, 10, 0, 0, 5, 0, 1, 0, 0, 200, 0, 1000, 0, _emptyEffects(), 0);
-        // 左轮弹雨：火枪手职业技（铅弹 ammoId=1，命中后少量 AP）
-        uint32 skillRevolverRain = _registerClassSkill(sr, 3, 1, 0, 10, 1, 3, 0, 0, 3, 0, 3, 60, 0, 700, 0, _emptyEffects(), 0);
-        // 龙击弹：火枪手职业技（龙击弹 ammoId=2，命中后注入少量魔素）
+        // 鹰眼：职业绑定（火枪手 classId=3）（小技能：AP 1）
+        _registerClassSkill(sr, 3, 3, 1, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0, _guarNextEffect(), 1);
+        // 一闪：公共自选池（原剑士职业技移入）（小技能：AP 1）
+        uint32 skillFlash = _registerSkill(sr, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 350, 350, 650, 0, _emptyEffects(), 0);
+        // 暴风剑：公共自选池·爆发（高命中四连斩、随机目标多段、高 AP 消耗）（中等技能：AP 5）
+        uint32 skillStormBlade = _registerSkill(sr, 1, 5, 0, 0, 0, 0, 0, 3, 0, 4, 250, 0, 900, 0, _emptyEffects(), 0);
+        // 魔法剑：剑士职业技（魔攻输出 + 少量魔素 + 少量 AP）（小技能：魔素 1、AP 产出 1）
+        uint32 skillMagicSword = _registerClassSkill(sr, 1, 2, 0, 1, 0, 0, 1, 0, 1, 0, 0, 200, 0, 1000, 0, _emptyEffects(), 0);
+        // 左轮弹雨：火枪手职业技（铅弹 ammoId=1，命中后少量 AP）（AP 产出 1）
+        uint32 skillRevolverRain = _registerClassSkill(sr, 3, 1, 0, 1, 1, 3, 0, 0, 3, 0, 3, 60, 0, 700, 0, _emptyEffects(), 0);
+        // 龙击弹：火枪手职业技（龙击弹 ammoId=2，命中后注入少量魔素）（魔素产出 1）
         uint32 skillDragonBullet = _registerClassSkill(sr, 3, 1, 0, 0, 2, 1, 0, 0, 1, 0, 0, 300, 0, 1000, 0, _dragonBulletEffects(), 1);
         // 爆裂魔法：黑魔法师职业技（耗光魔素 + 固有绝对命中 + 自晕）
         uint32 skillBurstMagic = _registerClassSkill(sr, 4, 2, 0, 0, 0, 0, 0, 0, 4, 0, 0, 500, 0, 1000, 3, _burstMagicEffects(), 1);
@@ -134,7 +135,7 @@ contract Seed is Script {
         uint16[] memory ws = new uint16[](1);
         ws[0] = 100;
         ce.registerEnemyTable(1, ids, ws);
-        ce.setDungeon(1, CombatTypes.DungeonConfig({tableId: 1, enemyCount: 2, manaPerTurn: 10, rewardBase: 20, entryFee: 5, rescueFee: 10, turnInterval: 5}));
+        ce.setDungeon(1, CombatTypes.DungeonConfig({tableId: 1, enemyCount: 2, manaPerTurn: 1, rewardBase: 20, entryFee: 5, rescueFee: 10, turnInterval: 5}));
 
         // ---- 测试角色（GM 铸造，固定属性，供 CLI/Bot 联调）----
         address alice = vm.envOr("SEED_ALICE", address(0xA11CE));
@@ -204,7 +205,7 @@ contract Seed is Script {
     }
 
     function _manaBurstEffect() internal pure returns (SkillRegistry.Effect[4] memory e) {
-        e[0] = SkillRegistry.Effect({op: 13, duration: 0, magnitude: 20, scope: 0, prob: 1000});
+        e[0] = SkillRegistry.Effect({op: 13, duration: 0, magnitude: 1, scope: 0, prob: 1000});
     }
 
     function _dotEffect() internal pure returns (SkillRegistry.Effect[4] memory e) {
@@ -259,7 +260,7 @@ contract Seed is Script {
     }
 
     function _dragonBulletEffects() internal pure returns (SkillRegistry.Effect[4] memory e) {
-        e[0] = SkillRegistry.Effect({op: 13, duration: 0, magnitude: 5, scope: 0, prob: 1000});
+        e[0] = SkillRegistry.Effect({op: 13, duration: 0, magnitude: 1, scope: 0, prob: 1000});
     }
 
     function _burstMagicEffects() internal pure returns (SkillRegistry.Effect[4] memory e) {

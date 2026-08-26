@@ -29,7 +29,7 @@ contract CombatEngineTest is BaseTest {
         skillNuke = _register(_mkSkill(1, 1, 2000, 1000, 0));
         skillMegaNuke = _register(_mkSkill(1, 1, 10000, 1000, 0));
         SkillRegistry.Skill memory sm = _mkSkill(2, 1, 2000, 1000, 0);
-        sm.manaCost = 5; // 魔弹耗魔素 5（触发资源短缺路径）
+        sm.manaCost = 1; // 魔弹耗魔素 1（触发资源短缺路径；数量级：魔素以 1 为单位）
         skillMagicNuke = _register(sm);
         skillHealBig = _register(_mkSkill(3, 5, 2000, 1000, 0)); // SUPPORT 治疗 = power × 魔攻
         skillShieldBig = _register(_withEffect(_mkSkill(3, 9, 0, 1000, 0), ce.OP_SHIELD(), 3, 100, 0));
@@ -62,7 +62,7 @@ contract CombatEngineTest is BaseTest {
         uint16[] memory ws3 = new uint16[](1);
         ws3[0] = 100;
         ce.registerEnemyTable(3, ids3, ws3);
-        ce.setDungeon(3, CombatTypes.DungeonConfig({tableId: 3, enemyCount: 1, manaPerTurn: 10, rewardBase: 0, entryFee: 0, rescueFee: 0, turnInterval: 0}));
+        ce.setDungeon(3, CombatTypes.DungeonConfig({tableId: 3, enemyCount: 1, manaPerTurn: 1, rewardBase: 0, entryFee: 0, rescueFee: 0, turnInterval: 0}));
 
         // 单史莱姆地下城（difficulty 4）：确定性目标测试用（房间级 PRNG 下目标选择随机）
         uint16[] memory ids4 = new uint16[](1);
@@ -70,7 +70,7 @@ contract CombatEngineTest is BaseTest {
         uint16[] memory ws4 = new uint16[](1);
         ws4[0] = 100;
         ce.registerEnemyTable(4, ids4, ws4);
-        ce.setDungeon(4, CombatTypes.DungeonConfig({tableId: 4, enemyCount: 1, manaPerTurn: 10, rewardBase: 0, entryFee: 0, rescueFee: 0, turnInterval: 0}));
+        ce.setDungeon(4, CombatTypes.DungeonConfig({tableId: 4, enemyCount: 1, manaPerTurn: 2, rewardBase: 0, entryFee: 0, rescueFee: 0, turnInterval: 0}));
 
         // 坦克敌人 + 地下城（difficulty 5）：高 HP 高攻，伤害修正测试用
         templateTank = sr.registerTemplate(SkillRegistry.EnemyTemplate({
@@ -174,15 +174,15 @@ contract CombatEngineTest is BaseTest {
         _setPlan(alice, roomId, skills);
         vm.prank(alice);
         ce.startCombat(roomId);
-        // 第 1 回合：魔素池 0 < 5 → 资源短缺；回合末 +10
+        // 第 1 回合：魔素池 0 < 1 → 资源短缺；回合末 +2
         vm.prank(alice);
         ce.advanceTurn(roomId);
-        assertEq(ce.getRoom(roomId).manaPool, 10);
-        // 第 2 回合：魔素 10-5=5，魔弹 2000×35/1000=70 秒杀史莱姆 0；回合末 +10 → 15
+        assertEq(ce.getRoom(roomId).manaPool, 2);
+        // 第 2 回合：魔素 2-1=1，魔弹 2000×35/1000=70 秒杀史莱姆 0；回合末 +2 → 3
         vm.prank(alice);
         ce.advanceTurn(roomId);
         CombatTypes.Room memory r = ce.getRoom(roomId);
-        assertEq(r.manaPool, 15);
+        assertEq(r.manaPool, 3);
         assertFalse(r.enemies[0].alive);
     }
 
@@ -207,18 +207,18 @@ contract CombatEngineTest is BaseTest {
     // ---- 多段连击：3 段独立目标 + AP 产出 ----
     function testMultiHitStrike() public {
         uint32[] memory skills = new uint32[](2);
-        skills[0] = skillAttack; // AP +10
-        skills[1] = skillStrike3; // 3 段 × 50×30/1000 = 1
+        skills[0] = skillAttack; // AP +1
+        skills[1] = skillStrike3; // 3 段 × 50×30/1000 = 1；耗 1 产 2（攒点）
         (uint256 charId, uint32 roomId) = _gmSolo(alice, 1, 4, skills); // 单史莱姆：目标选择确定
         _setPlan(alice, roomId, skills);
         vm.prank(alice);
         ce.startCombat(roomId);
         vm.prank(alice);
-        ce.advanceTurn(roomId); // 普攻 3 伤 → 史莱姆 0 (47)，AP 10
+        ce.advanceTurn(roomId); // 普攻 3 伤 → 史莱姆 0 (47)，AP 1
         vm.prank(alice);
-        ce.advanceTurn(roomId); // 三连击 3 段 × 1 伤 → 史莱姆 0 (44)，AP 10-10+15 = 15
+        ce.advanceTurn(roomId); // 三连击 3 段 × 1 伤 → 史莱姆 0 (44)，AP 1-1+2 = 2
         CombatTypes.RoomMember memory m = ce.getMember(roomId, 0);
-        assertEq(m.ap, 15);
+        assertEq(m.ap, 2);
         assertEq(ce.getEnemy(roomId, 0).hp, 44);
     }
 
@@ -394,7 +394,7 @@ contract CombatEngineTest is BaseTest {
         ce.advanceTurn(roomId);
         vm.prank(alice);
         ce.advanceTurn(roomId);
-        assertEq(ce.getMember(roomId, 0).ap, 20); // 两回合普攻命中 → AP 10+10
+        assertEq(ce.getMember(roomId, 0).ap, 2); // 两回合普攻命中 → AP 1+1
     }
 
     // ---- 敌人攻击成员（目标语义翻转修复验证）----
@@ -479,34 +479,34 @@ contract CombatEngineTest is BaseTest {
     function testGuarNextFlag() public {
         uint32 lowAcc = _register(_mkSkill(1, 1, 1000, 0, 0)); // baseAcc 0 无 GUARANTEED_HIT
         uint32[] memory skills = new uint32[](3);
-        skills[0] = skillAttack; // AP +10
-        skills[1] = skillEagleEye; // GUAR_NEXT，AP -5（火枪手职业技）
-        skills[2] = lowAcc; // 依赖 GUAR_NEXT 必中
+        skills[0] = skillAttack; // AP +1（火枪手 28 攻 → 2 伤）
+        skills[1] = skillEagleEye; // GUAR_NEXT，AP -1（火枪手职业技）
+        skills[2] = lowAcc; // 依赖 GUAR_NEXT 必中（1000×28/1000=28）
         (uint256 charId, uint32 roomId) = _gmSolo(alice, 3, 4, skills); // 火枪手
         _setPlan(alice, roomId, skills);
         vm.prank(alice);
         ce.startCombat(roomId);
         vm.prank(alice);
-        ce.advanceTurn(roomId); // 普攻 → AP 10
+        ce.advanceTurn(roomId); // 普攻 → AP 1，史莱姆 48
         vm.prank(alice);
-        ce.advanceTurn(roomId); // 鹰眼 → AP 5，GUAR_NEXT
+        ce.advanceTurn(roomId); // 鹰眼 → AP 0，GUAR_NEXT
         vm.prank(alice);
-        ce.advanceTurn(roomId); // 低命中技必中：1000×30/1000=30
-        assertEq(ce.getEnemy(roomId, 0).hp, 50 - 30);
+        ce.advanceTurn(roomId); // 低命中技必中 28 伤 → 48-28
+        assertEq(ce.getEnemy(roomId, 0).hp, 50 - 30); // 2+28=30
     }
 
     // ---- 圣泉 MANA_DELTA：注入魔素 + 回合末回复 ----
     function testManaBurstInjectsMana() public {
         uint32[] memory skills = new uint32[](1);
-        skills[0] = skillManaBurst; // MANA_DELTA +20
+        skills[0] = skillManaBurst; // MANA_DELTA +1
         (uint256 charId, uint32 roomId) = _gmSolo(alice, 4, 4, skills); // 黑魔法师
         _setPlan(alice, roomId, skills);
         vm.prank(alice);
         ce.startCombat(roomId);
         vm.prank(alice);
         ce.advanceTurn(roomId);
-        // 0 + 圣泉 20 + 回合末回复 10 = 30
-        assertEq(ce.getRoom(roomId).manaPool, 30);
+        // 0 + 圣泉 1 + 回合末回复 2 = 3
+        assertEq(ce.getRoom(roomId).manaPool, 3);
     }
 
     // ---- 狂暴 DMG_OUT_MOD/DMG_IN_MOD：双修正同时生效（种族技随兽人自动并入，不可手动自选）----
@@ -530,12 +530,12 @@ contract CombatEngineTest is BaseTest {
         vm.prank(alice);
         ce.advanceTurn(roomId); // 狂暴（成员先手）；坦克随后普攻 10×1200/1000=12
         vm.prank(alice);
-        ce.advanceTurn(roomId); // 核弹 93.6→93；坦克反击 12
-        // 兽人剑士：物攻 30×1.2=36、生命 120×1.1=132（种族直接修正）
-        uint64 nukeDmg = uint64(2000 * 36 / 1000) * 1300 / 1000; // 2000×36/1000=72 → ×1.3=93.6→93
+        ce.advanceTurn(roomId); // 核弹 83.2→83；坦克反击 12
+        // 兽人剑士（线性相加）：攻 10×(1000+2000+300)‰=32、生命 100×(1000+200+100)‰=130
+        uint64 nukeDmg = uint64(2000 * 32 / 1000) * 1300 / 1000; // 2000×32/1000=64 → ×1.3=83.2→83
         uint64 tankHit = 10 * 1200 / 1000; // 100×100/1000=10 → ×1.2（狂暴 DMG_IN_MOD）=12
         assertEq(ce.getEnemy(roomId, 0).hp, 500 - nukeDmg, "DMG_OUT_MOD applied");
-        assertEq(ce.getMember(roomId, 0).hp, 132 - tankHit - tankHit, "DMG_IN_MOD applied");
+        assertEq(ce.getMember(roomId, 0).hp, 130 - tankHit - tankHit, "DMG_IN_MOD applied");
     }
 
     // ---- 计划层锁定：计划只能排角色已习得技能（防绕过创建层绑定）----
@@ -568,8 +568,8 @@ contract CombatEngineTest is BaseTest {
     // ---- 公共池进攻锚点验收：无职业人类 solo D1（属性双弱 + 加强毒刃）----
     function testClasslessHumanSoloD1PoisonBlade() public {
         uint32[] memory skills = new uint32[](2);
-        skills[0] = skillDot; // 加强毒刃：直伤 4 + 流血 18×3
-        skills[1] = skillAttack; // 攒 AP（毒刃 8 AP 门槛）
+        skills[0] = skillDot; // 加强毒刃：直伤 4 + 流血 18×3，AP 2
+        skills[1] = skillAttack; // 攒 AP（普攻命中 +1）
         (uint256 charId, uint32 roomId) = _gmSolo(alice, 6, 1, skills); // 无职业人类 + D1（2 史莱姆）
         uint32[] memory plan = new uint32[](3);
         plan[0] = skillAttack;
@@ -588,16 +588,20 @@ contract CombatEngineTest is BaseTest {
         assertLt(turns, 40);
     }
 
-    // ---- 公共池进攻锚点验收：无职业人类 solo D1（暴风剑爆发）----
+    // ---- 公共池进攻锚点验收：无职业人类 solo D1（暴风剑爆发，AP 5 门槛）----
     function testClasslessHumanSoloD1StormBlade() public {
         uint32[] memory skills = new uint32[](2);
-        skills[0] = skillStormBlade; // 暴风剑：20 AP 四连斩
-        skills[1] = skillAttack; // 攒 AP（20 AP 门槛）
+        skills[0] = skillStormBlade; // 暴风剑：AP 5 四连斩
+        skills[1] = skillAttack; // 攒 AP（普攻命中 +1）
         (uint256 charId, uint32 roomId) = _gmSolo(alice, 6, 1, skills);
-        uint32[] memory plan = new uint32[](3);
+        // 5 次普攻攒满 5 AP → 暴风剑（循环：+5-5 维持）
+        uint32[] memory plan = new uint32[](6);
         plan[0] = skillAttack;
         plan[1] = skillAttack;
-        plan[2] = skillStormBlade;
+        plan[2] = skillAttack;
+        plan[3] = skillAttack;
+        plan[4] = skillAttack;
+        plan[5] = skillStormBlade;
         _setPlan(alice, roomId, plan);
         vm.prank(alice);
         ce.startCombat(roomId);

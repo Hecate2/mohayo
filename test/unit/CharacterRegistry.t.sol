@@ -130,29 +130,63 @@ contract CharacterRegistryTest is BaseTest {
         assertEq(cr.getAffixTemplate(c.affixIds[1]).direction, cr.AFFIX_NEGATIVE());
     }
 
-    // ---- 属性计算与直接修正（无封顶）----
+    // ---- 属性计算与直接修正（线性相加：职业+种族+词条千分比，1 级 = 基准 × 总加成/1000）----
     function testStatsNoCapHumanPositiveAffixes() public {
-        mockRng.setFixed(0); // 人类 + 正面词条 1（攻击 +10%）
+        mockRng.setFixed(0); // 人类 + 正面词条 1（攻击 +100‰ ×2）
         uint256 tokenId = _createCharacter(alice, 1, new uint32[](0));
         (uint64 hp, uint64 maxHp, uint64 attack, uint64 magic, uint64 speed) = cr.getStats(tokenId);
-        // 剑士 base：120/30/10/10；双词条攻击 +20% → 36（人类无修正、无封顶）
+        // 剑士：hp 100×1200‰=120、攻 10×(1000+3000+200)‰=32、魔 10×1000‰=10、速 10×1000‰=10
         assertEq(maxHp, 120);
-        assertEq(attack, 36);
+        assertEq(attack, 32);
         assertEq(magic, 10);
         assertEq(speed, 10);
         assertEq(hp, maxHp);
     }
 
     function testStatsDemonDirectModifiers() public {
-        // GM 铸造：恶魔（物攻+30%/魔攻-10%/敏捷+20%/生命-15%）+ 双刃词条 8（蛮力觉醒：攻击 +25% 魔攻 -15%）
+        // GM 铸造：恶魔（物攻+300‰/魔攻-100‰/敏捷+200‰/生命-150‰）+ 双刃词条 8（蛮力觉醒：攻击+250‰ 魔攻-150‰）
         uint16[] memory affixes = new uint16[](1);
         affixes[0] = 8;
         uint32[] memory skills = new uint32[](0);
         uint256 tokenId = cr.gmMintCharacter(alice, 1, 7, affixes, skills);
         (,, uint64 attack,, uint64 speed) = cr.getStats(tokenId);
-        // 攻击 = 30×(1+0.30+0.25) = 46；速度 = 10×(1+0.20) = 12（直接修正叠加，无封顶）
-        assertEq(attack, 46);
+        // 攻击 = 10×(1000+3000+300+250)‰ = 35（千分比线性相加）；速度 = 10×(1000+1000+200)‰ = 12
+        assertEq(attack, 35);
         assertEq(speed, 12);
+    }
+
+    // ---- 等级公式：满级 = 1 级 × 300，线性插值，先乘后除 ----
+    function testLevelFormulaLinear() public {
+        uint256 tokenId = _gmCharacter(alice, 1, 0, new uint16[](0), new uint32[](0)); // 人类剑士：1 级攻 30 / hp 120
+        (,, uint64 attack1,,) = cr.getStats(tokenId);
+        assertEq(attack1, 30);
+        // 满级 300：能力值 = 1 级 × 300
+        cr.gmSetLevel(tokenId, cr.MAX_LEVEL());
+        (uint64 hp300, uint64 maxHp300, uint64 attack300,,) = cr.getStats(tokenId);
+        assertEq(attack300, 9000); // 30×300
+        assertEq(maxHp300, 36000); // 120×300
+        assertEq(hp300, maxHp300);
+        // 线性插值：150 级 = 1 级 × 150
+        cr.gmSetLevel(tokenId, 150);
+        (,, uint64 attack150,,) = cr.getStats(tokenId);
+        assertEq(attack150, 4500);
+        // 等级上限钳制
+        vm.expectRevert("CR: bad level");
+        cr.gmSetLevel(tokenId, 301);
+    }
+
+    // ---- 转移重置等级：属性按等级 1 重算（_computeStats 幂等）----
+    function testTransferResetsStatsToLevel1() public {
+        uint256 tokenId = _gmCharacter(alice, 1, 0, new uint16[](0), new uint32[](0));
+        cr.gmSetLevel(tokenId, 300);
+        (,, uint64 attack300,,) = cr.getStats(tokenId);
+        assertEq(attack300, 9000);
+        vm.prank(alice);
+        cr.transferFrom(alice, bob, tokenId);
+        CharacterRegistry.Character memory c = cr.getCharacter(tokenId);
+        assertEq(c.level, 1);
+        assertEq(c.attack, 30); // 属性回落等级 1
+        assertEq(c.hp, c.maxHp);
     }
 
     // ---- 资源流词条（默诵/好战本能）----

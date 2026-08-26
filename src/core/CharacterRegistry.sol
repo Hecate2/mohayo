@@ -22,6 +22,14 @@ contract CharacterRegistry is ERC721, Ownable {
     uint8 public constant MAX_AFFIX_PER_CHAR = 2;
     uint8 public constant MAX_SKILL_PER_CHAR = 8;
 
+    // ---- 数量级基准（用户定案）：1 级基准 / 满级 300 / 词条上限 ×3 ----
+    uint64 public constant BASE_HP = 100;
+    uint64 public constant BASE_ATTACK = 10;
+    uint64 public constant BASE_MAGIC = 10;
+    uint64 public constant BASE_SPEED = 10;
+    uint16 public constant MAX_LEVEL = 300; // 满级；能力值 = 1 级基准 × level（线性插值，满级 = 1 级 × 300）
+    int64 public constant MAX_AFFIX_MOD = 2000; // 词条单属性修正上限（千分比）：极端词条最多把能力值 ×3
+
     // ---- 种族/词条方向常量（与 SkillRegistry 对齐；本地定义避免跨合约常量解析）----
     uint8 public constant RACE_HUMAN = 0;
     uint8 public constant RACE_ORC = 1;
@@ -43,7 +51,7 @@ contract CharacterRegistry is ERC721, Ownable {
     struct Character {
         uint8 classId;
         uint8 race;
-        uint8 level;
+        uint16 level; // 等级（满级 MAX_LEVEL=300；能力值 = 1 级基准 × level 线性插值）
         uint16[4] affixIds; // 词条（≤2 条，数组留余量）
         uint8 affixCount;
         uint32[8] skillIds; // 职业技 + 种族技 + 自选技
@@ -64,11 +72,12 @@ contract CharacterRegistry is ERC721, Ownable {
     uint256 public nextTokenId = 1;
 
     struct ClassDef {
-        uint64 baseHp;
-        uint64 baseAttack;
-        uint64 baseMagic;
-        uint64 baseSpeed;
+        int64 baseHpPct; // 职业 HP 加成（千分比**增量**，与种族/词条同约定：1000+mod 为乘数；守卫 +350 = ×1.35）
+        int64 baseAttackPct; // 职业物攻加成（千分比增量，相对 BASE_ATTACK：剑士 +2000 = ×3.0）
+        int64 baseMagicPct; // 职业魔攻加成（千分比增量，相对 BASE_MAGIC）
+        int64 baseSpeedPct; // 职业敏捷加成（千分比增量，相对 BASE_SPEED）
         uint8 skillSlots; // 职业额外自选槽（无职业 3 / 职业 1）
+        bool exists; // 注册标记（职业增量可为 0，用 exists 区分未注册）
     }
     mapping(uint8 => ClassDef) public classDefs;
     uint8 public classCount;
@@ -107,7 +116,7 @@ contract CharacterRegistry is ERC721, Ownable {
     /// @notice GM 测试入口开关（主网部署传 false 物理移除）
     bool public immutable gmEnabled;
 
-    event CharacterCreated(uint256 indexed tokenId, address indexed owner, uint8 classId, uint8 race, uint8 level);
+    event CharacterCreated(uint256 indexed tokenId, address indexed owner, uint8 classId, uint8 race, uint16 level);
     event CharacterRerolled(uint256 indexed tokenId, address indexed owner);
     event AffixTemplateRegistered(uint16 indexed id, uint8 direction);
     event ClassRegistered(uint8 indexed id);
@@ -122,8 +131,9 @@ contract CharacterRegistry is ERC721, Ownable {
     // ---- 模板注册（治理/部署）----
     function registerClass(uint8 classId, ClassDef calldata def) external onlyOwner {
         require(classId > 0 && classId <= MAX_CLASSES, "CR: bad classId");
-        require(classDefs[classId].baseHp == 0, "CR: class exists");
+        require(!classDefs[classId].exists, "CR: class exists");
         classDefs[classId] = def;
+        classDefs[classId].exists = true;
         if (classId > classCount) classCount = classId;
         emit ClassRegistered(classId);
     }
@@ -157,7 +167,7 @@ contract CharacterRegistry is ERC721, Ownable {
     // ---- 创建 ----
     /// @notice 正常创建：种族/词条全部走 AFFIX RNG；自选技由玩家指定
     function createCharacter(uint8 classId, uint32[] calldata skillIds) external returns (uint256 tokenId) {
-        require(classDefs[classId].baseHp != 0, "CR: unknown class");
+        require(classDefs[classId].exists, "CR: unknown class");
         uint8 race = _rollRace(tokenId);
         uint16[4] memory affixIds;
         uint8 affixCount_ = _rollAffixes(affixIds);
@@ -176,7 +186,7 @@ contract CharacterRegistry is ERC721, Ownable {
         returns (uint256 tokenId)
     {
         require(gmEnabled, "CR: GM disabled");
-        require(classDefs[classId].baseHp != 0, "CR: unknown class");
+        require(classDefs[classId].exists, "CR: unknown class");
         require(race < raceCount, "CR: unknown race");
         uint16[4] memory affixIds;
         uint8 n = uint8(affixIds_.length);
@@ -184,6 +194,16 @@ contract CharacterRegistry is ERC721, Ownable {
         for (uint8 i; i < n; ++i) affixIds[i] = affixIds_[i];
         tokenId = _mintCharacter(to, classId, race, affixIds, n, skillIds);
         emit CharacterCreated(tokenId, to, classId, race, characters[tokenId].level);
+    }
+
+    /// @notice GM 测试入口：设置等级并按等级公式重算属性（满级 = 1 级 × MAX_LEVEL 线性插值；主网物理移除）
+    function gmSetLevel(uint256 tokenId, uint16 level) external onlyOwner {
+        require(gmEnabled, "CR: GM disabled");
+        require(level >= 1 && level <= MAX_LEVEL, "CR: bad level");
+        Character storage c = characters[tokenId];
+        c.level = level;
+        _computeStats(c, c.classId, c.race, c.affixIds, c.affixCount);
+        c.hp = c.maxHp;
     }
 
     function _mintCharacter(address to, uint8 classId, uint8 race, uint16[4] memory affixIds, uint8 affixCount_, uint32[] calldata skillIds)
@@ -207,13 +227,22 @@ contract CharacterRegistry is ERC721, Ownable {
     function _computeStats(Character storage c, uint8 classId, uint8 race, uint16[4] memory affixIds, uint8 affixCount_) private {
         ClassDef memory def = classDefs[classId];
         RaceDef memory rd = raceDefs[race];
+        // 种族/职业/词条的加成百分比线性相加（千分比）；词条单属性修正钳制 ≤ MAX_AFFIX_MOD（最多 ×3）
         int64[3] memory mods = [int64(rd.statMods[0]), int64(rd.statMods[1]), int64(rd.statMods[2])];
         int64 hpMod = int64(rd.hpMod);
+        int64[3] memory affixMods;
+        int64 affixHpMod;
+        // 资源流字段清零（幂等：transfer 重置等级时重算，避免重复累加）
+        c.manaDiscount = 0;
+        c.apDiscount = 0;
+        c.apBonus = 0;
+        c.manaGainBonus = 0;
+        c.apCapBonus = 0;
         uint8 resourceCount;
         for (uint8 i; i < affixCount_; ++i) {
             AffixTemplate memory t = affixTemplates[affixIds[i]];
-            for (uint8 j; j < 3; ++j) mods[j] += t.statMods[j];
-            hpMod += t.hpMod;
+            for (uint8 j; j < 3; ++j) affixMods[j] += t.statMods[j];
+            affixHpMod += t.hpMod;
             if (t.resourceType != 0) {
                 c.manaDiscount += t.manaDiscount;
                 c.apDiscount += t.apDiscount;
@@ -225,17 +254,29 @@ contract CharacterRegistry is ERC721, Ownable {
         }
         // 资源流词条 ≤2 条（创建时已保证，此处冗余防御）
         require(resourceCount <= MAX_AFFIX_PER_CHAR, "CR: resource affix cap");
+        for (uint8 j; j < 3; ++j) {
+            if (affixMods[j] > MAX_AFFIX_MOD) affixMods[j] = MAX_AFFIX_MOD;
+            mods[j] += affixMods[j];
+        }
+        if (affixHpMod > MAX_AFFIX_MOD) affixHpMod = MAX_AFFIX_MOD;
+        hpMod += affixHpMod;
 
-        c.maxHp = _calcStat(def.baseHp, hpMod);
-        c.attack = _calcStat(def.baseAttack, mods[0]);
-        c.magic = _calcStat(def.baseMagic, mods[1]);
-        c.speed = _calcStat(def.baseSpeed, mods[2]);
+        // 等级公式（先乘后除，防中间溢出）：总加成 = 职业 + 种族 + 词条（千分比线性相加）
+        // 假定的满级能力值 = 基准 × 总加成 /1000 × MAX_LEVEL；当前 = 满级 × level / MAX_LEVEL（线性插值）
+        c.maxHp = _calcStat(BASE_HP, def.baseHpPct + hpMod, c.level);
+        c.attack = _calcStat(BASE_ATTACK, def.baseAttackPct + mods[0], c.level);
+        c.magic = _calcStat(BASE_MAGIC, def.baseMagicPct + mods[1], c.level);
+        c.speed = _calcStat(BASE_SPEED, def.baseSpeedPct + mods[2], c.level);
     }
 
-    function _calcStat(uint64 base, int64 mod) private pure returns (uint64) {
-        int256 v = int256(uint256(base)) * (1000 + mod) / 1000;
-        if (v < 0) v = 0;
-        return uint64(uint256(v));
+    function _calcStat(uint64 base, int64 mod, uint16 level) internal pure returns (uint64) {
+        int256 totalPct = 1000 + int256(mod);
+        if (totalPct <= 0) return 0;
+        // 满级能力值 = 基准 × (1000+总加成) / 1000 × MAX_LEVEL（先乘后除）
+        uint256 full = uint256(base) * uint256(totalPct) * uint256(MAX_LEVEL) / 1000;
+        // 当前等级 = 满级 × level / MAX_LEVEL（线性插值）
+        uint256 v = full * uint256(level) / uint256(MAX_LEVEL);
+        return uint64(v);
     }
 
     function _mergeSkills(Character storage c, uint8 classId, uint8 race, uint32[] calldata skillIds) private {
@@ -370,8 +411,9 @@ contract CharacterRegistry is ERC721, Ownable {
         if (from != address(0) && to != address(0)) {
             Character storage c = characters[tokenId];
             require(c.roomId == 0, "CR: in room");
-            // 所有权变更 → 等级重置为 1（属性按等级 1 重算）
+            // 所有权变更 → 等级重置为 1，属性按等级 1 重算（幂等：_computeStats 先清零资源流字段）
             c.level = 1;
+            _computeStats(c, c.classId, c.race, c.affixIds, c.affixCount);
             c.hp = c.maxHp;
         }
         return super._update(to, tokenId, auth);
