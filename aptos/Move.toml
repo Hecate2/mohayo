@@ -1,0 +1,9 @@
+[package]
+name = "Mohayo"
+version = "0.1.0"
+
+[addresses]
+mohayo = "0x88080"
+
+[dependencies.AptosFramework]
+local = "../.vendor/aptos-core/aptos-move/framework/aptos-framework"

@@ -1,4 +1,5 @@
 out-release/
+aptos/build/
 
 # Foundry
 out/
