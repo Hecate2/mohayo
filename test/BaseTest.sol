@@ -342,12 +342,12 @@ contract BaseTest is Test {
             effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
-        // 深渊低语：降低敌方全体命中（恶魔种族技 2）（小技能：魔素 1）
+        // 深渊低语：降低敌方全体命中 + 随机1个敌人受伤增加（恶魔种族技 2）（小技能：魔素 1）
         skillAbyssWhisper = sr.registerSkill(SkillRegistry.Skill({
             id: 0, kind: 3, apCost: 0, apGain: 0, ammoId: 0, ammoCost: 0, manaCost: 1, hpCost: 0,
             targeting: 4, weightMode: 0, targetCount: 0, power: 0, damageCap: 0, baseAcc: 1000, flags: 0,
-            effects: [SkillRegistry.Effect({op: 6, duration: 2, magnitude: 200, scope: 3, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
-            effectCount: 1, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
+            effects: [SkillRegistry.Effect({op: 6, duration: 2, magnitude: 200, scope: 3, prob: 1000}), SkillRegistry.Effect({op: 3, duration: 2, magnitude: 200, scope: 1, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000}), SkillRegistry.Effect({op: 0, duration: 0, magnitude: 0, scope: 0, prob: 1000})],
+            effectCount: 2, summon: SkillRegistry.SummonRule({templateId: 0, maxCount: 0, enemyHeadroom: 0})
         }));
 
         // 召唤（怪物侧）：SUMMON（中等技能：魔素 3）

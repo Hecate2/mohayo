@@ -827,6 +827,8 @@ module mohayo::engine {
         dealt
     }
 
+    // 钳制先于乘区：damageCap 只压基础伤害；DMG_IN_MOD 乘区在 cap 之后叠加，
+    // 有 DMG_IN_MOD 的角色不受 damageCap 限制——最终伤害可超过 damageCap
     fun compute_damage(room: &mut Room, skill: &Skill, stat: u64, actor_enemy: bool, actor_index: u64, t: Target): u64 {
         let dmg = skill.power * stat / 1000;
         let dmg = if (skill.damage_cap != 0 && dmg > skill.damage_cap) { skill.damage_cap } else { dmg };
@@ -1470,6 +1472,10 @@ module mohayo::engine {
         (f.op, f.duration, f.magnitude)
     }
     #[view]
+    public fun enemy_effect_count(room_id: u64, enemy_index: u64): u64 acquires RoomStore {
+        vector::length(&vector::borrow(&table::borrow(&borrow_global<RoomStore>(@mohayo).rooms, room_id).enemies, enemy_index).effects)
+    }
+    #[view]
     public fun enemy_count(room_id: u64): u64 acquires RoomStore {
         vector::length(&table::borrow(&borrow_global<RoomStore>(@mohayo).rooms, room_id).enemies)
     }
@@ -1487,5 +1493,9 @@ module mohayo::engine {
     #[view]
     public fun skill_registered(skill_id: u64): bool acquires Registry {
         table::contains(&borrow_global<Registry>(@mohayo).skills, skill_id)
+    }
+    #[view]
+    public fun next_room_id(): u64 acquires Registry {
+        borrow_global<Registry>(@mohayo).next_room_id
     }
 }

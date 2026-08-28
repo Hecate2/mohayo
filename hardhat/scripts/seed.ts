@@ -71,7 +71,7 @@ async function main() {
   const skillHolyLight = await reg(sr.registerSkill, mkSkill({ kind: 3, manaCost: 1, targeting: 10, effects: [eff(9, 0, 100, 1), ...emptyEffects().slice(1)], effectCount: 1 })); // 天使·圣愈之光
   const skillAngelJudgment = await reg(sr.registerSkill, mkSkill({ kind: 2, manaCost: 3, targeting: 3, targetCount: 4, power: 80 })); // 天使·天使雷击
   const skillSoulDrain = await reg(sr.registerSkill, mkSkill({ kind: 1, apGain: 1, targeting: 1, power: 100, effects: [eff(12, 0, 300, 0), ...emptyEffects().slice(1)], effectCount: 1 })); // 恶魔·汲魂
-  const skillAbyssWhisper = await reg(sr.registerSkill, mkSkill({ kind: 3, manaCost: 1, targeting: 4, effects: [eff(6, 2, 200, 3), ...emptyEffects().slice(1)], effectCount: 1 })); // 恶魔·深渊低语
+  const skillAbyssWhisper = await reg(sr.registerSkill, mkSkill({ kind: 3, manaCost: 1, targeting: 4, effects: [eff(6, 2, 200, 3), eff(3, 2, 200, 1), ...emptyEffects().slice(2)], effectCount: 2 })); // 恶魔·深渊低语：全体命中降低 + 随机1敌受伤增加
 
   // 职业技（classId 绑定）
   await reg(sr.registerClassSkill, mkSkill({ kind: 3, targeting: 9, effects: [eff(7, 2, 0, 0), ...emptyEffects().slice(1)], effectCount: 1 }), 3); // 鹰眼：火枪手 classId=3（小技能：AP 1）

@@ -610,7 +610,8 @@ library CombatLib {
         uint8 tEffectCount
     ) internal returns (uint64) {
         uint256 dmg = uint256(s.power) * stat / 1000;
-        // 钳制先于乘区：damageCap 只压基础伤害，狂暴/龙鳞的乘区加成可突破单次伤害上限（用户定案）
+        // 钳制先于乘区：damageCap 只压基础伤害；DMG_OUT_MOD/DMG_IN_MOD 乘区加成可突破单次伤害上限（用户定案）
+        // 含义：有 DMG_IN_MOD 的角色不受 damageCap 钳制——承伤面乘区在 cap 之后叠加，最终伤害可超过 damageCap
         if (s.damageCap != 0 && dmg > s.damageCap) dmg = s.damageCap;
         uint256 outMod = sumMod(actorEffects, actorEffectCount, CombatTypes.OP_DMG_OUT_MOD);
         if (outMod != 0) dmg = dmg * (1000 + outMod) / 1000;

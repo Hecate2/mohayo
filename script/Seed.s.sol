@@ -53,7 +53,7 @@ contract Seed is Script {
         uint32 skillHolyLight = _registerSkill(sr, 3, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, 0, 1000, 0, _holyLightEffects(), 1); // 天使 1
         uint32 skillAngelJudgment = _registerSkill(sr, 2, 0, 0, 0, 0, 3, 0, 3, 0, 4, 80, 0, 1000, 0, _emptyEffects(), 0); // 天使 2
         uint32 skillSoulDrain = _registerSkill(sr, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 100, 0, 1000, 0, _soulDrainEffects(), 1); // 恶魔 1
-        uint32 skillAbyssWhisper = _registerSkill(sr, 3, 0, 0, 0, 0, 1, 0, 4, 0, 0, 0, 0, 1000, 0, _abyssWhisperEffects(), 1); // 恶魔 2
+        uint32 skillAbyssWhisper = _registerSkill(sr, 3, 0, 0, 0, 0, 1, 0, 4, 0, 0, 0, 0, 1000, 0, _abyssWhisperEffects(), 2); // 恶魔 2
         uint32 skillSummon = _registerSkill(sr, 4, 0, 0, 0, 0, 3, 0, 9, 0, 0, 0, 0, 1000, 0, _summonEffect(), 1);
         uint32 skillIdle = _registerSkill(sr, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0, _emptyEffects(), 0);
         // 鹰眼：职业绑定（火枪手 classId=3）（小技能：AP 1）
@@ -356,6 +356,7 @@ contract Seed is Script {
 
     function _abyssWhisperEffects() internal pure returns (SkillRegistry.Effect[4] memory e) {
         e[0] = SkillRegistry.Effect({op: 6, duration: 2, magnitude: 200, scope: 3, prob: 1000});
+        e[1] = SkillRegistry.Effect({op: 3, duration: 2, magnitude: 200, scope: 1, prob: 1000});
     }
 
     function _summonEffect() internal pure returns (SkillRegistry.Effect[4] memory e) {

@@ -543,6 +543,76 @@ contract CombatEngineTest is BaseTest {
         assertGt(ce.getMember(roomId, 0).hp, 0, "member survived after berserk DMG_IN_MOD");
     }
 
+    // ---- 深渊低语 DMG_IN_MOD：随机1个敌人受伤增加 + 不受 damageCap 限制 ----
+    function testAbyssWhisperAppliesDmgInMod() public {
+        uint32[] memory skills = new uint32[](1);
+        skills[0] = skillAttack;
+        // 使用恶魔种族（race=7），深渊低语+汲魂自动并入
+        uint256 charId = _gmCharacter(alice, 1, 7, new uint16[](0), skills);
+        vm.prank(alice);
+        uint32 roomId = ce.createRoom(4);
+        vm.prank(alice);
+        ce.joinRoom(roomId, charId);
+        uint32[] memory plan = new uint32[](2);
+        plan[0] = skillAbyssWhisper;
+        plan[1] = skillAttack;
+        _setPlan(alice, roomId, plan);
+        vm.prank(alice);
+        ce.startCombat(roomId);
+        // Turn1: AbyssWhisper fails (mana=0), Turn2: Attack, Turn3: AbyssWhisper fires
+        vm.prank(alice);
+        ce.advanceTurn(roomId); // Turn1: mana=0, ABYSS_WHISPER fails
+        vm.prank(alice);
+        ce.advanceTurn(roomId); // Turn2: ATTACK fires, mana regens
+        vm.prank(alice);
+        ce.advanceTurn(roomId); // Turn3: ABYSS_WHISPER fires (mana>=1)
+        // 至少1个敌人应有DMG_IN_MOD效果
+        bool foundDmgInMod = false;
+        uint8 ec = ce.getRoom(roomId).enemyCount;
+        for (uint8 i; i < ec; ++i) {
+            CombatTypes.Enemy memory e = ce.getEnemy(roomId, i);
+            for (uint8 j; j < e.effectCount; ++j) {
+                if (e.effects[j].op == 3) { // OP_DMG_IN_MOD
+                    foundDmgInMod = true;
+                    assertEq(e.effects[j].magnitude, 200, "DMG_IN_MOD magnitude");
+                }
+            }
+        }
+        assertTrue(foundDmgInMod, "at least one enemy has DMG_IN_MOD");
+    }
+
+    function testDmgInModBypassesDamageCap() public {
+        // 注册一个高伤害+低damageCap的技能（ALL_ENEMY，确保命中）
+        SkillRegistry.Skill memory cappedSkill = _mkSkill(1, 4, 2000, 1000, 0);
+        cappedSkill.damageCap = 50; // damageCap = 50
+        uint32 skillCapped = _register(cappedSkill);
+        // 注册一个DMG_IN_MOD效果（对敌单体施加，确保目标承伤增加）
+        SkillRegistry.Skill memory dmgInModSkill = _mkSkill(3, 1, 0, 1000, 0);
+        dmgInModSkill.effects[0] = SkillRegistry.Effect({op: 3, duration: 3, magnitude: 200, scope: 1, prob: 1000});
+        dmgInModSkill.effectCount = 1;
+        uint32 skillDmgInMod = _register(dmgInModSkill);
+
+        uint32[] memory skills = new uint32[](2);
+        skills[0] = skillDmgInMod; // 对敌施加DMG_IN_MOD
+        skills[1] = skillCapped; // 对全体敌人造成 capped 伤害
+        (uint256 charId, uint32 roomId) = _gmSolo(alice, 1, 5, skills); // difficulty 5 = templateTank (maxHp=500)
+        uint32[] memory plan = new uint32[](2);
+        plan[0] = skillDmgInMod;
+        plan[1] = skillCapped;
+        _setPlan(alice, roomId, plan);
+        vm.prank(alice);
+        ce.startCombat(roomId);
+        vm.prank(alice);
+        ce.advanceTurn(roomId); // DMG_IN_MOD 施加到敌方
+        uint64 hpBefore = ce.getEnemy(roomId, 0).hp;
+        vm.prank(alice);
+        ce.advanceTurn(roomId); // cappedSkill 伤害被 cap=50，但 DMG_IN_MOD +200% 后 = 50*(1+200%)=150
+        uint64 hpAfter = ce.getEnemy(roomId, 0).hp;
+        uint64 damage = hpBefore - hpAfter;
+        // 基础伤害 = min(2000*30/1000, 50) = 50，乘区 50*(1+200/1000)=60
+        assertGt(damage, 50, "DMG_IN_MOD should make damage exceed damageCap");
+    }
+
     // ---- 计划层锁定：计划只能排角色已习得技能（防绕过创建层绑定）----
     function testPlanRejectsUnOwnedSkill() public {
         uint32[] memory skills = new uint32[](1);
