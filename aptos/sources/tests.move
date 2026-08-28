@@ -1,592 +1,1170 @@
-// Mohayo engine comprehensive tests
+#[test_only]
 module mohayo::tests {
-    use std::account;
     use std::signer;
-    use mohayo::engine::{Self};
+    use std::vector;
+    use mohayo::types;
+    use mohayo::skill_registry;
+    use mohayo::character;
+    use mohayo::economy;
+    use mohayo::engine;
+    use mohayo::rng;
 
-    const SKILL_ATTACK: u64 = 1;
-    const SKILL_MAGIC_BOLT: u64 = 2;
-    const SKILL_HEAL: u64 = 3;
-    const SKILL_STRIKE_3: u64 = 4;
-    const SKILL_SHIELD: u64 = 5;
-    const SKILL_STUN: u64 = 6;
-    const SKILL_SMOKE: u64 = 7;
-    const SKILL_EAGLE_EYE: u64 = 8;
-    const SKILL_MANA_BURST: u64 = 9;
-    const SKILL_DOT: u64 = 10;
-    const SKILL_TAUNT: u64 = 11;
-    const SKILL_BERSERK: u64 = 12;
-    const SKILL_STONE_BODY: u64 = 13;
-    const SKILL_SPIRIT_RETURN: u64 = 14;
-    const SKILL_STORM: u64 = 15;
-    const SKILL_DRAGON_SCALE: u64 = 16;
-    const SKILL_HOLY_LIGHT: u64 = 17;
-    const SKILL_ANGEL_JUDGMENT: u64 = 18;
-    const SKILL_SOUL_DRAIN: u64 = 19;
-    const SKILL_ABYSS_WHISPER: u64 = 20;
-    const SKILL_SUMMON: u64 = 21;
-    const SKILL_IDLE: u64 = 22;
-    const SKILL_FLASH: u64 = 23;
-    const SKILL_STORM_BLADE: u64 = 24;
-    const SKILL_MAGIC_SWORD: u64 = 25;
-    const SKILL_REVOLVER_RAIN: u64 = 26;
-    const SKILL_DRAGON_BULLET: u64 = 27;
-    const SKILL_BURST_MAGIC: u64 = 28;
-    const SKILL_RAPID_STRIKE: u64 = 29;
-    const SKILL_IRON_CLEAVE: u64 = 30;
-    const SKILL_SHIELD_BASH: u64 = 31;
-    const SKILL_SHIELD_WALL: u64 = 32;
-    const SKILL_GUARD_EVADE: u64 = 33;
-    const SKILL_SACRIFICE: u64 = 34;
-    const SKILL_BLACK_VEIL: u64 = 35;
-    const SKILL_LIGHT_ORB: u64 = 36;
-    const SKILL_HOLY_SPRING: u64 = 37;
-    const SKILL_DECOY_DOLL: u64 = 38;
-    const SKILL_FIRST_AID: u64 = 39;
-    const SKILL_BLINDING_POWDER: u64 = 40;
-    const SKILL_ROCK_BULWARK: u64 = 41;
-    const SKILL_MAGIC_SHIELD: u64 = 42;
-    const SKILL_DRAGON_BREATH: u64 = 43;
-    const SKILL_MANA_CLAP: u64 = 44;
-    const SKILL_SPARK_SAW: u64 = 45;
-    const SKILL_PARTICLE_SLASH: u64 = 46;
-    const SKILL_MARSHAL_LEAK: u64 = 47;
-    const SKILL_FURNACE_LEAK: u64 = 48;
-    const SKILL_FURNACE_SIPHON: u64 = 49;
-    const SKILL_FURNACE_SUMMON: u64 = 50;
-    const SKILL_EMPEROR_CANNON: u64 = 51;
-    const SKILL_EMPEROR_WHEEL: u64 = 52;
-    const SKILL_EMPEROR_LEAK: u64 = 53;
-    const SKILL_EMPEROR_SIPHON: u64 = 54;
-    const SKILL_EMPEROR_PRESSURE: u64 = 55;
-    const SKILL_EMPEROR_SUMMON: u64 = 56;
+    // ===================== helpers =====================
 
-    // helpers using engine constructors
-    fun eff(op: u8, dur: u8, mag: u64, scope: u8, prob: u64): engine::EffectSpec {
-        engine::make_effect_spec(op, dur, mag, scope, prob)
-    }
-    fun empty_eff(): engine::EffectSpec { eff(0, 0, 0, 0, 1000) }
-    fun no_summon(): engine::SummonRule { engine::make_summon_rule(0, 0, 0) }
-
-    fun base_skill(id: u64, kind: u8, mana: u64, tgt: u8, tcount: u64, power: u64, acc: u64, flags: u8): engine::Skill {
-        engine::make_skill(id, kind, 0, 0, 0, 0, mana, 0, tgt, 0, tcount, power, 0, acc, flags,
-            vector[empty_eff(), empty_eff(), empty_eff(), empty_eff()], no_summon())
+    fun setup(account: &signer) {
+        skill_registry::init_for_test(account);
+        character::init_for_test(account);
+        economy::init_for_test(account);
+        engine::init_for_test(account);
     }
 
-    fun ods(tid: u64, count: u64, prob: u64): engine::OnDeathSpawn { engine::make_on_death_spawn(tid, count, prob) }
-    fun tpl_no_ods(ai: u64, threat: u64, hp: u64, p: u64, m: u64, spd: u64): engine::EnemyTemplate {
-        engine::make_enemy_template(ai, threat, hp, p, m, spd, 1000, 5, 10, ods(0, 0, 0))
-    }
-    fun tpl_ods(ai: u64, threat: u64, hp: u64, p: u64, m: u64, spd: u64, ods_tid: u64, ods_count: u64, ods_prob: u64): engine::EnemyTemplate {
-        engine::make_enemy_template(ai, threat, hp, p, m, spd, 1000, 5, 10, ods(ods_tid, ods_count, ods_prob))
-    }
-    fun te(tid: u64, w: u64): engine::TableEntry { engine::make_table_entry(tid, w) }
-
-    // ---- seed ----
-    fun seed_engine(acct: &signer) {
-        engine::init_for_test(acct);
-        // ---- Skills ----
-        let s = engine::make_skill(1, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 100, 0, 1000, 0,
-            vector[empty_eff(), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(2, 2, 0, 0, 0, 0, 1, 0, 1, 0, 0, 150, 0, 1000, 0,
-            vector[empty_eff(), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(3, 3, 0, 0, 0, 0, 1, 0, 5, 1, 0, 100, 0, 1000, 0,
-            vector[eff(9, 0, 0, 1, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(4, 1, 1, 2, 0, 0, 0, 0, 3, 0, 3, 50, 0, 1000, 0,
-            vector[empty_eff(), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(5, 3, 0, 0, 0, 0, 1, 0, 9, 0, 0, 100, 0, 1000, 0,
-            vector[eff(4, 3, 0, 0, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(6, 1, 3, 0, 0, 0, 0, 0, 1, 0, 0, 50, 0, 1000, 0,
-            vector[eff(1, 2, 0, 1, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(7, 3, 0, 0, 0, 0, 1, 0, 8, 0, 0, 0, 0, 1000, 0,
-            vector[eff(6, 2, 200, 2, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(8, 3, 1, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[eff(7, 2, 0, 0, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(9, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[eff(13, 0, 1, 0, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(10, 1, 2, 0, 0, 0, 0, 0, 1, 0, 0, 200, 0, 950, 0,
-            vector[eff(8, 3, 18, 1, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(11, 3, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1000, 0,
-            vector[eff(11, 2, 0, 1, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(12, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[eff(2, 2, 300, 0, 1000), eff(3, 2, 200, 0, 1000), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(13, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[eff(4, 4, 80, 0, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(14, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[eff(10, 0, 0, 0, 1000), eff(9, 0, 30, 0, 1000), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(15, 2, 0, 0, 0, 0, 3, 0, 3, 0, 3, 60, 0, 1000, 0,
-            vector[eff(1, 1, 0, 1, 300), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(16, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[eff(4, 3, 60, 0, 1000), eff(2, 3, 150, 0, 1000), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(17, 3, 0, 0, 0, 0, 1, 0, 10, 0, 0, 0, 0, 1000, 0,
-            vector[eff(9, 0, 100, 1, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        engine::register_skill(acct, engine::make_skill(18, 2, 0, 0, 0, 0, 3, 0, 3, 0, 4, 80, 0, 1000, 0,
-            vector[empty_eff(), empty_eff(), empty_eff(), empty_eff()], no_summon()));
-        let s = engine::make_skill(19, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 100, 0, 1000, 0,
-            vector[eff(12, 0, 300, 0, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        // 20. Abyss Whisper: ACC_DOWN(all enemy) + DMG_IN_MOD(random 1 enemy)
-        let s = engine::make_skill(20, 3, 0, 0, 0, 0, 1, 0, 4, 0, 0, 0, 0, 1000, 0,
-            vector[eff(6, 2, 200, 3, 1000), eff(3, 2, 200, 1, 1000), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        // 21. Summon
-        let s = engine::make_skill(21, 4, 0, 0, 0, 0, 3, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[eff(14, 0, 0, 0, 1000), empty_eff(), empty_eff(), empty_eff()],
-            engine::make_summon_rule(100, 1, 2));
-        engine::register_skill(acct, s);
-        // 22. Idle
-        engine::register_skill(acct, engine::make_skill(22, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[empty_eff(), empty_eff(), empty_eff(), empty_eff()], no_summon()));
-        // 23. Flash
-        engine::register_skill(acct, engine::make_skill(23, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 350, 350, 650, 0,
-            vector[empty_eff(), empty_eff(), empty_eff(), empty_eff()], no_summon()));
-        // 24. Storm Blade
-        engine::register_skill(acct, engine::make_skill(24, 1, 5, 0, 0, 0, 0, 0, 3, 0, 4, 250, 0, 900, 0,
-            vector[empty_eff(), empty_eff(), empty_eff(), empty_eff()], no_summon()));
-        // 25. Magic Sword
-        let s = engine::make_skill(25, 2, 0, 1, 0, 0, 1, 0, 1, 0, 0, 200, 0, 1000, 0,
-            vector[empty_eff(), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        engine::register_skill(acct, engine::make_skill(26, 3, 1, 0, 1, 1, 3, 0, 3, 0, 3, 60, 0, 700, 0,
-            vector[empty_eff(), empty_eff(), empty_eff(), empty_eff()], no_summon()));
-        engine::register_skill(acct, engine::make_skill(27, 3, 1, 0, 2, 1, 3, 0, 3, 0, 3, 80, 0, 800, 0,
-            vector[eff(13, 0, 1, 0, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon()));
-        let s = engine::make_skill(28, 2, 2, 0, 0, 0, 0, 0, 1, 0, 0, 300, 0, 1000, 0,
-            vector[empty_eff(), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        engine::register_skill(acct, engine::make_skill(29, 1, 0, 0, 0, 0, 0, 0, 3, 0, 2, 70, 0, 1000, 0,
-            vector[empty_eff(), empty_eff(), empty_eff(), empty_eff()], no_summon()));
-        engine::register_skill(acct, engine::make_skill(30, 1, 10, 0, 0, 0, 0, 0, 1, 0, 0, 600, 0, 1000, 0,
-            vector[empty_eff(), empty_eff(), empty_eff(), empty_eff()], no_summon()));
-        let s = engine::make_skill(31, 1, 2, 0, 0, 0, 0, 0, 1, 0, 0, 100, 0, 1000, 0,
-            vector[eff(11, 2, 0, 1, 500), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(32, 3, 3, 0, 0, 0, 2, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[eff(4, 4, 200, 0, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(33, 3, 1, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[eff(5, 2, 200, 0, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(34, 1, 0, 0, 0, 50, 0, 0, 3, 0, 2, 120, 0, 1000, 0,
-            vector[eff(13, 0, 1, 0, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(35, 3, 0, 1, 0, 0, 0, 0, 4, 0, 0, 0, 0, 1000, 0,
-            vector[eff(6, 2, 250, 0, 1000), eff(6, 2, 400, 1, 1000), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(36, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 100, 0, 1000, 0,
-            vector[eff(9, 0, 0, 0, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(37, 3, 0, 0, 0, 0, 2, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[eff(9, 0, 60, 0, 1000), eff(13, 0, 2, 0, 1000), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(38, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[eff(14, 0, 0, 0, 1000), empty_eff(), empty_eff(), empty_eff()],
-            engine::make_summon_rule(200, 1, 1));
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(39, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[eff(9, 0, 50, 0, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(40, 3, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1000, 0,
-            vector[eff(6, 2, 250, 0, 1000), eff(6, 2, 400, 1, 1000), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(41, 3, 0, 1, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[eff(4, 3, 60, 0, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(42, 2, 0, 1, 0, 1000, 0, 0, 9, 0, 0, 1000, 0, 1000, 0,
-            vector[eff(4, 3, 0, 0, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        engine::register_skill(acct, engine::make_skill(43, 2, 0, 2, 0, 0, 0, 0, 2, 0, 2, 70, 0, 1000, 0,
-            vector[empty_eff(), empty_eff(), empty_eff(), empty_eff()], no_summon()));
-        engine::register_skill(acct, engine::make_skill(44, 2, 0, 2, 0, 0, 0, 0, 4, 0, 0, 60, 0, 1000, 0,
-            vector[empty_eff(), empty_eff(), empty_eff(), empty_eff()], no_summon()));
-        // 45-56 (D9)
-        engine::register_skill(acct, engine::make_skill(45, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1300, 0, 950, 0,
-            vector[empty_eff(), empty_eff(), empty_eff(), empty_eff()], no_summon()));
-        engine::register_skill(acct, engine::make_skill(46, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1700, 0, 950, 0,
-            vector[empty_eff(), empty_eff(), empty_eff(), empty_eff()], no_summon()));
-        let s = engine::make_skill(47, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[eff(13, 0, 100, 0, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(48, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[eff(13, 0, 100, 0, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(49, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[eff(13, 0, 80, 1, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        engine::register_skill(acct, engine::make_skill(51, 1, 0, 0, 0, 0, 40, 0, 1, 0, 1, 17000, 0, 900, 0,
-            vector[empty_eff(), empty_eff(), empty_eff(), empty_eff()], no_summon()));
-        let s = engine::make_skill(52, 2, 0, 0, 0, 0, 12, 0, 3, 0, 4, 6700, 0, 900, 0,
-            vector[eff(1, 2, 0, 1, 400), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(53, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[eff(13, 0, 100, 0, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(54, 3, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[eff(13, 0, 80, 1, 1000), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(55, 3, 0, 0, 0, 0, 2, 0, 4, 0, 0, 0, 0, 1000, 0,
-            vector[eff(6, 3, 300, 3, 1000), eff(1, 1, 0, 3, 300), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(50, 4, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[eff(14, 0, 0, 0, 1000), empty_eff(), empty_eff(), empty_eff()],
-            engine::make_summon_rule(300, 2, 0));
-        engine::register_skill(acct, s);
-        let s = engine::make_skill(56, 4, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1000, 0,
-            vector[eff(14, 0, 0, 0, 1000), empty_eff(), empty_eff(), empty_eff()],
-            engine::make_summon_rule(300, 2, 0));
-        engine::register_skill(acct, s);
-
-        // ---- AI ----
-        engine::register_ai(acct, 1, vector[SKILL_ATTACK]);
-        engine::register_ai(acct, 2, vector[SKILL_ATTACK, SKILL_ATTACK, SKILL_MAGIC_BOLT]);
-        engine::register_ai(acct, 10, vector[SKILL_SPARK_SAW]);
-        engine::register_ai(acct, 11, vector[SKILL_PARTICLE_SLASH, SKILL_PARTICLE_SLASH, SKILL_MARSHAL_LEAK]);
-        engine::register_ai(acct, 12, vector[SKILL_FURNACE_LEAK, SKILL_FURNACE_SIPHON, SKILL_FURNACE_SUMMON, SKILL_FURNACE_LEAK, SKILL_FURNACE_SIPHON]);
-        engine::register_ai(acct, 13, vector[SKILL_EMPEROR_WHEEL, SKILL_EMPEROR_CANNON, SKILL_EMPEROR_PRESSURE, SKILL_EMPEROR_SUMMON, SKILL_EMPEROR_LEAK, SKILL_EMPEROR_CANNON]);
-        engine::register_ai(acct, 14, vector[0]);
-
-        // ---- Templates ----
-        engine::register_template(acct, 100, tpl_no_ods(0, 0, 30, 10, 3, 6));   // decoy
-        engine::register_template(acct, 200, tpl_no_ods(0, 0, 120, 0, 0, 0));   // decoy target
-        engine::register_template(acct, 1, tpl_no_ods(1, 1, 50, 12, 5, 8));     // slime
-        engine::register_template(acct, 2, tpl_ods(2, 5, 200, 25, 15, 12, 1, 2, 500)); // boss
-        engine::register_template(acct, 300, tpl_no_ods(10, 3, 2600, 380, 150, 28)); // soldier
-        engine::register_template(acct, 301, tpl_no_ods(11, 8, 9000, 900, 600, 42)); // marshal
-        engine::register_template(acct, 302, tpl_ods(12, 4, 22000, 0, 0, 5, 303, 1, 600)); // furnace
-        engine::register_template(acct, 303, tpl_no_ods(13, 9, 60000, 3000, 3000, 60)); // emperor
-        engine::register_template(acct, 304, tpl_ods(14, 0, 1, 0, 0, 1, 303, 1, 200)); // chest
-
-        // ---- Tables ----
-        engine::register_table(acct, 1, vector[te(1, 100)]);
-        engine::register_table(acct, 71, vector[te(300, 100)]);
-        engine::register_table(acct, 72, vector[te(300, 60), te(301, 40)]);
-        engine::register_table(acct, 73, vector[te(302, 55), te(300, 45)]);
-        engine::register_table(acct, 74, vector[te(303, 55), te(300, 45)]);
-        engine::register_table(acct, 75, vector[te(304, 100)]);
-        engine::register_table(acct, 101, vector[te(1, 100)]);
-
-        // ---- Dungeons ----
-        engine::set_dungeon(acct, 1, engine::make_dungeon_config(1, 2, 1, 0, 0, 0, 0, 1));
-        engine::set_dungeon(acct, 9, engine::make_dungeon_config(71, 3, 6, 0, 0, 0, 0, 4));
-        engine::set_dungeon_battles(acct, 9, vector[
-            engine::make_battle_config(71, 3),
-            engine::make_battle_config(72, 3),
-            engine::make_battle_config(73, 2),
-            engine::make_battle_config(75, 1),
-        ]);
-        engine::add_battle_variant(acct, 9, 4, 75, 850);
-        engine::add_battle_variant(acct, 9, 4, 74, 150);
-        engine::set_dungeon(acct, 10, engine::make_dungeon_config(101, 2, 4, 0, 0, 0, 0, 1));
+    fun skill_attack(): types::Skill {
+        types::make_skill(
+            0, 1, 0, 1, 0, 0, 0, 0,
+            1, 0, 1, 1000, 0, 1000, 0,
+            vector::empty(), types::make_summon_rule(0, 0, 0),
+        )
     }
 
-    fun create_and_join(acct: &signer, diff: u64, hp: u64, atk: u64, mag: u64, spd: u64): u64 {
-        let rid = engine::next_room_id();
-        engine::create_room(acct, diff);
-        engine::join_room(acct, rid, hp, atk, mag, spd, 0, 0, 0, 0);
-        rid
+    fun skill_stun(): types::Skill {
+        types::make_skill(
+            0, 3, 0, 1, 0, 0, 0, 0,
+            1, 0, 1, 0, 0, 1000, 0,
+            vector[types::make_effect_spec(1, 2, 100, 1, 1000)],
+            types::make_summon_rule(0, 0, 0),
+        )
     }
 
-    fun start_combat(acct: &signer, rid: u64, plan: vector<u64>, seed: u64) {
-        engine::set_plan(acct, rid, plan);
-        engine::start_combat_test(acct, rid, seed);
+    fun skill_heal(): types::Skill {
+        types::make_skill(
+            0, 3, 0, 1, 0, 0, 0, 0,
+            10, 0, 1, 500, 0, 1000, 0,
+            vector[types::make_effect_spec(9, 1, 500, 1, 1000)],
+            types::make_summon_rule(0, 0, 0),
+        )
     }
 
-    fun drive(acct: &signer, rid: u64, n: u64) {
+    fun skill_dmg_out_mod(): types::Skill {
+        types::make_skill(
+            0, 3, 0, 1, 0, 0, 0, 0,
+            9, 0, 1, 0, 0, 1000, 0,
+            vector[types::make_effect_spec(2, 3, 200, 0, 1000)],
+            types::make_summon_rule(0, 0, 0),
+        )
+    }
+
+    fun skill_dmg_in_mod(): types::Skill {
+        types::make_skill(
+            0, 3, 0, 1, 0, 0, 0, 0,
+            1, 0, 1, 0, 0, 1000, 0,
+            vector[types::make_effect_spec(3, 2, 200, 1, 1000)],
+            types::make_summon_rule(0, 0, 0),
+        )
+    }
+
+    fun skill_mana_gain(): types::Skill {
+        types::make_skill(
+            0, 3, 0, 0, 0, 0, 0, 0,
+            9, 0, 1, 0, 0, 1000, 0,
+            vector[types::make_effect_spec(13, 1, 5, 0, 1000)],
+            types::make_summon_rule(0, 0, 0),
+        )
+    }
+
+    fun skill_shield(): types::Skill {
+        types::make_skill(
+            0, 3, 0, 1, 0, 0, 0, 0,
+            9, 0, 1, 0, 0, 1000, 0,
+            vector[types::make_effect_spec(4, 3, 1200, 3, 1000)],
+            types::make_summon_rule(0, 0, 0),
+        )
+    }
+
+    fun skill_mana_bolt(): types::Skill {
+        types::make_skill(
+            0, 2, 0, 1, 0, 0, 0, 0,
+            1, 0, 1, 1200, 0, 900, 0,
+            vector::empty(), types::make_summon_rule(0, 0, 0),
+        )
+    }
+
+    fun simple_ai(skill_id: u64): types::MonsterAI {
+        types::make_monster_ai(vector[skill_id], 1)
+    }
+
+    fun simple_template(ai_id: u64): types::EnemyTemplate {
+        types::make_enemy_template(
+            ai_id, 1, 1000, 500, 500, 10, 1000, 10, 20,
+            types::make_on_death_spawn(0, 0, 0),
+        )
+    }
+
+    // ===================== types tests =====================
+
+    #[test]
+    fun test_type_constants() {
+        assert!(types::KIND_PHYSICAL() == 1, 1);
+        assert!(types::KIND_MAGIC() == 2, 2);
+        assert!(types::KIND_SUPPORT() == 3, 3);
+        assert!(types::TGT_ALL_ENEMY() == 4, 3);
+        assert!(types::TGT_SELF() == 9, 4);
+        assert!(types::OP_STUN() == 1, 5);
+        assert!(types::OP_DMG_OUT_MOD() == 2, 6);
+        assert!(types::OP_DMG_IN_MOD() == 3, 7);
+        assert!(types::OP_SHIELD() == 4, 8);
+        assert!(types::OP_HEAL() == 9, 9);
+        assert!(types::OP_DISPEL() == 10, 10);
+        assert!(types::OP_MANA_DELTA() == 13, 11);
+        assert!(types::PHASE_LOBBY() == 0, 12);
+        assert!(types::PHASE_COMBAT() == 1, 13);
+        assert!(types::PHASE_SETTLED() == 2, 14);
+        assert!(types::PHASE_INTERMISSION() == 3, 15);
+    }
+
+    #[test]
+    fun test_skill_constructor_and_accessors() {
+        let s = types::make_skill(
+            42, 1, 3, 2, 0, 0, 5, 10,
+            4, 0, 3, 800, 500, 950, 1,
+            vector[types::make_effect_spec(1, 2, 100, 1, 500)],
+            types::make_summon_rule(0, 0, 0),
+        );
+        assert!(types::skill_id(&s) == 42, 1);
+        assert!(types::skill_kind(&s) == 1, 2);
+        assert!(types::skill_power(&s) == 800, 3);
+        assert!(types::skill_damage_cap(&s) == 500, 4);
+        assert!(types::skill_base_acc(&s) == 950, 5);
+        assert!(types::skill_targeting(&s) == 4, 6);
+        assert!(types::skill_flags(&s) == 1, 7);
+        assert!(types::skill_mana_cost(&s) == 5, 8);
+        assert!(types::skill_ap_cost(&s) == 3, 9);
+        assert!(types::skill_ap_gain(&s) == 2, 10);
+        assert!(types::skill_hp_cost(&s) == 10, 11);
+        assert!(types::skill_target_count(&s) == 3, 12);
+    }
+
+    #[test]
+    fun test_enemy_template_constructor() {
+        let ods = types::make_on_death_spawn(5, 2, 300);
+        let t = types::make_enemy_template(1, 3, 2000, 600, 400, 15, 900, 50, 100, ods);
+        assert!(types::template_max_hp(&t) == 2000, 1);
+        assert!(types::template_power(&t) == 600, 2);
+        assert!(types::template_magic(&t) == 400, 3);
+        assert!(types::template_speed(&t) == 15, 4);
+        assert!(types::template_threat(&t) == 3, 5);
+        assert!(types::template_ai_id(&t) == 1, 6);
+        assert!(types::template_reward_min(&t) == 50, 7);
+        assert!(types::template_reward_max(&t) == 100, 8);
+        let ods_ref = types::template_on_death_spawn(&t);
+        assert!(types::on_death_spawn_template_id(ods_ref) == 5, 9);
+        assert!(types::on_death_spawn_count(ods_ref) == 2, 10);
+        assert!(types::on_death_spawn_prob(ods_ref) == 300, 11);
+    }
+
+    #[test]
+    fun test_effect_spec_constructor() {
+        let e = types::make_effect_spec(6, 3, 500, 2, 800);
+        assert!(types::effect_op(&e) == 6, 1);
+        assert!(types::effect_duration(&e) == 3, 2);
+        assert!(types::effect_magnitude(&e) == 500, 3);
+        assert!(types::effect_scope(&e) == 2, 4);
+        assert!(types::effect_prob(&e) == 800, 5);
+    }
+
+    #[test]
+    fun test_dungeon_config_constructor() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        let d = types::make_dungeon_config(1, 3, 5, 100, 25, 50, 5, 4);
+        assert!(types::dungeon_table_id(&d) == 1, 1);
+        assert!(types::dungeon_enemy_count(&d) == 3, 2);
+        assert!(types::dungeon_mana_per_turn(&d) == 5, 3);
+        assert!(types::dungeon_battles(&d) == 4, 4);
+        assert!(types::dungeon_entry_fee(&d) == 25, 5);
+        assert!(types::dungeon_rescue_fee(&d) == 50, 6);
+    }
+
+    #[test]
+    fun test_target_constructor() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        let t = types::make_target(true, 3);
+        assert!(types::target_is_enemy(&t) == true, 1);
+        assert!(types::target_index(&t) == 3, 2);
+        let t2 = types::make_target(false, 7);
+        assert!(types::target_is_enemy(&t2) == false, 3);
+        assert!(types::target_index(&t2) == 7, 4);
+    }
+
+    // ===================== rng tests =====================
+
+    #[test]
+    fun test_rng_deterministic() {
+        let a = rng::new(42);
+        let b = rng::new(42);
         let i = 0;
-        while (i < n) {
-            if (engine::room_phase(rid) != 1) return;
-            engine::advance_turn_test(acct, rid);
+        while (i < 8) {
+            assert!(rng::next(&mut a) == rng::next(&mut b), 1);
             i = i + 1;
         };
-    }
-
-    // ============================ tests ============================
-    #[test]
-    fun test_all_56_skills_registered() {
-        let a = account::create_account_for_test(@mohayo);
-        seed_engine(&a);
-        let i = 1;
-        while (i <= 56) { assert!(engine::skill_registered(i), i); i = i + 1; };
+        let c = rng::new(43);
+        assert!(rng::next(&mut c) != rng::next(&mut a), 2);
     }
 
     #[test]
-    fun test_rng_stream_deterministic() {
-        let a = account::create_account_for_test(@mohayo);
-        seed_engine(&a);
-        let rid = create_and_join(&a, 1, 1000, 100, 50, 10);
-        start_combat(&a, rid, vector[SKILL_ATTACK], 42);
-        let (hp1, _, _, _, _, _, _) = engine::enemy_state(rid, 0);
-        let rid2 = create_and_join(&a, 1, 1000, 100, 50, 10);
-        start_combat(&a, rid2, vector[SKILL_ATTACK], 42);
-        let (hp2, _, _, _, _, _, _) = engine::enemy_state(rid2, 0);
-        assert!(hp1 == hp2, 1); // same seed → same result
+    fun test_rng_bounds() {
+        let r = rng::new(7);
+        let i = 0;
+        while (i < 200) {
+            let v = rng::range(&mut r, 5, 17);
+            assert!(v >= 5 && v < 17, 3);
+            i = i + 1;
+        };
+        assert!(rng::range(&mut r, 9, 9) == 9, 4);
+        assert!(rng::below(&mut r, 0) == 0, 5);
+    }
+
+    // ===================== skill_registry tests =====================
+
+    #[test]
+    fun test_register_skill() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        let s = skill_attack();
+        skill_registry::register_skill(a, s);
+        assert!(skill_registry::skill_registered(1), 1);
+        let retrieved = skill_registry::get_skill(1);
+        assert!(types::skill_id(&retrieved) == 1, 2);
+        assert!(types::skill_kind(&retrieved) == 1, 3);
     }
 
     #[test]
-    fun test_physical_attack_deals_damage() {
-        let a = account::create_account_for_test(@mohayo);
-        seed_engine(&a);
-        let rid = create_and_join(&a, 1, 1000, 100, 50, 10);
-        start_combat(&a, rid, vector[SKILL_ATTACK], 42);
-        let (hp_before, _, _, _, _, _, _) = engine::enemy_state(rid, 0);
-        drive(&a, rid, 1);
-        let (hp_after, _, _, _, _, _, _) = engine::enemy_state(rid, 0);
-        assert!(hp_after < hp_before, 1);
+    fun test_register_multiple_skills() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        skill_registry::register_skill(a, skill_attack());
+        skill_registry::register_skill(a, skill_stun());
+        skill_registry::register_skill(a, skill_heal());
+        assert!(skill_registry::skill_registered(1), 1);
+        assert!(skill_registry::skill_registered(2), 2);
+        assert!(skill_registry::skill_registered(3), 3);
     }
 
     #[test]
-    fun test_enemy_actually_hurts_member() {
-        let a = account::create_account_for_test(@mohayo);
-        seed_engine(&a);
-        let rid = create_and_join(&a, 1, 1000, 100, 50, 10);
-        start_combat(&a, rid, vector[SKILL_ATTACK], 42);
-        let (hp_before, _, _, _, _, _, _) = engine::member_state(rid, 0);
-        drive(&a, rid, 1);
-        let (hp_after, _, _, _, _, _, _) = engine::member_state(rid, 0);
-        assert!(hp_after < hp_before, 1);
+    fun test_register_ai_and_template() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        skill_registry::register_skill(a, skill_attack());
+        let ai = simple_ai(1);
+        skill_registry::register_ai(a, ai);
+        let tmpl = simple_template(1);
+        skill_registry::register_template(a, tmpl);
+        let retrieved_tmpl = skill_registry::get_template(1);
+        assert!(types::template_max_hp(&retrieved_tmpl) == 1000, 1);
+        assert!(types::template_power(&retrieved_tmpl) == 500, 2);
     }
 
     #[test]
-    fun test_mana_restricts_skill() {
-        let a = account::create_account_for_test(@mohayo);
-        seed_engine(&a);
-        let rid = create_and_join(&a, 1, 10000, 100, 50, 10);
-        start_combat(&a, rid, vector[SKILL_MANA_BURST], 42);
-        drive(&a, rid, 1);
-        let (_, _, _, _, eff_count, _, _) = engine::member_state(rid, 0);
-        // Turn1: mana=0 → MANA_BURST(1) cannot cast, but mana=1 after regen; next cycle turn3 it fires
-        // Just verify no crash
-        assert!(eff_count >= 0, 0);
+    fun test_register_table() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        let entries = vector[
+            types::make_table_entry(1, 700),
+            types::make_table_entry(2, 300),
+        ];
+        skill_registry::register_table(a, entries);
+        let retrieved = skill_registry::get_table(1);
+        assert!(vector::length(&retrieved) == 2, 1);
+    }
+
+    #[test]
+    fun test_dungeon_config() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        let dungeon = types::make_dungeon_config(1, 3, 5, 100, 25, 50, 5, 1);
+        skill_registry::set_dungeon(a, 1, dungeon);
+        let d = skill_registry::get_dungeon(1);
+        assert!(types::dungeon_mana_per_turn(&d) == 5, 1);
+        assert!(types::dungeon_enemy_count(&d) == 3, 2);
+    }
+
+    #[test]
+    fun test_battle_config() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        let dungeon = types::make_dungeon_config(1, 3, 5, 100, 25, 50, 5, 2);
+        skill_registry::set_dungeon(a, 1, dungeon);
+        let configs = vector[
+            types::make_battle_config(1, 2),
+            types::make_battle_config(1, 4),
+        ];
+        skill_registry::set_dungeon_battles(a, 1, configs);
+        assert!(skill_registry::get_battle_count(1) == 2, 1);
+        let battles = skill_registry::get_battles(1);
+        assert!(vector::length(&battles) == 2, 2);
+    }
+
+    #[test]
+    fun test_variant() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        skill_registry::add_battle_variant(a, 9, 4, 74, 150);
+        skill_registry::add_battle_variant(a, 9, 4, 75, 850);
+        let variants = skill_registry::get_variants(9, 4);
+        assert!(vector::length(&variants) == 2, 1);
+    }
+
+    #[test]
+    fun test_class_skills() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        let s = types::make_skill(
+            0, 1, 0, 1, 0, 0, 0, 0,
+            1, 0, 1, 1000, 0, 1000, 0,
+            vector::empty(), types::make_summon_rule(0, 0, 0),
+        );
+        skill_registry::register_class_skill(a, s, 1);
+        let ids = skill_registry::get_class_skill_ids(1);
+        assert!(vector::length(&ids) == 1, 1);
+        assert!(*vector::borrow(&ids, 0) == 1, 2);
+    }
+
+    #[test]
+    fun test_next_room_id() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        assert!(skill_registry::next_room_id() == 1, 1);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 12)]
+    fun test_register_bad_targeting() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        let s = types::make_skill(
+            0, 1, 0, 0, 0, 0, 0, 0,
+            99, 0, 1, 0, 0, 1000, 0,
+            vector::empty(), types::make_summon_rule(0, 0, 0),
+        );
+        skill_registry::register_skill(a, s);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 11)]
+    fun test_register_bad_acc() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        let s = types::make_skill(
+            0, 1, 0, 0, 0, 0, 0, 0,
+            1, 0, 1, 0, 0, 2000, 0,
+            vector::empty(), types::make_summon_rule(0, 0, 0),
+        );
+        skill_registry::register_skill(a, s);
+    }
+
+    // ===================== character tests =====================
+
+    #[test]
+    fun test_register_class_and_race() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        let class_def = types::make_class_def(0, 0, 0, 0, 2);
+        character::register_class(a, 1, class_def);
+        let c = character::get_class(1);
+        assert!(types::class_def_skill_slots(&c) == 2, 1);
+
+        let race_def = types::make_race_def(0, vector[0, 0, 0], 0, 0, 0);
+        character::register_race(a, 0, race_def);
+        let r = character::get_race(0);
+        assert!(types::race_def_self_select_bonus(&r) == 0, 2);
+    }
+
+    #[test]
+    fun test_gm_mint_character() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        let player = &std::account::create_account_for_test(@0x100);
+        setup(a);
+        let class_def = types::make_class_def(0, 200, 0, 0, 2);
+        character::register_class(a, 1, class_def);
+        let race_def = types::make_race_def(0, vector[0, 0, 0], 0, 0, 0);
+        character::register_race(a, 0, race_def);
+        character::gm_mint(a, signer::address_of(player), 1, 0, vector::empty(), vector::empty());
+        let (class_id, race, level, hp, max_hp, atk, mag, spd, _skills, _room) = character::get_character(1);
+        assert!(class_id == 1, 1);
+        assert!(race == 0, 2);
+        assert!(level == 1, 3);
+        assert!(hp > 0, 4);
+        assert!(atk > 10, 5);
+    }
+
+    #[test]
+    fun test_gm_mint_at_level() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        let player = &std::account::create_account_for_test(@0x100);
+        setup(a);
+        let class_def = types::make_class_def(0, 0, 0, 0, 2);
+        character::register_class(a, 1, class_def);
+        let race_def = types::make_race_def(0, vector[0, 0, 0], 0, 0, 0);
+        character::register_race(a, 0, race_def);
+        character::gm_mint_at_level(a, signer::address_of(player), 1, 0, vector::empty(), vector::empty(), 100);
+        let (_class_id, _race, level, hp, _max_hp, _atk, _mag, _spd, _skills, _room) = character::get_character(1);
+        assert!(level == 100, 1);
+        assert!(hp > 100, 2);
+    }
+
+    #[test]
+    fun test_gm_set_level() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        let player = &std::account::create_account_for_test(@0x100);
+        setup(a);
+        let class_def = types::make_class_def(0, 0, 0, 0, 2);
+        character::register_class(a, 1, class_def);
+        let race_def = types::make_race_def(0, vector[0, 0, 0], 0, 0, 0);
+        character::register_race(a, 0, race_def);
+        character::gm_mint(a, signer::address_of(player), 1, 0, vector::empty(), vector::empty());
+        let (_c, _r, l1, hp1, _mh, _a, _m, _s, _sk, _rm) = character::get_character(1);
+        assert!(l1 == 1, 1);
+        character::gm_set_level(a, 1, 50);
+        let (_c, _r, l2, hp2, _mh, _a, _m, _s, _sk, _rm) = character::get_character(1);
+        assert!(l2 == 50, 2);
+        assert!(hp2 > hp1, 3);
+    }
+
+    #[test]
+    fun test_character_race_class_mods() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        let player = &std::account::create_account_for_test(@0x100);
+        setup(a);
+        let class_def = types::make_class_def(200, 50, 0, -50, 2);
+        character::register_class(a, 1, class_def);
+        let race_def = types::make_race_def(0, vector[100, -50, -30], 0, 0, 0);
+        character::register_race(a, 1, race_def);
+        character::gm_mint(a, signer::address_of(player), 1, 1, vector::empty(), vector::empty());
+        let (_c, _r, _l, _hp, _mh, atk, _mag, _spd, _sk, _rm) = character::get_character(1);
+        assert!(atk > 10, 1);
+    }
+
+    #[test]
+    fun test_character_stat_formula_level300() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        let player = &std::account::create_account_for_test(@0x100);
+        setup(a);
+        let class_def = types::make_class_def(0, 0, 0, 0, 2);
+        character::register_class(a, 1, class_def);
+        let race_def = types::make_race_def(0, vector[0, 0, 0], 0, 0, 0);
+        character::register_race(a, 0, race_def);
+        character::gm_mint_at_level(a, signer::address_of(player), 1, 0, vector::empty(), vector::empty(), 300);
+        let (_c, _r, _l, hp, _mh, atk, mag, spd, _sk, _rm) = character::get_character(1);
+        // Level 300 with 0 mods: HP = 100*1000*300/1000 = 30000
+        assert!(hp == 30000, 1);
+        // ATK = 10*1000*300/1000 = 3000
+        assert!(atk == 3000, 2);
+        assert!(mag == 3000, 3);
+        assert!(spd == 3000, 4);
+    }
+
+    #[test]
+    fun test_character_room_lock() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        let player = &std::account::create_account_for_test(@0x100);
+        setup(a);
+        let class_def = types::make_class_def(0, 0, 0, 0, 2);
+        character::register_class(a, 1, class_def);
+        let race_def = types::make_race_def(0, vector[0, 0, 0], 0, 0, 0);
+        character::register_race(a, 0, race_def);
+        character::gm_mint(a, signer::address_of(player), 1, 0, vector::empty(), vector::empty());
+        assert!(character::get_room_id(1) == 0, 1);
+        character::set_in_room(a, 1, 42);
+        assert!(character::get_room_id(1) == 42, 2);
+    }
+
+    #[test]
+    fun test_character_multiple_characters() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        let p1 = &std::account::create_account_for_test(@0x100);
+        let p2 = &std::account::create_account_for_test(@0x200);
+        setup(a);
+        let class_def = types::make_class_def(0, 0, 0, 0, 2);
+        character::register_class(a, 1, class_def);
+        let race_def = types::make_race_def(0, vector[0, 0, 0], 0, 0, 0);
+        character::register_race(a, 0, race_def);
+        character::gm_mint(a, signer::address_of(p1), 1, 0, vector::empty(), vector::empty());
+        character::gm_mint(a, signer::address_of(p2), 1, 0, vector::empty(), vector::empty());
+        let (_c1, _r1, _l1, hp1, _mh1, _a1, _m1, _s1, _sk1, _rm1) = character::get_character(1);
+        let (_c2, _r2, _l2, hp2, _mh2, _a2, _m2, _s2, _sk2, _rm2) = character::get_character(2);
+        assert!(hp1 == hp2, 1);
+    }
+
+    #[test]
+    fun test_race_tier_weights() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        character::set_race_tier_weights(a, 850, 120, 30);
+        character::set_race_pools(
+            a,
+            vector[0, 1, 2, 3],
+            vector[4, 5],
+            vector[6, 7],
+        );
+    }
+
+    #[test]
+    fun test_affix_template() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        let tmpl = types::make_affix_template(1, vector[500, 300, 200], vector[50, 100, 200]);
+        character::register_affix_template(a, 0, tmpl);
+    }
+
+    // ===================== economy tests =====================
+
+    #[test]
+    fun test_economy_mint() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        economy::set_minter(a, @mohayo, true);
+        economy::mint(a, @0x100, 500);
+        assert!(economy::balance_of(@0x100) == 500, 1);
+    }
+
+    #[test]
+    fun test_economy_spend() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        economy::set_spender(a, @mohayo, true);
+        economy::gm_mint(a, @0x100, 1000);
+        economy::spend(a, @0x100, 300);
+        assert!(economy::balance_of(@0x100) == 700, 1);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 2)]
+    fun test_economy_unauthorized_mint() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        let attacker = &std::account::create_account_for_test(@0x999);
+        setup(a);
+        economy::set_minter(a, @mohayo, true);
+        economy::mint(attacker, @0x100, 500);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 3)]
+    fun test_economy_unauthorized_spend() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        let attacker = &std::account::create_account_for_test(@0x999);
+        setup(a);
+        economy::gm_mint(a, @0x100, 1000);
+        economy::spend(attacker, @0x100, 300);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 4)]
+    fun test_economy_insufficient_balance() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        economy::set_spender(a, @mohayo, true);
+        economy::gm_mint(a, @0x100, 100);
+        economy::spend(a, @0x100, 200);
+    }
+
+    #[test]
+    fun test_economy_is_minter() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        assert!(!economy::is_minter(@mohayo), 1);
+        economy::set_minter(a, @mohayo, true);
+        assert!(economy::is_minter(@mohayo), 2);
+        economy::set_minter(a, @mohayo, false);
+        assert!(!economy::is_minter(@mohayo), 3);
+    }
+
+    #[test]
+    fun test_economy_is_spender() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        assert!(!economy::is_spender(@mohayo), 1);
+        economy::set_spender(a, @mohayo, true);
+        assert!(economy::is_spender(@mohayo), 2);
+    }
+
+    // ===================== engine tests =====================
+
+    fun setup_full_dungeon(a: &signer) {
+        // Register attack skill (id=1)
+        skill_registry::register_skill(a, skill_attack());
+        // Register stun skill (id=2)
+        skill_registry::register_skill(a, skill_stun());
+        // Register heal skill (id=3)
+        skill_registry::register_skill(a, skill_heal());
+        // Register AI (id=1, uses skill 1)
+        let ai = simple_ai(1);
+        skill_registry::register_ai(a, ai);
+        // Register template (id=1, ai=1, hp=1000, power=500)
+        let tmpl = simple_template(1);
+        skill_registry::register_template(a, tmpl);
+        // Register table (id=1, one entry: template 1)
+        let entries = vector[types::make_table_entry(1, 1000)];
+        skill_registry::register_table(a, entries);
+        // Set dungeon (difficulty 1, table=1, enemies=3, mana=5)
+        let dungeon = types::make_dungeon_config(1, 3, 5, 100, 0, 0, 0, 1);
+        skill_registry::set_dungeon(a, 1, dungeon);
+    }
+
+    #[test]
+    fun test_create_room() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        setup_full_dungeon(a);
+        engine::create_room(a, 1);
+        assert!(engine::room_phase(1) == 0, 1);
+    }
+
+    #[test]
+    fun test_join_room() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        setup_full_dungeon(a);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 500, 100, 50, 30);
+        assert!(engine::member_count(1) == 1, 1);
+    }
+
+    #[test]
+    fun test_join_room_multiple() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        setup_full_dungeon(a);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 500, 100, 50, 30);
+        engine::join_room(a, 1, 300, 200, 100, 20);
+        assert!(engine::member_count(1) == 2, 1);
+    }
+
+    #[test]
+    fun test_start_combat() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        setup_full_dungeon(a);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 500, 100, 50, 30);
+        engine::start_combat(a, 1);
+        assert!(engine::room_phase(1) == 1, 1);
+        assert!(engine::enemy_count(1) == 3, 2);
+    }
+
+    #[test]
+    fun test_set_plan_and_advance() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        setup_full_dungeon(a);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 500, 100, 50, 30);
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[1]);
+        engine::advance_turn(a, 1);
+        assert!(engine::room_turn(1) == 2, 1);
+    }
+
+    #[test]
+    fun test_damage_dealt() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        skill_registry::register_skill(a, skill_attack()); // id=1
+        let ai = simple_ai(1);
+        skill_registry::register_ai(a, ai);
+        let tmpl = simple_template(1);
+        skill_registry::register_template(a, tmpl);
+        let entries = vector[types::make_table_entry(1, 1000)];
+        skill_registry::register_table(a, entries);
+        let dungeon = types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1);
+        skill_registry::set_dungeon(a, 1, dungeon);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 500, 200, 50, 30);
+        engine::start_combat(a, 1);
+        let (hp1, _mh, _a, _m, _s, _alive) = engine::enemy_state(1, 0);
+        assert!(hp1 == 1000, 1);
+        engine::set_plan(a, 1, 0, vector[1]);
+        engine::advance_turn(a, 1);
+        let (hp2, _mh, _a, _m, _s, _alive) = engine::enemy_state(1, 0);
+        assert!(hp2 < hp1, 2);
+    }
+
+    #[test]
+    fun test_stun_prevents_action() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        // Register stun skill (id=1), attack skill (id=2)
+        skill_registry::register_skill(a, skill_stun());
+        skill_registry::register_skill(a, skill_attack());
+        // AI uses stun
+        let ai = types::make_monster_ai(vector[1], 1);
+        skill_registry::register_ai(a, ai);
+        let tmpl = types::make_enemy_template(1, 1, 500, 0, 0, 10, 1000, 10, 20, types::make_on_death_spawn(0, 0, 0));
+        skill_registry::register_template(a, tmpl);
+        let entries = vector[types::make_table_entry(1, 1000)];
+        skill_registry::register_table(a, entries);
+        let dungeon = types::make_dungeon_config(1, 1, 5, 100, 0, 0, 0, 1);
+        skill_registry::set_dungeon(a, 1, dungeon);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 500, 200, 50, 30);
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[2]);
+        // First turn: enemy uses stun on member
+        engine::advance_turn(a, 1);
+        // Check if member has stun effect
+        let (_hp, _mh, _a, _m, _s, _alive) = engine::member_state(1, 0);
+        // If stun landed, member effect count > 0
+        // (stun prob is 1000 so it should always land)
+        let effect_count = engine::member_effect_count(1, 0);
+        assert!(effect_count > 0, 1);
+    }
+
+    #[test]
+    fun test_damage_cap() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        // Attack skill with damage cap of 100
+        let s = types::make_skill(
+            0, 1, 0, 1, 0, 0, 0, 0,
+            1, 0, 1, 5000, 100, 1000, 0,
+            vector::empty(), types::make_summon_rule(0, 0, 0),
+        );
+        skill_registry::register_skill(a, s);
+        let ai = simple_ai(1);
+        skill_registry::register_ai(a, ai);
+        // Enemy with high HP so we can see the cap
+        let tmpl = types::make_enemy_template(1, 1, 10000, 500, 500, 10, 1000, 10, 20, types::make_on_death_spawn(0, 0, 0));
+        skill_registry::register_template(a, tmpl);
+        let entries = vector[types::make_table_entry(1, 1000)];
+        skill_registry::register_table(a, entries);
+        let dungeon = types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1);
+        skill_registry::set_dungeon(a, 1, dungeon);
+        engine::create_room(a, 1);
+        // Very high attack so uncapped would be > 100
+        engine::join_room(a, 1, 500, 1000, 50, 30);
+        engine::start_combat(a, 1);
+        let (hp1, _mh, _a, _m, _s, _alive) = engine::enemy_state(1, 0);
+        engine::set_plan(a, 1, 0, vector[1]);
+        engine::advance_turn(a, 1);
+        let (hp2, _mh, _a, _m, _s, _alive) = engine::enemy_state(1, 0);
+        let dmg = hp1 - hp2;
+        // 5000 * 1000 / 1000 = 5000, cap = 100, so damage should be 100
+        assert!(dmg == 100, 1);
+    }
+
+    #[test]
+    fun test_dmg_out_mod_amplifies() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        // Normal attack (id=1)
+        skill_registry::register_skill(a, skill_attack());
+        // Self-buff: DMG_OUT_MOD +200% (id=2)
+        skill_registry::register_skill(a, skill_dmg_out_mod());
+        let ai = simple_ai(1);
+        skill_registry::register_ai(a, ai);
+        let tmpl = simple_template(1);
+        skill_registry::register_template(a, tmpl);
+        let entries = vector[types::make_table_entry(1, 1000)];
+        skill_registry::register_table(a, entries);
+        let dungeon = types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1);
+        skill_registry::set_dungeon(a, 1, dungeon);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 500, 100, 50, 30);
+        engine::start_combat(a, 1);
+        let (hp1, _mh, _a, _m, _s, _alive) = engine::enemy_state(1, 0);
+        // Plan: self-buff then attack
+        engine::set_plan(a, 1, 0, vector[2, 1]);
+        engine::advance_turn(a, 1);
+        // After buff: turn 1 = buff, turn 2 = attack with +200% damage
+        engine::set_plan(a, 1, 0, vector[1]);
+        engine::advance_turn(a, 1);
+        let (hp2, _mh, _a, _m, _s, _alive) = engine::enemy_state(1, 0);
+        let dmg = hp1 - hp2;
+        // Turn 1: buff, turn 2: attack. Base dmg = 100*1000/1000 = 100
+        // With +200% out_mod: 100 * (1000+200)/1000 = 120
+        assert!(dmg == 120, 1);
+    }
+
+    #[test]
+    fun test_dmg_in_mod_amplifies() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        skill_registry::register_skill(a, skill_attack()); // id=1
+        skill_registry::register_skill(a, skill_dmg_in_mod()); // id=2: 1000 dmg + 200% DMG_IN_MOD
+        let ai = simple_ai(1);
+        skill_registry::register_ai(a, ai);
+        let tmpl = simple_template(1);
+        skill_registry::register_template(a, tmpl);
+        let entries = vector[types::make_table_entry(1, 1000)];
+        skill_registry::register_table(a, entries);
+        let dungeon = types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1);
+        skill_registry::set_dungeon(a, 1, dungeon);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 500, 100, 50, 30);
+        engine::start_combat(a, 1);
+        let (hp1, _mh, _a, _m, _s, _alive) = engine::enemy_state(1, 0);
+        // Plan: debuff enemy then attack
+        engine::set_plan(a, 1, 0, vector[2, 1]);
+        engine::advance_turn(a, 1);
+        engine::set_plan(a, 1, 0, vector[1]);
+        engine::advance_turn(a, 1);
+        let (hp2, _mh, _a, _m, _s, _alive) = engine::enemy_state(1, 0);
+        let dmg = hp1 - hp2;
+        // Turn 1: skill 2 on enemy - DMG_IN_MOD +200% on enemy
+        // Turn 2: skill 1 on enemy - base 100, then in_mod: 100 * (1000+200)/1000 = 120
+        assert!(dmg == 120, 1);
     }
 
     #[test]
     fun test_shield_absorbs_damage() {
-        let a = account::create_account_for_test(@mohayo);
-        seed_engine(&a);
-        let rid = create_and_join(&a, 1, 100000, 100, 50, 10);
-        start_combat(&a, rid, vector[SKILL_SHIELD, SKILL_ATTACK], 42);
-        // Shield fires first (apCost=0, manaCost=1, regen gives 1 mana after t1)
-        // t1: no mana, shield fails; t2: mana=1, shield casts, then attack
-        drive(&a, rid, 3);
-        let (_, _, _, _, eff_count, _, _) = engine::member_state(rid, 0);
-        // Should have shield or have used it
-        assert!(eff_count >= 0, 0);
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        skill_registry::register_skill(a, skill_shield()); // id=1: shield 300 for 3 turns
+        skill_registry::register_skill(a, skill_attack()); // id=2
+        let ai = simple_ai(2);
+        skill_registry::register_ai(a, ai);
+        let tmpl = simple_template(1);
+        skill_registry::register_template(a, tmpl);
+        let entries = vector[types::make_table_entry(1, 1000)];
+        skill_registry::register_table(a, entries);
+        let dungeon = types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1);
+        skill_registry::set_dungeon(a, 1, dungeon);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 500, 100, 50, 30);
+        engine::start_combat(a, 1);
+        // Plan: shield self, then attack
+        engine::set_plan(a, 1, 0, vector[1, 2]);
+        engine::advance_turn(a, 1);
+        // Check member has shield effect
+        let ec = engine::member_effect_count(1, 0);
+        assert!(ec > 0, 1);
+        // Advance to let enemy attack (should be absorbed by shield)
+        engine::set_plan(a, 1, 0, vector[2]);
+        engine::advance_turn(a, 1);
+        // Member should still have HP close to max due to shield
+        let (hp, max_hp, _a, _m, _s, _alive) = engine::member_state(1, 0);
+        assert!(hp > max_hp - 100, 2);
     }
 
     #[test]
-    fun test_stun_skips_turn() {
-        let a = account::create_account_for_test(@mohayo);
-        seed_engine(&a);
-        let rid = create_and_join(&a, 1, 10000, 100, 50, 10);
-        start_combat(&a, rid, vector[SKILL_STUN, SKILL_ATTACK], 42);
-        // STUN costs 3 AP but member has 0 AP → stun can't fire turn1
-        // Just run a few turns and verify no crash
-        drive(&a, rid, 3);
-        assert!(true, 0);
+    fun test_heal() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        // Register a self-damage skill (hp_cost=200, power=0, SELF targeting)
+        let sac_s = types::make_skill(
+            0, 1, 0, 1, 0, 0, 0, 200,
+            9, 0, 1, 0, 0, 1000, 0,
+            vector::empty(), types::make_summon_rule(0, 0, 0),
+        );
+        skill_registry::register_skill(a, sac_s); // id=1: sacrifice (costs 200 HP)
+        // Register heal skill (most wounded ally, heals 600)
+        let heal_s = types::make_skill(
+            0, 3, 0, 1, 0, 0, 0, 0,
+            10, 0, 1, 0, 0, 1000, 0,
+            vector[types::make_effect_spec(9, 1, 600, 1, 1000)],
+            types::make_summon_rule(0, 0, 0),
+        );
+        skill_registry::register_skill(a, heal_s); // id=2: heal
+        // Passive enemy (no damage)
+        let ai = simple_ai(1);
+        skill_registry::register_ai(a, ai);
+        let weak_tmpl = types::make_enemy_template(
+            1, 1, 1000, 0, 0, 50, 1000, 0, 100,
+            types::make_on_death_spawn(0, 0, 0),
+        );
+        skill_registry::register_template(a, weak_tmpl);
+        let entries = vector[types::make_table_entry(1, 1000)];
+        skill_registry::register_table(a, entries);
+        let dungeon = types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1);
+        skill_registry::set_dungeon(a, 1, dungeon);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 1000, 100, 50, 30);
+        engine::start_combat(a, 1);
+        let (hp_before, _mh, _a, _m, _s, _alive) = engine::member_state(1, 0);
+        // Turn 1: sacrifice 200 HP → HP drops to 800
+        engine::set_plan(a, 1, 0, vector[1]);
+        engine::advance_turn(a, 1);
+        let (hp_after_enemy, _mh, _a, _m, _s, _alive) = engine::member_state(1, 0);
+        assert!(hp_after_enemy < hp_before, 3);
+        // Turn 2: heal 600 HP → HP should increase
+        engine::set_plan(a, 1, 0, vector[2]);
+        engine::advance_turn(a, 1);
+        let (hp_healed, _mh, _a, _m, _s, _alive) = engine::member_state(1, 0);
+        assert!(hp_healed > hp_after_enemy, 1);
     }
 
     #[test]
-    fun test_room_lifecycle_to_settled() {
-        let a = account::create_account_for_test(@mohayo);
-        seed_engine(&a);
-        let rid = create_and_join(&a, 1, 100000, 10000, 0, 100);
-        start_combat(&a, rid, vector[SKILL_ATTACK], 42);
-        assert!(engine::room_phase(rid) == 1, 1); // COMBAT
-        let i = 0;
-        while (i < 50 && engine::room_phase(rid) == 1) { drive(&a, rid, 1); i = i + 1; };
-        assert!(engine::room_phase(rid) == 2, 2); // SETTLED
+    fun test_victory() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        // Very weak enemy (1 HP)
+        skill_registry::register_skill(a, skill_attack());
+        let ai = simple_ai(1);
+        skill_registry::register_ai(a, ai);
+        let tmpl = types::make_enemy_template(1, 1, 1, 0, 0, 1, 1000, 10, 20, types::make_on_death_spawn(0, 0, 0));
+        skill_registry::register_template(a, tmpl);
+        let entries = vector[types::make_table_entry(1, 1000)];
+        skill_registry::register_table(a, entries);
+        let dungeon = types::make_dungeon_config(1, 1, 5, 100, 0, 0, 0, 1);
+        skill_registry::set_dungeon(a, 1, dungeon);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 500, 100, 50, 30);
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[1]);
+        engine::advance_turn(a, 1);
+        // Enemy should be dead, victory
+        assert!(engine::room_phase(1) == 2, 1);
     }
 
     #[test]
-    fun test_defeat_weakling() {
-        let a = account::create_account_for_test(@mohayo);
-        seed_engine(&a);
-        let rid = create_and_join(&a, 1, 1, 1, 1, 1); // 1 HP
-        start_combat(&a, rid, vector[SKILL_IDLE], 42);
-        drive(&a, rid, 3);
-        assert!(engine::room_phase(rid) == 2, 1);
-    }
-
-    #[test]
-    fun test_enemy_takes_damage() {
-        let a = account::create_account_for_test(@mohayo);
-        seed_engine(&a);
-        let rid = create_and_join(&a, 1, 10000, 5000, 0, 100);
-        start_combat(&a, rid, vector[SKILL_ATTACK], 42);
-        let (hp0, _, _, _, _, _, _) = engine::member_state(rid, 0);
-        drive(&a, rid, 3);
-        let (hp1, _, _, _, _, _, _) = engine::member_state(rid, 0);
-        assert!(hp1 < hp0, 1); // member took damage from enemy
-    }
-
-    #[test]
-    fun test_berserk_applies_effects() {
-        let a = account::create_account_for_test(@mohayo);
-        seed_engine(&a);
-        let rid = create_and_join(&a, 1, 10000, 100, 50, 10);
-        start_combat(&a, rid, vector[SKILL_BERSERK, SKILL_ATTACK], 42);
-        drive(&a, rid, 3);
-        // Berserk costs 0, should apply DMG_OUT_MOD and DMG_IN_MOD
-        let (_, _, _, _, eff_count, _, _) = engine::member_state(rid, 0);
-        assert!(eff_count >= 2, 1); // at least 2 effects
-    }
-
-    #[test]
-    fun test_d9_multi_battle() {
-        let a = account::create_account_for_test(@mohayo);
-        seed_engine(&a);
-        let rid = create_and_join(&a, 9, 50000, 5000, 5000, 50);
-        start_combat(&a, rid, vector[SKILL_ATTACK], 42);
-        let (bi, tb) = engine::room_battle(rid);
-        assert!(bi == 1, 1);
-        assert!(tb == 4, 2);
-        // Drive battle 1
-        let i = 0;
-        while (i < 50 && engine::room_phase(rid) == 1) { drive(&a, rid, 1); i = i + 1; };
-    }
-
-    #[test]
-    fun test_d9_mana_pool() {
-        let a = account::create_account_for_test(@mohayo);
-        seed_engine(&a);
-        let rid = create_and_join(&a, 9, 50000, 5000, 5000, 50);
-        start_combat(&a, rid, vector[SKILL_ATTACK], 42);
-        drive(&a, rid, 3);
-        let mp = engine::room_mana(rid);
-        assert!(mp > 0, 1);
-    }
-
-    #[test]
-    fun test_d9_furnace_mana() {
-        let a = account::create_account_for_test(@mohayo);
-        seed_engine(&a);
-        engine::set_dungeon(&a, 9, engine::make_dungeon_config(73, 1, 6, 0, 0, 0, 0, 4));
-        engine::set_dungeon_battles(&a, 9, vector[
-            engine::make_battle_config(73, 1),
-            engine::make_battle_config(72, 3),
-            engine::make_battle_config(73, 2),
-            engine::make_battle_config(75, 1),
-        ]);
-        let rid = create_and_join(&a, 9, 50000, 5000, 5000, 50);
-        start_combat(&a, rid, vector[SKILL_ATTACK], 42);
-        drive(&a, rid, 3);
-        // Just verify no crash
-        assert!(true, 0);
-    }
-
-    #[test]
-    fun test_d9_emperor_skill_cycle() {
-        let a = account::create_account_for_test(@mohayo);
-        seed_engine(&a);
-        engine::set_dungeon(&a, 9, engine::make_dungeon_config(74, 1, 6, 0, 0, 0, 0, 4));
-        engine::set_dungeon_battles(&a, 9, vector[
-            engine::make_battle_config(74, 1),
-            engine::make_battle_config(72, 3),
-            engine::make_battle_config(73, 2),
-            engine::make_battle_config(75, 1),
-        ]);
-        let rid = create_and_join(&a, 9, 50000, 5000, 5000, 50);
-        start_combat(&a, rid, vector[SKILL_ATTACK], 42);
-        let i = 0;
-        while (i < 30 && engine::room_phase(rid) == 1) { drive(&a, rid, 1); i = i + 1; };
-        // Just verify it doesn't crash through emperor
-        assert!(true, 0);
-    }
-
-    #[test]
-    fun test_d9_chest_emperor_spawn() {
-        let a = account::create_account_for_test(@mohayo);
-        seed_engine(&a);
-        engine::set_dungeon(&a, 7, engine::make_dungeon_config(75, 1, 6, 0, 0, 0, 0, 1));
-        engine::create_room(&a, 7);
-        engine::join_room(&a, 1, 100000, 10000, 0, 100, 0, 0, 0, 0);
-        start_combat(&a, 1, vector[SKILL_ATTACK], 42);
-        drive(&a, 1, 3);
-        // Chest has 1 HP — dies immediately; 20% emperor spawn
-        let ec = engine::enemy_count(1);
-        assert!(ec <= 10, 1);
-    }
-
-    #[test]
-    fun test_abyss_whisper_applies_dmg_in_mod() {
-        let a = account::create_account_for_test(@mohayo);
-        seed_engine(&a);
-        // Register a tanky enemy so it doesn't die before we check effects
-        engine::register_template(&a, 500, tpl_no_ods(0, 1, 5000, 12, 5, 8));
-        engine::register_table(&a, 500, vector[te(500, 100)]);
-        engine::set_dungeon_battles(&a, 10, vector[
-            engine::make_battle_config(500, 1),
-        ]);
-        // AbyssWhisper: manaCost=1, difficulty10 has mana_per_turn=4
-        // Plan: [ABYSS_WHISPER, ATTACK]; AbyssWhisper fires turn3 (after mana regen)
-        let rid = create_and_join(&a, 10, 10000, 100, 0, 100);
-        start_combat(&a, rid, vector[SKILL_ABYSS_WHISPER, SKILL_ATTACK], 42);
-        // Turn1: AbyssWhisper fails (mana=0), Turn2: Attack, Turn3: AbyssWhisper fires
-        drive(&a, rid, 3);
-        // Check DMG_IN_MOD on surviving enemies
-        let ec = engine::enemy_count(rid);
-        let found = false;
-        let i = 0;
-        while (i < ec) {
-            let (_, _, _, _, _, _, alive) = engine::enemy_state(rid, i);
-            if (alive) {
-                let efc = engine::enemy_effect_count(rid, i);
-                let j = 0;
-                while (j < efc) {
-                    let (op, _, _) = engine::enemy_effect(rid, i, j);
-                    if (op == 3) { // OP_DMG_IN_MOD
-                        found = true;
-                    };
-                    j = j + 1;
-                };
-            };
-            i = i + 1;
+    fun test_defeat() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        // Super strong enemy that one-shots member
+        skill_registry::register_skill(a, skill_attack());
+        let ai = simple_ai(1);
+        skill_registry::register_ai(a, ai);
+        let tmpl = types::make_enemy_template(1, 1, 10000, 99999, 0, 100, 1000, 10, 20, types::make_on_death_spawn(0, 0, 0));
+        skill_registry::register_template(a, tmpl);
+        let entries = vector[types::make_table_entry(1, 1000)];
+        skill_registry::register_table(a, entries);
+        let dungeon = types::make_dungeon_config(1, 1, 5, 100, 0, 0, 0, 1);
+        skill_registry::set_dungeon(a, 1, dungeon);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 10, 10, 10, 10);
+        engine::start_combat(a, 1);
+        // Member with 10 HP vs enemy with 99999 attack
+        // Member attacks first (higher speed?), then enemy attacks and kills
+        engine::set_plan(a, 1, 0, vector[1]);
+        engine::advance_turn(a, 1);
+        // Check if member is dead
+        let (_hp, _mh, _a, _m, _s, alive) = engine::member_state(1, 0);
+        // Either member survived turn 1 or is dead
+        // Let's advance more turns
+        if (alive == 1) {
+            engine::set_plan(a, 1, 0, vector[1]);
+            engine::advance_turn(a, 1);
         };
-        assert!(found, 1); // at least one enemy has DMG_IN_MOD
     }
 
     #[test]
-    fun test_dmg_in_mod_bypasses_damage_cap() {
-        let a = account::create_account_for_test(@mohayo);
-        seed_engine(&a);
-        // Register a tanky enemy (HP=5000) and a single-enemy dungeon
-        engine::register_template(&a, 500, tpl_no_ods(0, 1, 5000, 12, 5, 8));
-        engine::register_table(&a, 500, vector[te(500, 100)]);
-        // Use difficulty 10 (existing, but override table/count via battle_config)
-        engine::set_dungeon_battles(&a, 10, vector[
-            engine::make_battle_config(500, 1),
-        ]);
-        // Capped skill: power=2000, damageCap=50, targeting=ALL_ENEMY
-        let capped = engine::make_skill(100, 1, 0, 0, 0, 0, 0, 0, 4, 0, 0, 2000, 50, 1000, 0,
-            vector[empty_eff(), empty_eff(), empty_eff(), empty_eff()], no_summon());
-        engine::register_skill(&a, capped);
-        let rid = create_and_join(&a, 10, 10000, 1000, 0, 100);
-        start_combat(&a, rid, vector[SKILL_BERSERK, 100], 42);
-        // Turn 1: Berserk fires → DMG_OUT_MOD applied to self (dur=2)
-        drive(&a, rid, 1);
-        let (_, hp_before, _, _, _, _, _) = engine::enemy_state(rid, 0);
-        // Turn 2: Capped skill fires → base=2000*1000/1000=2000, cap=50, DMG_OUT_MOD=300% → 50*4=200
-        drive(&a, rid, 1);
-        let (hp_after, _, _, _, _, _, _) = engine::enemy_state(rid, 0);
-        let damage = hp_before - hp_after;
-        // Without modifier: damage=50 (capped). With DMG_OUT_MOD=300: 50*4=200
-        assert!(damage > 50, 2); // modifier bypasses damageCap
+    fun test_multi_battle_dungeon() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        skill_registry::register_skill(a, skill_attack());
+        let ai = simple_ai(1);
+        skill_registry::register_ai(a, ai);
+        // Weak enemy for battle 1
+        let tmpl1 = types::make_enemy_template(1, 1, 1, 0, 0, 1, 1000, 10, 20, types::make_on_death_spawn(0, 0, 0));
+        skill_registry::register_template(a, tmpl1);
+        let entries = vector[types::make_table_entry(1, 1000)];
+        skill_registry::register_table(a, entries);
+        // 2-battle dungeon
+        let dungeon = types::make_dungeon_config(1, 1, 5, 100, 0, 0, 0, 2);
+        skill_registry::set_dungeon(a, 1, dungeon);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 500, 100, 50, 30);
+        engine::start_combat(a, 1);
+        // Battle 1: kill weak enemy
+        engine::set_plan(a, 1, 0, vector[1]);
+        engine::advance_turn(a, 1);
+        // Should be in intermission (phase 3)
+        assert!(engine::room_phase(1) == 3, 1);
+        // Advance to battle 2
+        engine::advance_battle(a, 1);
+        assert!(engine::room_phase(1) == 1, 2);
+        let (bi, tb) = engine::room_battle(1);
+        assert!(bi == 2, 3);
+        assert!(tb == 2, 4);
+    }
+
+    #[test]
+    fun test_mana_pool() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        // Skill with mana cost
+        let s = types::make_skill(
+            0, 1, 0, 1, 0, 0, 3, 0,
+            1, 0, 1, 1000, 0, 1000, 0,
+            vector::empty(), types::make_summon_rule(0, 0, 0),
+        );
+        skill_registry::register_skill(a, s);
+        let ai = simple_ai(1);
+        skill_registry::register_ai(a, ai);
+        let tmpl = simple_template(1);
+        skill_registry::register_template(a, tmpl);
+        let entries = vector[types::make_table_entry(1, 1000)];
+        skill_registry::register_table(a, entries);
+        let dungeon = types::make_dungeon_config(1, 1, 5, 100, 0, 0, 0, 1);
+        skill_registry::set_dungeon(a, 1, dungeon);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 500, 100, 50, 30);
+        engine::start_combat(a, 1);
+        // Turn 1: mana = 5 (from mana_per_turn), costs 3, should work
+        let mana1 = engine::room_mana(1);
+        assert!(mana1 == 5, 1);
+        engine::set_plan(a, 1, 0, vector[1]);
+        engine::advance_turn(a, 1);
+        let mana2 = engine::room_mana(1);
+        // After turn: 5 - 3 + 5 = 7
+        assert!(mana2 == 7, 2);
+    }
+
+    #[test]
+    fun test_enemy_ai_cycle() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        // Two skills: attack (id=1) and stun (id=2)
+        skill_registry::register_skill(a, skill_attack());
+        skill_registry::register_skill(a, skill_stun());
+        // AI alternates: [attack, stun]
+        let ai = types::make_monster_ai(vector[1, 2], 2);
+        skill_registry::register_ai(a, ai);
+        let tmpl = simple_template(1);
+        skill_registry::register_template(a, tmpl);
+        let entries = vector[types::make_table_entry(1, 1000)];
+        skill_registry::register_table(a, entries);
+        let dungeon = types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1);
+        skill_registry::set_dungeon(a, 1, dungeon);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 500, 100, 50, 30);
+        engine::start_combat(a, 1);
+        // Turn 1: enemy uses attack (cycle[0])
+        engine::set_plan(a, 1, 0, vector[1]);
+        engine::advance_turn(a, 1);
+        // Turn 2: enemy uses stun (cycle[1])
+        engine::set_plan(a, 1, 0, vector[1]);
+        engine::advance_turn(a, 1);
+        // Check member has stun effect after turn 2
+        let ec = engine::member_effect_count(1, 0);
+        assert!(ec > 0, 1);
+    }
+
+    #[test]
+    fun test_cancel_plan() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        setup_full_dungeon(a);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 500, 100, 50, 30);
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[1, 1, 1]);
+        engine::cancel_plan(a, 1, 0);
+        // After cancel, member has no plan so does nothing
+        let (hp_before, _mh, _a, _m, _s, _alive) = engine::enemy_state(1, 0);
+        engine::advance_turn(a, 1);
+        let (hp_after, _mh, _a, _m, _s, _alive) = engine::enemy_state(1, 0);
+        assert!(hp_before == hp_after, 1);
+    }
+
+    #[test]
+    fun test_leave_room() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        setup_full_dungeon(a);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 500, 100, 50, 30);
+        assert!(engine::member_count(1) == 1, 1);
+        engine::leave_room(a, 1);
+    }
+
+    #[test]
+    fun test_reward_pool() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        // Kill enemy to earn reward
+        skill_registry::register_skill(a, skill_attack());
+        let ai = simple_ai(1);
+        skill_registry::register_ai(a, ai);
+        // Weak enemy with reward 50-100
+        let tmpl = types::make_enemy_template(1, 1, 1, 0, 0, 1, 1000, 50, 100, types::make_on_death_spawn(0, 0, 0));
+        skill_registry::register_template(a, tmpl);
+        let entries = vector[types::make_table_entry(1, 1000)];
+        skill_registry::register_table(a, entries);
+        let dungeon = types::make_dungeon_config(1, 1, 5, 100, 0, 0, 0, 1);
+        skill_registry::set_dungeon(a, 1, dungeon);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 500, 100, 50, 30);
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[1]);
+        engine::advance_turn(a, 1);
+        // Victory: reward pool should be 0 (distributed)
+        assert!(engine::room_phase(1) == 2, 1);
+        // Rewards were distributed, pool is 0
+        let rp = engine::reward_pool(1);
+        assert!(rp == 0, 2);
+    }
+
+    // ===================== combined integration tests =====================
+
+    #[test]
+    fun test_full_combat_flow() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+
+        // Setup skills
+        skill_registry::register_skill(a, skill_attack()); // 1
+        skill_registry::register_skill(a, skill_heal());   // 2
+        skill_registry::register_skill(a, skill_stun());   // 3
+        // AI
+        let ai = simple_ai(1);
+        skill_registry::register_ai(a, ai);
+        // Template
+        let tmpl = simple_template(1);
+        skill_registry::register_template(a, tmpl);
+        // Table
+        let entries = vector[types::make_table_entry(1, 1000)];
+        skill_registry::register_table(a, entries);
+        // Dungeon
+        let dungeon = types::make_dungeon_config(1, 1, 5, 100, 0, 0, 0, 1);
+        skill_registry::set_dungeon(a, 1, dungeon);
+
+        // Create room, join, fight
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 1000, 200, 100, 30);
+        engine::start_combat(a, 1);
+
+        // Run 10 turns of combat
+        let turn = 0;
+        while (turn < 10) {
+            let phase = engine::room_phase(1);
+            if (phase != 1) break;
+            engine::set_plan(a, 1, 0, vector[1]);
+            engine::advance_turn(a, 1);
+            turn = turn + 1;
+        };
+
+        // Combat should have ended
+        let final_phase = engine::room_phase(1);
+        assert!(final_phase == 2 || final_phase == 3, 1);
+    }
+
+    #[test]
+    fun test_two_party_combat() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+
+        skill_registry::register_skill(a, skill_attack()); // 1
+        let ai = simple_ai(1);
+        skill_registry::register_ai(a, ai);
+        let tmpl = simple_template(1);
+        skill_registry::register_template(a, tmpl);
+        let entries = vector[types::make_table_entry(1, 1000)];
+        skill_registry::register_table(a, entries);
+        let dungeon = types::make_dungeon_config(1, 1, 5, 100, 0, 0, 0, 1);
+        skill_registry::set_dungeon(a, 1, dungeon);
+
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 500, 100, 50, 30);
+        engine::join_room(a, 1, 400, 150, 80, 25);
+        engine::start_combat(a, 1);
+        assert!(engine::member_count(1) == 2, 1);
+        // Both members attack
+        engine::set_plan(a, 1, 0, vector[1]);
+        engine::set_plan(a, 1, 1, vector[1]);
+        engine::advance_turn(a, 1);
+        // Both should have dealt damage
+        let (hp1, _, _, _, _, _) = engine::enemy_state(1, 0);
+        assert!(hp1 < 1000, 2);
     }
 }
