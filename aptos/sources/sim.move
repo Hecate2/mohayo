@@ -451,4 +451,26 @@ module mohayo::sim {
         // 能跑到这里即说明归属校验不误伤合法计划(角色血薄, 被碎石磨死也属正常模拟)
         assert!(guard > 0, 1);
     }
+
+    // ================================================================
+    //  中后期梯度: D5(成长分水岭, ~85%) → D6 亡者回廊 → D7 熔渊龙巢 →
+    //  D8 虚空裂隙(接近顶配) → D9 机神帝座(顶点)。near-max solo 通关率应随
+    //  难度单调下降, 且 D8 以下不该把近满级队挡死(留出组队/词条提升空间)。
+    // ================================================================
+    #[test]
+    fun sim_late_ladder() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let (w5, t5) = clear_rate(a, 5, 15, 30000, 26000, 13000, 600, plan_attack());
+        report(w5, t5);
+        let (w6, t6) = clear_rate(a, 6, 15, 30000, 26000, 13000, 600, plan_attack());
+        report(w6, t6);
+        let (w7, t7) = clear_rate(a, 7, 15, 30000, 26000, 13000, 600, plan_attack());
+        report(w7, t7);
+        let (w8, t8) = clear_rate(a, 8, 15, 30000, 26000, 13000, 600, plan_attack());
+        report(w8, t8);
+        assert!(w5 >= 12, 1);   // D5 solo 高胜率(参考 80-90% 带)
+        assert!(w6 >= w7 && w7 >= w8, 2); // 难度单调递进
+        assert!(w8 >= 1, 3);    // near-max 打 D8 留有胜面(非全灭)
+    }
 }
