@@ -380,7 +380,9 @@ module mohayo::types {
     public fun skill_base_acc(s: &Skill): u16 { s.base_acc }
     public fun skill_targeting(s: &Skill): u8 { s.targeting }
     public fun skill_flags(s: &Skill): u8 { s.flags }
-    public fun skill_mana_cost(s: &Skill): u64 { s.mana_cost }
+
+    public fun skill_ammo_id(s: &Skill): u16 { s.ammo_id }
+    public fun skill_ammo_cost(s: &Skill): u16 { s.ammo_cost }    public fun skill_mana_cost(s: &Skill): u64 { s.mana_cost }
     public fun skill_ap_cost(s: &Skill): u16 { s.ap_cost }
     public fun skill_ap_gain(s: &Skill): u16 { s.ap_gain }
     public fun skill_hp_cost(s: &Skill): u16 { s.hp_cost }

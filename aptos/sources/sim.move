@@ -8,6 +8,7 @@
 /// It is `#[test_only]`: it depends on test-only initializers and is never deployed.
 module mohayo::sim {
     use mohayo::engine;
+    use mohayo::item;
     use mohayo::character;
     use mohayo::skill_registry;
     use mohayo::content_registration;
@@ -897,4 +898,88 @@ module mohayo::sim {
         std::debug::print(&vector[999, (r as u64)]);
     }
 
+    // ================================================================
+    //  道具层验证(数据驱动): 火枪弹药自动消耗(弹尽空过) / 魔素礼花入队占回合加魔素 /
+    //  非战斗道具不可进计划 / decimals=18 拆分交易。
+    // ================================================================
+    #[test]
+    fun sim_ammo_consumption() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let own = std::signer::address_of(a);
+        character::gm_mint_at_level(a, own, 5, 0, vector[0, 0, 0, 0], vector[850], 40); // 火枪手
+        let cid = character::owner_latest_char(own);
+        item::gm_mint(a, item::ITEM_LEAD_BULLET, own, 5); // 5 发铅弹
+        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(4, 1, 10, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon_battles(a, 1, vector[mohayo::types::make_battle_config(4, 1)]);
+        engine::create_room(a, 1);
+        let room_id = skill_registry::next_room_id() - 1;
+        engine::join_room_as_char(a, room_id, cid);
+        engine::start_combat(a, room_id);
+        engine::set_plan(a, room_id, 0, vector[620]); // 左轮弹雨(每施放耗 3 发)
+        engine::advance_turn(a, room_id); // r1: 耗 3 发施放(段伤 150×452/1000×3≈202)
+        engine::advance_turn(a, room_id); // r2: 剩 2 发不足 → 空过
+        let bal = item::balance_whole(item::ITEM_LEAD_BULLET, own);
+        let (eh, _, _, _, _, _) = engine::enemy_state(room_id, 0);
+        std::debug::print(&vector[bal, eh]);
+        assert!(bal == 2, 1);    // 5 - 3 = 2 发
+        assert!(eh < 2600, 2);   // 左轮确实输出了
+    }
+
+    #[test]
+    fun sim_mana_firework() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let own = std::signer::address_of(a);
+        character::gm_mint_at_level(a, own, 2, 0, vector[0, 0, 0, 0], vector[850], 40); // 剑士
+        let cid = character::owner_latest_char(own);
+        item::gm_mint(a, item::ITEM_MANA_FIREWORK, own, 3); // 3 份魔素礼花
+        engine::create_room(a, 1);
+        let room_id = skill_registry::next_room_id() - 1;
+        engine::join_room_as_char(a, room_id, cid);
+        engine::start_combat(a, room_id);
+        // 道具占计划队列: ITEM_SKILL_BASE(61440) + 魔素礼花(type 100) = 61540, 占 1 回合行动位
+        engine::set_plan(a, room_id, 0, vector[61540]);
+        engine::advance_turn(a, room_id);
+        engine::advance_turn(a, room_id);
+        let pool = engine::room_mana(room_id);
+        let bal = item::balance_whole(item::ITEM_MANA_FIREWORK, own);
+        std::debug::print(&vector[pool, bal]);
+        assert!(pool >= 400, 1); // 池 ≈ 2 + 2×2 + 2×200 = 406
+        assert!(bal == 1, 2);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 20)]
+    fun sim_item_noncombat_rejected() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let own = std::signer::address_of(a);
+        character::gm_mint_at_level(a, own, 5, 0, vector[0, 0, 0, 0], vector[850], 40);
+        let cid = character::owner_latest_char(own);
+        item::gm_mint(a, item::ITEM_LEAD_BULLET, own, 5);
+        engine::create_room(a, 1);
+        let room_id = skill_registry::next_room_id() - 1;
+        engine::join_room_as_char(a, room_id, cid);
+        engine::start_combat(a, room_id);
+        // 铅弹标记战斗中不可使用 → 不可进计划队列
+        engine::set_plan(a, room_id, 0, vector[61441]);
+    }
+
+    #[test]
+    fun sim_item_split_transfer() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let own = std::signer::address_of(a);
+        let b = &std::account::create_account_for_test(@0xCAFE);
+        let baddr = std::signer::address_of(b);
+        item::gm_mint(a, item::ITEM_MANA_FIREWORK, own, 2);
+        // 拆散交易: 转 1.5 份(1.5 × 10^18 raw)
+        item::transfer(a, item::ITEM_MANA_FIREWORK, baddr, 1500000000000000000);
+        let rb = item::balance_whole(item::ITEM_MANA_FIREWORK, baddr);
+        let ra = item::balance_raw(item::ITEM_MANA_FIREWORK, own);
+        std::debug::print(&vector[rb, (ra as u64)]);
+        assert!(rb == 1, 1);             // 收款方 1 整份(1.5e18 → 整除 1)
+        assert!(ra == 500000000000000000, 2); // 转出方剩 0.5 份 raw
+    }
 }

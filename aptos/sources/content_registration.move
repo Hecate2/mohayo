@@ -16,6 +16,7 @@ module mohayo::content_registration {
     use mohayo::character;
     use mohayo::skill_registry;
     use mohayo::content;
+    use mohayo::item;
 
     // Per-battle turn cap, uniform across all dungeons. Its purpose is NOT difficulty:
     // it is a chain-safety eviction bound so a party that can never win (or that stalls
@@ -41,6 +42,18 @@ module mohayo::content_registration {
         effects: vector<types::EffectSpec>,
     ): types::Skill {
         types::make_skill(id, kind, ap_cost, ap_gain, 0, 0, mana_cost, hp_cost,
+            targeting, weight_mode, target_count, power, damage_cap, base_acc, flags,
+            effects, nosummon())
+    }
+
+    /// 带弹药需求的技能构造(火枪系): 每次施放固定消耗 ammo_cost 份 ammo_id 道具。
+    fun ska(
+        id: u64, kind: u8, ap_cost: u16, ap_gain: u16, mana_cost: u64, hp_cost: u16,
+        targeting: u8, weight_mode: u8, target_count: u8,
+        power: u64, damage_cap: u64, base_acc: u16, flags: u8,
+        effects: vector<types::EffectSpec>, ammo_id: u16, ammo_cost: u16,
+    ): types::Skill {
+        types::make_skill(id, kind, ap_cost, ap_gain, ammo_id, ammo_cost, mana_cost, hp_cost,
             targeting, weight_mode, target_count, power, damage_cap, base_acc, flags,
             effects, nosummon())
     }
@@ -140,12 +153,12 @@ module mohayo::content_registration {
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 280, 0, 950, 0,
             vector::empty()), 2);                                                       // 330 魔法剑
         // --- 火枪手 ---
-        skill_registry::register_class_skill(account, sk(620,types::KIND_PHYSICAL(), 1, 3, 4, 0,
+        skill_registry::register_class_skill(account, ska(620, types::KIND_PHYSICAL(), 1, 3, 4, 0,
             types::TGT_RAND_STRIKE_ENEMY(), types::WT_THREAT_ENEMY(), 3, 150, 0, 820, 0,
-            vector::empty()), 5);                                                       // 620 左轮弹雨
-        skill_registry::register_class_skill(account, sk(630,types::KIND_PHYSICAL(), 2, 1, 0, 0,
+            vector::empty(), (item::ITEM_LEAD_BULLET as u16), 3), 5);                   // 620 左轮弹雨(耗铅弹×3)
+        skill_registry::register_class_skill(account, ska(630, types::KIND_PHYSICAL(), 2, 1, 0, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 420, 0, 950, 0,
-            vector[eff(types::OP_MANA_DELTA(), 40, 1, 0, 1000)]), 5);                  // 630 龙击弹
+            vector[eff(types::OP_MANA_DELTA(), 40, 1, 0, 1000)], (item::ITEM_DRAGON_BULLET as u16), 1), 5); // 630 龙击弹(耗龙击弹×1, 命中产魔)
         // --- 黑魔法师 ---
         skill_registry::register_class_skill(account, sk(430,types::KIND_MAGIC(), 0, 1, 0, 0,
             types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 3000, 0, 1000, types::FLAG_MANA_ALL(),
@@ -513,6 +526,15 @@ module mohayo::content_registration {
         skill_registry::add_battle_variant(account, 9, 4, 31, 300);   // 皇帝备用机体
         // D10 超级难关 —— 占位(单场宝箱怪=待机, 砍开即胜), 后续配置
         skill_registry::set_dungeon(account, 10, dng(30, 1, 5, 0, 50, 200, BATTLE_TURN_CAP, 1));
+
+        // ===================== ITEMS (道具层: 数据驱动, decimals=18) =====================
+        // 上线后新增道具: GM 调 item::register_item 一笔交易即可, 无需发布新代码。
+        item::register_item(account, item::ITEM_LEAD_BULLET, b"lead_bullet",
+            item::GROUP_AMMO, false, item::EFFECT_NONE, 0, 18);      // 铅弹: 战斗不可用, 左轮技能自动消耗
+        item::register_item(account, item::ITEM_DRAGON_BULLET, b"dragon_bullet",
+            item::GROUP_AMMO, false, item::EFFECT_NONE, 0, 18);      // 龙击弹: 同上, 龙击弹技能自动消耗
+        item::register_item(account, item::ITEM_MANA_FIREWORK, b"mana_firework",
+            item::GROUP_COMBAT_CONSUMABLE, true, item::EFFECT_MANA_BOOST, 200, 18); // 魔素礼花: 战斗使用, 房间魔素+200
     }
 
     // ===================== private helpers =====================

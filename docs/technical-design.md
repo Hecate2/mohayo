@@ -419,6 +419,18 @@ struct RoomMember {
 
 组内步长 5~10，未来在同一组追加技能时取区间内未用 key 即可；`MAX_SKILLS=4096`。
 
+### 2.7.1 Move 道具层注记（数据驱动, 2026-09-02 实现）
+
+- **每种道具 = item_type + ItemDef**（name/group/combat_usable/effect_kind/effect_value/decimals），**无 per-type struct**。
+  GM 常驻 entry `item::register_item` 可**上线后动态添加新道具**（一笔交易, 零代码发布）。
+- **fungible token 语义**：Vault 每 item_type 一张独立 address→u128 同质账本；decimals=18 约定
+  `1 整份 = ONE = 10^18 raw`（平时按整份消耗, 允许拆散交易, `transfer` 支持任意 raw）。
+- **战斗内使用** = 特殊技能 id `ITEM_SKILL_BASE(61440=0xF000) + item_type` 排进计划队列, **占 1 回合行动位**
+  （§2.6 道具入队定案落地）；非战斗道具不可入队（`set_plan` 拒绝）；无库存/弹尽 → 空过不炸交易。
+- **弹药**：620 左轮(铅弹×3)/630 龙击弹(×1), `execute_skill` 每次施放固定消耗（§2.5.2）；
+  注册层 `reconstruct_skill_with_id` 已修复拷 ammo 字段（曾清零桩）。
+- 初始道具: 铅弹/龙击弹(组1 弹药, 不可直接使用) + 魔素礼花(组2, 效果 kind=1 mana_boost +200)。
+
 ### 2.7 道具资产层：只用 ERC-20（带 Permit）与 ERC-721，不用 ERC-1155（用户定案）
 
 **标准选型**：道具分两类资产形态——消耗品/弹药是**同质化、可堆叠**资产 → 每类一个 **ERC-20 道具币**（`ItemFactory` 克隆部署，decimals=0 整数计数，模板内置 **ERC20Permit**）；角色与未来的「独特物品」（有独立身份/履历的稀有掉落）→ **ERC-721**。全系统**不使用 ERC-1155**——钱包、水龙头、市场等生态工具对 ERC-20/721 的支持最广。

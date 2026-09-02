@@ -8,6 +8,7 @@ module mohayo::engine {
     use mohayo::types::{Self, Skill, Member, Enemy, Target};
     use mohayo::skill_registry;
     use mohayo::character;
+    use mohayo::item;
 
     const E_ROOM_NOT_FOUND: u64 = 3;
     const E_BAD_INDEX: u64 = 4;
@@ -59,6 +60,16 @@ module mohayo::engine {
     struct CombatStarted has drop, store { room_id: u64, turn_id: u64 }
     #[event]
     struct PlanSet has drop, store { room_id: u64, player: address }
+
+    #[event]
+    struct ItemUsed has drop, store {
+        room_id: u64,
+        player: address,
+        item_type: u64,
+        effect_kind: u8,
+        value: u64,
+    }
+
     #[event]
     struct TurnAdvanced has drop, store { room_id: u64, turn_id: u64 }
     #[event]
@@ -230,7 +241,13 @@ module mohayo::engine {
             if (cid != 0) {
                 let pi = 0;
                 while (pi < vector::length(&plan)) {
-                    assert!(character::char_owns_skill(cid, *vector::borrow(&plan, pi)), E_SKILL_NOT_OWNED);
+                    let sid = *vector::borrow(&plan, pi);
+                    if (sid >= item::ITEM_SKILL_BASE) {
+                        // 道具项: 必须是"战斗中可使用"的道具
+                        assert!(item::is_combat_usable(sid - item::ITEM_SKILL_BASE), E_SKILL_NOT_OWNED);
+                    } else {
+                        assert!(character::char_owns_skill(cid, sid), E_SKILL_NOT_OWNED);
+                    };
                     pi = pi + 1;
                 };
             };
@@ -581,6 +598,18 @@ module mohayo::engine {
         let plan_ref = types::member_plan(m);
         let skill_id = *vector::borrow(plan_ref, plan_idx);
         types::member_set_plan_start(m, cur_plan_start + 1);
+        if (skill_id >= item::ITEM_SKILL_BASE) {
+            // 道具使用(文档 §2.6: 排进计划队列, 占 1 回合行动位)
+            let item_type = skill_id - item::ITEM_SKILL_BASE;
+            let owner = types::member_owner(vector::borrow(&room.members, idx));
+            let (ok, kind, value) = item::combat_use(item_type, owner);
+            if (!ok) return; // 非战斗道具/无库存 → 空过
+            if (kind == item::EFFECT_MANA_BOOST) {
+                room.mana_pool = room.mana_pool + value;
+            };
+            event::emit(ItemUsed { room_id, player: owner, item_type, effect_kind: kind, value });
+            return;
+        };
         let s = skill_registry::get_skill(skill_id);
         execute_skill(room, room_id, idx, false, &s);
     }
@@ -607,6 +636,13 @@ module mohayo::engine {
     }
 
     fun execute_skill(room: &mut Room, room_id: u64, actor_idx: u64, actor_is_enemy: bool, s: &Skill) {
+        // 弹药(火枪): ammo_id>0 时每次施放固定消耗 N 份, 不足则空过(文档 §2.5.2; 怪物 AI 不耗弹药)
+        let ammo_id = (types::skill_ammo_id(s) as u64);
+        if (ammo_id > 0 && !actor_is_enemy) {
+            let owner = types::member_owner(vector::borrow(&room.members, actor_idx));
+            let need = (types::skill_ammo_cost(s) as u128) * item::one();
+            if (!item::try_consume_raw(ammo_id, owner, need)) return;
+        };
         let mana_cost = apply_mana_discount(room, actor_idx, actor_is_enemy, types::skill_mana_cost(s));
         let ap_cost = apply_ap_discount(room, actor_idx, actor_is_enemy, types::skill_ap_cost(s));
         if (mana_cost > room.mana_pool) return;

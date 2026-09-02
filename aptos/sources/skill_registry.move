@@ -116,8 +116,8 @@ module mohayo::skill_registry {
             types::skill_kind(s),
             types::skill_ap_cost(s),
             types::skill_ap_gain(s),
-            0, // ammo_id
-            0, // ammo_cost
+            types::skill_ammo_id(s),
+            types::skill_ammo_cost(s),
             types::skill_mana_cost(s),
             types::skill_hp_cost(s),
             types::skill_targeting(s),
