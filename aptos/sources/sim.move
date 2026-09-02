@@ -260,6 +260,51 @@ module mohayo::sim {
         (wins, samples)
     }
 
+    fun run_four(
+        a: &signer, difficulty: u64,
+        h1: u64, atk1: u64, m1: u64, s1: u64, p1: vector<u64>,
+        h2: u64, atk2: u64, m2: u64, s2: u64, p2: vector<u64>,
+        h3: u64, atk3: u64, m3: u64, s3: u64, p3: vector<u64>,
+        h4: u64, atk4: u64, m4: u64, s4: u64, p4: vector<u64>,
+    ): u64 {
+        engine::create_room(a, difficulty);
+        let room_id = skill_registry::next_room_id() - 1;
+        engine::join_room(a, room_id, h1, atk1, m1, s1);
+        engine::join_room(a, room_id, h2, atk2, m2, s2);
+        engine::join_room(a, room_id, h3, atk3, m3, s3);
+        engine::join_room(a, room_id, h4, atk4, m4, s4);
+        engine::start_combat(a, room_id);
+        engine::set_plan(a, room_id, 0, p1);
+        engine::set_plan(a, room_id, 1, p2);
+        engine::set_plan(a, room_id, 2, p3);
+        engine::set_plan(a, room_id, 3, p4);
+        let guard = 0;
+        while (guard < 800) {
+            let ph = engine::room_phase(room_id);
+            if (ph == 1) { engine::advance_turn(a, room_id); }
+            else if (ph == 3) { engine::advance_battle(a, room_id); }
+            else { break; };
+            guard = guard + 1;
+        };
+        if (engine::room_result(room_id) == 1) { 1 } else { 0 }
+    }
+
+    public fun clear_rate_four(
+        a: &signer, difficulty: u64, samples: u64,
+        h1: u64, atk1: u64, m1: u64, s1: u64, p1: vector<u64>,
+        h2: u64, atk2: u64, m2: u64, s2: u64, p2: vector<u64>,
+        h3: u64, atk3: u64, m3: u64, s3: u64, p3: vector<u64>,
+        h4: u64, atk4: u64, m4: u64, s4: u64, p4: vector<u64>,
+    ): (u64, u64) {
+        let wins = 0;
+        let i = 0;
+        while (i < samples) {
+            wins = wins + run_four(a, difficulty, h1, atk1, m1, s1, p1, h2, atk2, m2, s2, p2, h3, atk3, m3, s3, p3, h4, atk4, m4, s4, p4);
+            i = i + 1;
+        };
+        (wins, samples)
+    }
+
     fun reg(a: &signer) {
         character::init_for_test(a);
         skill_registry::init_for_test(a);
@@ -687,5 +732,12 @@ module mohayo::sim {
             33150, 3390, 3315, 3360, plan_attack(),
             33150, 3390, 3315, 3360, plan_attack());
         report(ct9a, ct9t);
+        // 常规满级 4 人满编 vs D9(文档 §3.1 目标对象: 合理职业搭配满级队)
+        let (f4a, f4t) = clear_rate_four(a, 9, 3,
+            33150, 3390, 3315, 3360, plan_attack(),
+            33150, 3390, 3315, 3360, plan_attack(),
+            33150, 3390, 3315, 3360, plan_attack(),
+            33150, 3390, 3315, 3360, plan_attack());
+        report(f4a, f4t);
     }
 }
