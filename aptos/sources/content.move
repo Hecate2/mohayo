@@ -60,6 +60,18 @@ module mohayo::content {
     public const SKILL_EMPEROR_SIPHON: u64 = 54;
     public const SKILL_EMPEROR_PRESSURE: u64 = 55;
     public const SKILL_EMPEROR_SUMMON: u64 = 56;
+    // ---- enemy skills 57+ (D2-D8 世界观怪物) ----
+    public const SKILL_RUST_CLAW: u64 = 57;     // 残破机仆·锈爪(单体物理)
+    public const SKILL_VINE_BIND: u64 = 58;     // 唤魔藤蔓·缠绕(单体物理+概率眩晕)
+    public const SKILL_PICK_SWEEP: u64 = 59;    // 亡灵矿工·矿镐横扫(2目标物理)
+    public const SKILL_WRAITH_DRAIN: u64 = 60;  // 怨灵·摄魂(单体魔法)
+    public const SKILL_WRAITH_FEAR: u64 = 61;   // 怨灵·恐惧尖啸(单体降命中)
+    public const SKILL_PRIEST_LASH: u64 = 62;   // 机神祭司·圣光鞭挞(单体魔法)
+    public const SKILL_PRIEST_SUMMON: u64 = 63; // 机神祭司·召唤机仆
+    public const SKILL_MAGMA_SPLASH: u64 = 64;  // 熔火傀儡·熔岩溅射(3目标物理)
+    public const SKILL_DRAGON_SPIT: u64 = 65;   // 熔铁幼龙·龙息(全体魔法)
+    public const SKILL_DIRE_BITE: u64 = 66;     // 深渊魔犬·撕咬(双段单体)
+    public const SKILL_SIPHON: u64 = 67;        // 魔素吞噬者·魔素虹吸(抽房间池)
 
     public const DUNGEON_D9: u64 = 9;
     public const D9_BATTLE_1: u64 = 71;

@@ -194,6 +194,7 @@ module mohayo::sim {
     // ===================== plan helpers =====================
     fun plan_attack(): vector<u64> { vector[1, 3] }              // 攻击 + 治疗(自循环)
     fun plan_burst(): vector<u64> { vector[24] }                 // 暴风剑(高AP消耗)自循环
+    fun plan_burst_heal(): vector<u64> { vector[24, 3] }         // 暴风剑+治疗(爆发带续航)
     fun plan_swing(): vector<u64> { vector[1] }                  // 纯攻击(挖矿/低危图,无治疗空转)
 
     // ================================================================
@@ -350,5 +351,29 @@ module mohayo::sim {
         assert!(w2 >= 18, 3);   // 满天赋1级 b2 ≥90%
         assert!(w3 >= 12 && w3 <= 17, 4); // 中坚 b3 60%~85% 通过 → 20%~40% 被超时清退(大魔素岩不轻松)
         assert!(wh >= 17, 5);   // Lv30 挖穿 ≥85%
+    }
+
+    // ================================================================
+    //  D2 reachability: a maxed-out level-1 (能力词条全 t10 + 全资源词条
+    //  ap折扣2/ap产量2/魔素折扣2/魔素产量2) driving 暴风剑+治疗 every turn is a
+    //  "极强天赋" build. Design intent: D2 (机仆残骸+藤蔓) 对 1 级仅"说不定能赢"——
+    //  顶级天赋也只有小概率(~10%)通过; 方差核心是唤魔藤蔓的缠绕眩晕(50%×2行动回合)
+    //  与机仆随机宕机, 而非单纯面板碾压。普通/无天赋 1 级打不穿(门槛仍在)。
+    // ================================================================
+    #[test]
+    fun sim_d2_l1_talented() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        // 对照组: 同面板无资源词条(普攻循环) — 不应能通 D2
+        let (wp, tp) = clear_rate(a, 2, 20, 355, 34, 28, 27, plan_attack());
+        report(wp, tp);
+        // 观察: 无资源词条的爆发+治疗流(不做断言——资源天赋分层由 D5 资源链测试承担)
+        let (wb, tb) = clear_rate(a, 2, 20, 355, 34, 28, 27, plan_burst_heal());
+        report(wb, tb);
+        // 极强天赋: 资源词条全拉满 + 爆发带续航循环
+        let (wt, tt) = clear_rate_affixed(a, 2, 20, 355, 34, 28, 27, 2, 2, 2, 2, plan_burst_heal());
+        report(wt, tt);
+        assert!(wt >= 1 && wt <= 4, 1); // 极强天赋1级对D2: 小概率通过(约10%, "说不定能赢")
+        assert!(wp == 0, 2);            // 无天赋普攻流1级打不穿D2(门槛仍存在)
     }
 }

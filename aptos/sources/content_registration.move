@@ -266,6 +266,43 @@ module mohayo::content_registration {
             0, 0, types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000,
             0, vector::empty(), types::make_summon_rule(19, 2, 0)));
 
+        // ===================== ENEMY SKILLS 57..67 (D2-D8 世界观怪物) =====================
+        // 注: 敌技 targeting 以"施放者视角"书写; 引擎按阵营自动镜像(打玩家侧用 1-4)。
+        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 700, 0, 920, 0,
+            vector::empty()));                                                          // 57 锈爪
+        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 800, 0, 900, 0,
+            vector[eff(types::OP_STUN(), 1, 3, 1, 500)]));                              // 58 缠绕(50%概率晕2回合行动——早期控制体验的方差核心)
+        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+            types::TGT_RAND_MULTI_ENEMY(), types::WT_THREAT_ENEMY(), 2, 500, 0, 880, 0,
+            vector::empty()));                                                          // 59 矿镐横扫
+        skill_registry::register_skill(account, sk(types::KIND_MAGIC(), 0, 0, 0, 0,
+            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 900, 0, 920, 0,
+            vector::empty()));                                                          // 60 摄魂(走魔攻)
+        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 0, 0, 0, 0,
+            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 0, 0, 900, 0,
+            vector[eff(types::OP_ACC_DOWN(), 300, 3, 1, 1000)]));                       // 61 恐惧尖啸
+        skill_registry::register_skill(account, sk(types::KIND_MAGIC(), 0, 0, 0, 0,
+            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 1000, 0, 920, 0,
+            vector::empty()));                                                          // 62 圣光鞭挞(走魔攻)
+        // 63 召唤机仆 —— 敌方阵营召唤残破机仆(模板31)×2，flags=0
+        skill_registry::register_skill(account, types::make_skill(0, types::KIND_SUPPORT(), 0, 0, 0, 0,
+            0, 0, types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000,
+            0, vector::empty(), types::make_summon_rule(31, 2, 0)));
+        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+            types::TGT_RAND_MULTI_ENEMY(), types::WT_THREAT_ENEMY(), 3, 520, 0, 880, 0,
+            vector::empty()));                                                          // 64 熔岩溅射
+        skill_registry::register_skill(account, sk(types::KIND_MAGIC(), 0, 0, 0, 0,
+            types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 600, 0, 900, 0,
+            vector::empty()));                                                          // 65 龙息(敌,全体魔攻)
+        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+            types::TGT_RAND_STRIKE_ENEMY(), types::WT_THREAT_ENEMY(), 2, 650, 0, 900, 0,
+            vector::empty()));                                                          // 66 撕咬(双段)
+        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 0, 0, 0, 0,
+            types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
+            vector[eff(types::OP_MANA_DRAIN(), 160, 1, 0, 1000)]));                     // 67 魔素虹吸(自施,单次抽池)
+
         // ===================== MONSTER AIs =====================
         // make_monster_ai(skill_cycle, cycle_len) ; skill selection is RANDOMIZED
         // per turn (engine picks a uniform-random index into the cycle each action).
@@ -287,6 +324,29 @@ module mohayo::content_registration {
             content::SKILL_EMPEROR_SIPHON,
             content::SKILL_EMPEROR_PRESSURE,
             content::SKILL_EMPEROR_SUMMON]);
+        // ---- 世界观重做: D2-D4 新怪 AI (8..17) ----
+        ai(account, vector[content::SKILL_RUST_CLAW,                          // 8 残破机仆:锈爪/宕机待机(方差: 半残的机仆随时卡死)
+            content::SKILL_IDLE]);
+        ai(account, vector[content::SKILL_VINE_BIND,                          // 9 唤魔藤蔓:缠绕为主
+            content::SKILL_VINE_BIND,
+            content::SKILL_RUST_CLAW]);
+        ai(account, vector[content::SKILL_VINE_BIND,                          // 10 唤魔藤王:缠绕连发
+            content::SKILL_VINE_BIND,
+            content::SKILL_VINE_BIND,
+            content::SKILL_RUST_CLAW]);
+        ai(account, vector[content::SKILL_PICK_SWEEP]);                       // 11 亡灵矿工:横扫
+        ai(account, vector[content::SKILL_WRAITH_DRAIN,                       // 12 怨灵:摄魂+恐惧
+            content::SKILL_WRAITH_FEAR,
+            content::SKILL_WRAITH_DRAIN]);
+        ai(account, vector[content::SKILL_PRIEST_LASH,                        // 13 机神祭司:鞭挞+召唤
+            content::SKILL_PRIEST_SUMMON,
+            content::SKILL_PRIEST_LASH]);
+        ai(account, vector[content::SKILL_MAGMA_SPLASH]);                     // 14 熔火傀儡:溅射
+        ai(account, vector[content::SKILL_DRAGON_SPIT]);                      // 15 熔铁幼龙:龙息
+        ai(account, vector[content::SKILL_DIRE_BITE]);                        // 16 深渊魔犬:撕咬
+        ai(account, vector[content::SKILL_SIPHON,                             // 17 魔素吞噬者:虹吸为主
+            content::SKILL_SIPHON,
+            content::SKILL_RUST_CLAW]);
 
         // ===================== ENEMY TEMPLATES (ids 1..30, in order) =====================
         // make_enemy_template(ai_id, threat, max_hp, power, magic, speed, base_acc, rew_min, rew_max, ods)
@@ -330,6 +390,18 @@ module mohayo::content_registration {
         skill_registry::register_template(account, tmpl(5, 1, 11000, 950, 0, 125, 900, 60, 95)); // 28 火花锯兵
         skill_registry::register_template(account, tmpl(7, 3, 220000, 620, 480, 140, 920, 400, 600)); // 29 机神皇帝(备用机体, 王座变体)
         skill_registry::register_template(account, tmpl(7, 3, 250000, 640, 500, 150, 930, 500, 800)); // 30 机神皇帝(炉召唤)
+        // ---- 世界观重做: D2-D4 新怪 (31..40)。模板 5-18(旧哥布林/兽人/幽灵/灼热草稿)不再被
+        //     任何 dungeon 表引用, 仅保留占位防止 id 漂移; 内容定稿后可整体清理重排。 ----
+        skill_registry::register_template(account, tmpl(8, 1, 110, 10, 0, 90, 900, 2, 4));     // 31 残破机仆(D2)
+        skill_registry::register_template(account, tmpl(9, 1, 180, 14, 0, 45, 900, 4, 7));     // 32 唤魔藤蔓(D2)
+        skill_registry::register_template(account, tmpl(10, 2, 500, 12, 0, 50, 900, 9, 14));   // 33 唤魔藤王(D2b3)
+        skill_registry::register_template(account, tmpl(11, 1, 420, 110, 0, 60, 900, 4, 6));    // 34 亡灵矿工(D3)
+        skill_registry::register_template(account, tmpl(12, 1, 320, 0, 170, 150, 900, 5, 8));   // 35 怨灵(D3,走魔攻)
+        skill_registry::register_template(account, tmpl(13, 3, 1600, 0, 200, 70, 920, 14, 22)); // 36 机神祭司(D3b3,召唤)
+        skill_registry::register_template(account, tmpl(14, 2, 1400, 150, 0, 35, 900, 10, 16)); // 37 熔火傀儡(D4,AoE)
+        skill_registry::register_template(account, tmpl(15, 2, 1900, 0, 210, 110, 920, 18, 28));// 38 熔铁幼龙(D4,全体龙息)
+        skill_registry::register_template(account, tmpl(16, 1, 700, 160, 0, 170, 920, 8, 13));  // 39 深渊魔犬(D4,高速)
+        skill_registry::register_template(account, tmpl(17, 3, 3000, 60, 0, 20, 900, 24, 38));  // 40 魔素吞噬者(D4,虹吸)
 
         // ===================== ENEMY TABLES (ids 1..32, in order) =====================
         // make_table_entry(template_id, weight)
@@ -365,17 +437,27 @@ module mohayo::content_registration {
         skill_registry::register_table(account, vector[te(26, 600), te(19, 400)]);            // 30 D9b3 机神魔素炉(炉+卫兵)
         skill_registry::register_table(account, vector[te(27, 1000)]);                        // 31 D9b4 王座宝箱
         skill_registry::register_table(account, vector[te(29, 1000)]);                        // 32 D9b4 皇帝备用机体
+        // ---- 世界观重做: D2-D4 新表 (33..41)。旧表 5..27 为草稿体系占位,不被 dungeon battles 引用。 ----
+        skill_registry::register_table(account, vector[te(31, 1000)]);                        // 33 D2b1 机仆×2
+        skill_registry::register_table(account, vector[te(32, 700), te(31, 300)]);           // 34 D2b2 藤蔓混编
+        skill_registry::register_table(account, vector[te(33, 800), te(31, 200)]);           // 35 D2b3 藤王+机仆
+        skill_registry::register_table(account, vector[te(34, 1000)]);                        // 36 D3b1 矿工群
+        skill_registry::register_table(account, vector[te(34, 650), te(35, 350)]);           // 37 D3b2 矿工+怨灵
+        skill_registry::register_table(account, vector[te(36, 850), te(35, 150)]);           // 38 D3b3 机神祭司
+        skill_registry::register_table(account, vector[te(37, 600), te(39, 400)]);           // 39 D4b1 傀儡+魔犬
+        skill_registry::register_table(account, vector[te(38, 700), te(37, 300)]);           // 40 D4b2 熔铁幼龙
+        skill_registry::register_table(account, vector[te(40, 600), te(39, 400)]);           // 41 D4b3 吞噬者+魔犬护卫
 
         // ===================== DUNGEONS D1..D10 =====================
         // make_dungeon_config(table, enemy_count, mana/turn, reward_base, entry_fee, rescue_fee, turn_interval, battles)
         skill_registry::set_dungeon(account, 1, dng(1, 2, 2, 0, 0, 10, BATTLE_TURN_CAP, 4)); // D1 灰烬矿坑(免费)；mana 2/回合保证"每回合挥一镐"节奏
         skill_registry::set_dungeon_battles(account, 1, vector[bt(1, 2), bt(2, 2), bt(3, 2), bt(4, 1)]);
-        skill_registry::set_dungeon(account, 2, dng(5, 3, 2, 0, 5, 15, BATTLE_TURN_CAP, 3));   // D2 哥布林营地
-        skill_registry::set_dungeon_battles(account, 2, vector[bt(5, 3), bt(6, 3), bt(7, 3)]);
-        skill_registry::set_dungeon(account, 3, dng(8, 3, 3, 0, 10, 25, BATTLE_TURN_CAP, 3));  // D3 兽人峡谷
-        skill_registry::set_dungeon_battles(account, 3, vector[bt(8, 3), bt(9, 3), bt(10, 1)]);
-        skill_registry::set_dungeon(account, 4, dng(11, 3, 4, 0, 15, 30, BATTLE_TURN_CAP, 3)); // D4 幽暗古墓
-        skill_registry::set_dungeon_battles(account, 4, vector[bt(11, 3), bt(12, 3), bt(13, 1)]);
+        skill_registry::set_dungeon(account, 2, dng(33, 3, 3, 0, 5, 15, BATTLE_TURN_CAP, 3)); // D2 遗弃回廊
+        skill_registry::set_dungeon_battles(account, 2, vector[bt(33, 2), bt(34, 2), bt(35, 1)]);
+        skill_registry::set_dungeon(account, 3, dng(36, 3, 3, 0, 10, 25, BATTLE_TURN_CAP, 3));// D3 沉眠圣所
+        skill_registry::set_dungeon_battles(account, 3, vector[bt(36, 3), bt(37, 3), bt(38, 1)]);
+        skill_registry::set_dungeon(account, 4, dng(39, 3, 4, 0, 15, 30, BATTLE_TURN_CAP, 3));// D4 熔铁深渊
+        skill_registry::set_dungeon_battles(account, 4, vector[bt(39, 3), bt(40, 2), bt(41, 2)]);
         // D5 灼热前线 —— 单人攻关门；b3 督军战加入混沌变体(20% 拖出猎犬/魔像，提升随机性)
         skill_registry::set_dungeon(account, 5, dng(14, 3, 4, 0, 20, 40, BATTLE_TURN_CAP, 3));
         skill_registry::set_dungeon_battles(account, 5, vector[bt(14, 3), bt(15, 3), bt(16, 1)]);
