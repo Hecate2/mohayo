@@ -305,6 +305,35 @@ module mohayo::sim {
         (wins, samples)
     }
 
+    // 真实角色 4 人队执行器: 4 个已 mint 的角色(生产链路 join_room_as_char) + 各自计划。
+    // 用于"职业互补组队"观测(守卫坦克/白魔奶/黑魔献祭/剑士输出)。
+    fun run_pro4(
+        a: &signer, difficulty: u64,
+        c1: u64, p1: vector<u64>, c2: u64, p2: vector<u64>,
+        c3: u64, p3: vector<u64>, c4: u64, p4: vector<u64>,
+    ): u64 {
+        engine::create_room(a, difficulty);
+        let room_id = skill_registry::next_room_id() - 1;
+        engine::join_room_as_char(a, room_id, c1);
+        engine::join_room_as_char(a, room_id, c2);
+        engine::join_room_as_char(a, room_id, c3);
+        engine::join_room_as_char(a, room_id, c4);
+        engine::start_combat(a, room_id);
+        engine::set_plan(a, room_id, 0, p1);
+        engine::set_plan(a, room_id, 1, p2);
+        engine::set_plan(a, room_id, 2, p3);
+        engine::set_plan(a, room_id, 3, p4);
+        let guard = 0;
+        while (guard < 900) {
+            let ph = engine::room_phase(room_id);
+            if (ph == 1) { engine::advance_turn(a, room_id); }
+            else if (ph == 3) { engine::advance_battle(a, room_id); }
+            else { break; };
+            guard = guard + 1;
+        };
+        if (engine::room_result(room_id) == 1) { 1 } else { 0 }
+    }
+
     fun reg(a: &signer) {
         character::init_for_test(a);
         skill_registry::init_for_test(a);
@@ -791,5 +820,43 @@ module mohayo::sim {
         let mc = engine::member_count(room_id);
         std::debug::print(&vector[mc]);
         assert!(mc >= 3, 1); // 白魔 + ≥2 只人偶(mana 8/回合 足够每回招)
+    }
+
+    // ================================================================
+    //  真实职业搭配队(职业互补) vs 同型队观测: Lv300 常规词条 守卫(盾击+盾墙)/
+    //  白魔(圣泉+人偶)/黑魔(献祭产魔)/剑士(快剑+斩铁)。D9 与 D5 通关率。
+    //  与同型面板队(~33% D9)对比, 看职业互补的贡献。
+    // ================================================================
+    #[test]
+    fun sim_professional_d9() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let own = std::signer::address_of(a);
+        // 守卫(巨人, self 急救39)
+        character::gm_mint_at_level(a, own, 1, 2, vector[0, 0, 0, 0], vector[39], 300);
+        let c_g = character::owner_latest_char(own);
+        // 白魔(人类, self 龙息43)
+        character::gm_mint_at_level(a, own, 4, 0, vector[0, 0, 0, 0], vector[43], 300);
+        let c_w = character::owner_latest_char(own);
+        // 黑魔(人类, self 魔爆44)
+        character::gm_mint_at_level(a, own, 3, 0, vector[0, 0, 0, 0], vector[44], 300);
+        let c_b = character::owner_latest_char(own);
+        // 剑士(人类, self 暴风剑24)
+        character::gm_mint_at_level(a, own, 2, 0, vector[0, 0, 0, 0], vector[24], 300);
+        let c_s = character::owner_latest_char(own);
+        let w1 = 0;
+        let i1 = 0;
+        while (i1 < 3) {
+            w1 = w1 + run_pro4(a, 9, c_g, vector[31, 32], c_w, vector[37, 38], c_b, vector[34], c_s, vector[29, 29, 30]);
+            i1 = i1 + 1;
+        };
+        report(w1, 3); // 职业队 D9
+        let w2 = 0;
+        let i2 = 0;
+        while (i2 < 2) {
+            w2 = w2 + run_pro4(a, 5, c_g, vector[31, 32], c_w, vector[37, 38], c_b, vector[34], c_s, vector[29, 29, 30]);
+            i2 = i2 + 1;
+        };
+        report(w2, 2); // 职业队 D5
     }
 }
