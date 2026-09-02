@@ -491,4 +491,40 @@ module mohayo::sim {
         assert!(w6 >= w7 && w7 >= w8, 2); // 难度单调递进
         assert!(w8 >= 1, 3);    // near-max 打 D8 留有胜面(非全灭)
     }
+
+    // ================================================================
+    //  真实角色端到端: 守卫(31盾击, 挂 TAUNT) 在双人房间拉走全部单体火力 ——
+    //  走生产链路 gm_mint_at_level → join_room_as_char → 双成员独立计划。
+    //  覆写 D3 为单场 1 只祭司/怨灵(单体魔攻技 targeting1), mana 给足。
+    //  判定: 守卫掉血 >> 脆皮(比值>3) —— taunt 未实现时两者掉血接近。
+    // ================================================================
+    #[test]
+    fun sim_guard_taunt_e2e() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let own = std::signer::address_of(a);
+        character::gm_mint_at_level(a, own, 1, 2, vector[0, 0, 0, 0], vector[39], 40); // 守卫×巨人
+        let guard = character::owner_latest_char(own);
+        character::gm_mint_at_level(a, own, 3, 0, vector[0, 0, 0, 0], vector[43], 40); // 人类黑魔(脆皮)
+        let squishy = character::owner_latest_char(own);
+        // 覆写 D3: 单场 1 敌, 表10(祭司850/怨灵150), 两者技能均为 targeting1 单体
+        skill_registry::set_dungeon(a, 3, mohayo::types::make_dungeon_config(10, 1, 15, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon_battles(a, 3, vector[mohayo::types::make_battle_config(10, 1)]);
+        engine::create_room(a, 3);
+        let room_id = skill_registry::next_room_id() - 1;
+        engine::join_room_as_char(a, room_id, guard);
+        engine::join_room_as_char(a, room_id, squishy);
+        engine::start_combat(a, room_id);
+        engine::set_plan(a, room_id, 0, vector[31]); // 守卫: 每回盾击(眩晕40%+嘲讽2轮)
+        engine::set_plan(a, room_id, 1, vector[]);   // 脆皮: 空过
+        let guard_i = 0;
+        while (guard_i < 8) { engine::advance_turn(a, room_id); guard_i = guard_i + 1; };
+        let (gh, gmax, _, _, _, _) = engine::member_state(room_id, 0);
+        let (sh, smax, _, _, _, _) = engine::member_state(room_id, 1);
+        let guard_drop = gmax - gh;
+        let squish_drop = smax - sh;
+        std::debug::print(&vector[guard_drop, squish_drop]);
+        assert!(guard_drop > 0, 1);     // 守卫确实吃到单体火力
+        assert!(squish_drop == 0, 2);   // 嘲讽拉怪: 脆皮全程零受击(taunt 未实现时脆皮会吃 2~4 击)
+    }
 }
