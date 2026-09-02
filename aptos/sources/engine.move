@@ -266,7 +266,7 @@ module mohayo::engine {
     fun advance_turn_inner(room: &mut Room, room_id: u64) {
         room.turn_id = room.turn_id + 1;
         room.battle_turns = room.battle_turns + 1;
-        tick_all_effects(room);
+        tick_all_effects(room, room_id);
         act_all(room, room_id);
         let mut_delta = room.mana_per_turn;
         let mlen = vector::length(&room.members);
@@ -517,12 +517,15 @@ module mohayo::engine {
 
     // ============================ internal: turn loop ============================
 
-    fun tick_all_effects(room: &mut Room) {
+    fun tick_all_effects(room: &mut Room, room_id: u64) {
         let mlen = vector::length(&room.members);
         let i = 0;
         while (i < mlen) {
-            let alive = types::member_alive(vector::borrow(&room.members, i));
-            if (alive) {
+            if (types::member_alive(vector::borrow(&room.members, i))) {
+                // DOT(op8): 回合初先造成伤害(固定 magnitude/跳, 先扣护盾再扣血,
+                // 走正常死亡管线——DOT 致死同样触发死亡召唤等既有结算), 再递减 duration。
+                let dot = (types::member_sum_effect_mag(vector::borrow(&room.members, i), 8) as u64);
+                if (dot > 0) { deal_damage(room, room_id, false, i, dot); };
                 types::member_tick_effects(vector::borrow_mut(&mut room.members, i));
             };
             i = i + 1;
@@ -530,8 +533,9 @@ module mohayo::engine {
         let elen = vector::length(&room.enemies);
         let j = 0;
         while (j < elen) {
-            let alive = types::enemy_alive(vector::borrow(&room.enemies, j));
-            if (alive) {
+            if (types::enemy_alive(vector::borrow(&room.enemies, j))) {
+                let dot = (types::enemy_sum_effect_mag(vector::borrow(&room.enemies, j), 8) as u64);
+                if (dot > 0) { deal_damage(room, room_id, true, j, dot); };
                 types::enemy_tick_effects(vector::borrow_mut(&mut room.enemies, j));
             };
             j = j + 1;

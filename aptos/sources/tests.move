@@ -691,6 +691,45 @@ module mohayo::tests {
     }
 
     #[test]
+    fun test_dot_ticks_damage() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        // skill id1 = 毒刃类: 低直伤 + DOT(mag40, dur3 → 3 跳 ×40)
+        skill_registry::register_skill(a, types::make_skill(
+            0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 1, 30, 0, 1000, 0,
+            vector[types::make_effect_spec(8, 3, 40, 1, 1000)],
+            types::make_summon_rule(0, 0, 0)));
+        // skill id2 = 待机(敌人用, 不打人)
+        skill_registry::register_skill(a, types::make_skill(
+            0, 3, 0, 0, 0, 0, 0, 0, 9, 0, 1, 0, 0, 1000, 0,
+            vector::empty(), types::make_summon_rule(0, 0, 0)));
+        skill_registry::register_ai(a, simple_ai(2));             // ai1 = 待机
+        skill_registry::register_template(a, simple_template(1)); // 敌人 hp1000
+        skill_registry::register_table(a, vector[types::make_table_entry(1, 1000)]);
+        skill_registry::set_dungeon(a, 1, types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1));
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 2000, 200, 100, 30);
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[1]);
+        engine::advance_turn(a, 1); // r1: 直伤 30×200/1000=6 → 994; DOT dur3 挂上
+        let (h1, _, _, _, _, _) = engine::enemy_state(1, 0);
+        assert!(h1 == 994, 1);
+        engine::set_plan(a, 1, 0, vector[]); // 玩家空过 → 之后全靠 DOT 跳血
+        engine::advance_turn(a, 1);          // r2 初: 跳 40 → 954; dur 3→2
+        let (h2, _, _, _, _, _) = engine::enemy_state(1, 0);
+        assert!(h2 == 954, 2);
+        engine::advance_turn(a, 1); // r3: 跳 40 → 914; 2→1
+        let (h3, _, _, _, _, _) = engine::enemy_state(1, 0);
+        assert!(h3 == 914, 3);
+        engine::advance_turn(a, 1); // r4: 跳 40 → 874; 1→0 移除
+        let (h4, _, _, _, _, _) = engine::enemy_state(1, 0);
+        assert!(h4 == 874, 4);
+        engine::advance_turn(a, 1); // r5: 无 DOT → 血量不再变
+        let (h5, _, _, _, _, _) = engine::enemy_state(1, 0);
+        assert!(h5 == 874, 5);
+    }
+
+    #[test]
     fun test_stun_prevents_action() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
@@ -1214,14 +1253,14 @@ module mohayo::tests {
         assert!(bi_count == 4, 4);
         let variants = skill_registry::get_variants(9, 4);
         assert!(vector::length(&variants) == 2, 5);
-        // --- furnace(26) on-death-spawn == Emperor(30) @60% ---
-        let furnace = skill_registry::get_template(26);
+        // --- furnace(30) on-death-spawn == Emperor(34) @60% ---
+        let furnace = skill_registry::get_template(30);
         let ods = types::template_on_death_spawn(&furnace);
-        assert!(types::on_death_spawn_template_id(ods) == 30, 6);
+        assert!(types::on_death_spawn_template_id(ods) == 34, 6);
         assert!(types::on_death_spawn_prob(ods) == 600, 7);
-        // --- D5 overseer(16) exists and battle-3 has a chaos variant ---
-        let overseer = skill_registry::get_template(16);
-        assert!(types::template_ai_id(&overseer) == 3, 8);
+        // --- D5 overseer(17) exists and battle-3 has a chaos variant ---
+        let overseer = skill_registry::get_template(17);
+        assert!(types::template_ai_id(&overseer) == 13, 8);
         assert!(vector::length(&skill_registry::get_variants(5, 3)) == 1, 9);
     }
 
