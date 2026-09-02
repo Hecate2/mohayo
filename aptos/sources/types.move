@@ -575,9 +575,13 @@ module mohayo::types {
         let i = 0;
         while (i < len) {
             let e = vector::borrow_mut(effects, i);
-            if (e.op == ae.op && ae.op != 4) { // SHIELD stacks separately
+            if (e.op == ae.op && ae.op != 4 && ae.op != 8) { // SHIELD stacks separately; DOT refreshes only
                 e.duration = ae.duration;
                 e.magnitude = e.magnitude + ae.magnitude;
+                return;
+            };
+            if (e.op == ae.op && ae.op == 8) { // DOT: 同源反复施加只刷新 duration, 不累加(防跳伤线性堆叠)
+                e.duration = ae.duration;
                 return;
             };
             i = i + 1;

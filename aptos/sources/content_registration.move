@@ -108,7 +108,7 @@ module mohayo::content_registration {
             vector::empty()));                                                          // 9 魔素爆发
         skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 1, 1, 3, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 140, 0, 950, 0,
-            vector[eff(types::OP_DOT(), 150, 3, 1, 1000)]));                          // 10 毒刃
+            vector[eff(types::OP_DOT(), 20, 3, 1, 1000)]));                          // 10 毒刃(流血20×3, 复审后值; 同源刷新不累加)
         skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 1, 0, 2, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
             vector[eff(types::OP_TAUNT(), 1, 3, 0, 1000), eff(types::OP_DMG_IN_MOD(), 150, 3, 0, 1000)])); // 11 挑衅
