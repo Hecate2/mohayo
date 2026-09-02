@@ -51,6 +51,7 @@ module mohayo::types {
     public fun OP_LIFESTEAL(): u8 { 12 }
     public fun OP_MANA_DELTA(): u8 { 13 }
     public fun OP_SUMMON(): u8 { 14 }
+    public fun OP_MANA_DRAIN(): u8 { 15 }
 
     // ---- room phases ----
     public fun PHASE_LOBBY(): u8 { 0 }
@@ -456,6 +457,9 @@ module mohayo::types {
     public fun member_plan(m: &Member): &vector<u64> { &m.plan }
     public fun member_plan_start(m: &Member): u64 { m.plan_start }
     public fun member_mana_gain_bonus(m: &Member): i64 { m.mana_gain_bonus }
+    public fun member_mana_discount(m: &Member): u16 { m.mana_discount }
+    public fun member_ap_discount(m: &Member): u16 { m.ap_discount }
+    public fun member_ap_bonus(m: &Member): u16 { m.ap_bonus }
     public fun member_class_id(m: &Member): u8 { m.class_id }
 
     // ---- Member mutators ----

@@ -438,6 +438,8 @@ module mohayo::character {
         class_id: u8, class: &ClassDef, race: u8, race_def: &RaceDef,
         self_select: &vector<u64>,
     ): vector<u64> {
+        // No auto-granted base skills: every skill must come from the chosen
+        // class, the character's race, or the shared pool picked at creation.
         let skills = vector::empty<u64>();
         let class_skills = get_class_skill_ids_for(class_id);
         let mut_i = 0;

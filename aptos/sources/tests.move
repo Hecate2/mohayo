@@ -8,6 +8,7 @@ module mohayo::tests {
     use mohayo::economy;
     use mohayo::engine;
     use mohayo::rng;
+    use mohayo::content_registration;
 
     // ===================== helpers =====================
 
@@ -1027,17 +1028,22 @@ module mohayo::tests {
         let dungeon = types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1);
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
-        engine::join_room(a, 1, 500, 100, 50, 30);
+        engine::join_room(a, 1, 10000, 100, 50, 30);
         engine::start_combat(a, 1);
-        // Turn 1: enemy uses attack (cycle[0])
+        // AI picks a skill uniformly at random each turn. With a [attack, stun] cycle the
+        // enemy must use stun (the only effect-producer) at least once across a 10-turn
+        // window (P(never) = 1/2^10), proving selection is randomized, not fixed-order.
         engine::set_plan(a, 1, 0, vector[1]);
-        engine::advance_turn(a, 1);
-        // Turn 2: enemy uses stun (cycle[1])
-        engine::set_plan(a, 1, 0, vector[1]);
-        engine::advance_turn(a, 1);
-        // Check member has stun effect after turn 2
-        let ec = engine::member_effect_count(1, 0);
-        assert!(ec > 0, 1);
+        let saw_stun = false;
+        let hi = 0;
+        while (hi < 10) {
+            engine::advance_turn(a, 1);
+            if (!saw_stun && engine::member_effect_count(1, 0) > 0) {
+                saw_stun = true;
+            };
+            hi = hi + 1;
+        };
+        assert!(saw_stun, 1);
     }
 
     #[test]
@@ -1166,5 +1172,107 @@ module mohayo::tests {
         // Both should have dealt damage
         let (hp1, _, _, _, _, _) = engine::enemy_state(1, 0);
         assert!(hp1 < 1000, 2);
+    }
+
+    // ===================== content_registration integration tests =====================
+    // These load the full production content via register_all_content and verify the
+    // wired templates/tables/dungeons actually run in the engine.
+
+    #[test]
+    fun test_content_d1_stones_do_not_attack() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        // D1 = free mining; all stones are idle (AI 1), they must never hurt the player.
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 5000, 200, 100, 30);
+        engine::start_combat(a, 1);
+        let (hp0, max_hp, _atk, _mag, _spd, _alive) = engine::member_state(1, 0);
+        assert!(hp0 == max_hp, 1);
+        // No plan: player idles too. Advance a few turns below the D1 turn budget (8).
+        let i = 0;
+        while (i < 5) {
+            engine::advance_turn(a, 1);
+            i = i + 1;
+        };
+        let (hp1, _mh, _a, _m, _s, _alive) = engine::member_state(1, 0);
+        // Player HP untouched === stones never strike.
+        assert!(hp1 == max_hp, 2);
+    }
+
+    #[test]
+    fun test_content_registry_wiring() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        // --- skills ---
+        assert!(skill_registry::skill_registered(1), 1);   // 攻击
+        assert!(skill_registry::skill_registered(22), 2);  // 待机
+        assert!(skill_registry::skill_registered(56), 3);  // 皇帝召唤
+        // --- dungeon 9 has 4 battles, battle-4 has the 85/15 variant ---
+        let bi_count = skill_registry::get_battle_count(9);
+        assert!(bi_count == 4, 4);
+        let variants = skill_registry::get_variants(9, 4);
+        assert!(vector::length(&variants) == 2, 5);
+        // --- furnace(26) on-death-spawn == Emperor(30) @60% ---
+        let furnace = skill_registry::get_template(26);
+        let ods = types::template_on_death_spawn(&furnace);
+        assert!(types::on_death_spawn_template_id(ods) == 30, 6);
+        assert!(types::on_death_spawn_prob(ods) == 600, 7);
+        // --- D5 overseer(16) exists and battle-3 has a chaos variant ---
+        let overseer = skill_registry::get_template(16);
+        assert!(types::template_ai_id(&overseer) == 3, 8);
+        assert!(vector::length(&skill_registry::get_variants(5, 3)) == 1, 9);
+    }
+
+    #[test]
+    fun test_content_d9_spawns_enemies() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        // D9 卫兵走廊: create at difficulty 9, battle 1 spawns from table 28 (4 mech guards).
+        // Room id is auto-incremented (1 for the first room), independent of difficulty.
+        engine::create_room(a, 9);
+        engine::join_room(a, 1, 90000, 3000, 3000, 2000);
+        engine::start_combat(a, 1);
+        assert!(engine::room_phase(1) == 1, 1);
+        assert!(engine::enemy_count(1) == 4, 2);
+    }
+
+    #[test]
+    fun test_content_d5_spawns_enemies() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        // D5 battle 1: 3 地狱猎犬. Room id = 1 (first auto-incremented id).
+        engine::create_room(a, 5);
+        engine::join_room(a, 1, 50000, 1500, 1200, 1000);
+        engine::start_combat(a, 1);
+        assert!(engine::room_phase(1) == 1, 1);
+        assert!(engine::enemy_count(1) == 3, 2);
+    }
+
+    #[test]
+    fun test_content_d1_miner_clears_first_battle() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        // A low-fitted miner should clear D1 battle 1 (two 碎石, 80 HP each) inside the
+        // 8-turn budget and pocket the reward at intermission. (The true weakest-player
+        // guarantee is fine-tuned later by the Phase-5 sim harness.)
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 4000, 400, 400, 30);
+        engine::start_combat(a, 1);
+        assert!(engine::enemy_count(1) == 2, 1);
+        engine::set_plan(a, 1, 0, vector[1]);
+        let guard = 0;
+        while (guard < 30 && engine::room_phase(1) == 1) {
+            engine::advance_turn(a, 1);
+            guard = guard + 1;
+        };
+        // Miner must reach intermission (3), not be evicted by timeout (2).
+        assert!(engine::room_phase(1) == 3, 2);
+        // Reward accumulated from killing both stones.
+        assert!(engine::reward_pool(1) > 0, 3);
     }
 }

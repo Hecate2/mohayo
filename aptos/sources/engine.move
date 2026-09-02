@@ -5,8 +5,7 @@ module mohayo::engine {
     use aptos_std::table::{Self, Table};
     use std::signer;
     use std::vector;
-    use mohayo::rng;
-    use mohayo::types::{Self, Skill, ActiveEffect, Member, Enemy, Target};
+    use mohayo::types::{Self, Skill, Member, Enemy, Target};
     use mohayo::skill_registry;
 
     const E_ROOM_NOT_FOUND: u64 = 3;
@@ -32,9 +31,12 @@ module mohayo::engine {
         phase: u8,
         battle_index: u64,
         total_battles: u64,
+        battle_turns: u64,
         turn_id: u64,
+        result: u8,
         mana_pool: u64,
         mana_per_turn: u64,
+        mana_all_consumed: u64,
         reward_pool: u64,
         leader: address,
         rng_seed: u64,
@@ -98,9 +100,12 @@ module mohayo::engine {
             phase: 0,
             battle_index: 0,
             total_battles: if (types::dungeon_battles(&dungeon) >= 1) { types::dungeon_battles(&dungeon) as u64 } else { 1 },
+            battle_turns: 0,
             turn_id: 0,
+            result: 0,
             mana_pool: 0,
             mana_per_turn: types::dungeon_mana_per_turn(&dungeon),
+            mana_all_consumed: 0,
             reward_pool: 0,
             leader: addr,
             rng_seed: rid * 1000 + 1,
@@ -187,10 +192,21 @@ module mohayo::engine {
 
     fun advance_turn_inner(room: &mut Room, room_id: u64) {
         room.turn_id = room.turn_id + 1;
+        room.battle_turns = room.battle_turns + 1;
         tick_all_effects(room);
         act_all(room, room_id);
-        let delta = room.mana_per_turn;
-        room.mana_pool = room.mana_pool + delta;
+        let mut_delta = room.mana_per_turn;
+        let mlen = vector::length(&room.members);
+        let mi = 0;
+        while (mi < mlen) {
+            let m = vector::borrow(&room.members, mi);
+            if (types::member_alive(m)) {
+                let g = types::member_mana_gain_bonus(m);
+                if (g > 0) { mut_delta = mut_delta + (g as u64); }
+            };
+            mi = mi + 1;
+        };
+        room.mana_pool = room.mana_pool + mut_delta;
         event::emit(ManaChanged { room_id, pool: room.mana_pool });
         check_end(room, room_id);
         event::emit(TurnAdvanced { room_id, turn_id: room.turn_id });
@@ -217,6 +233,14 @@ module mohayo::engine {
         let rs = borrow_global<RoomStore>(@mohayo);
         assert!(table::contains(&rs.rooms, room_id), E_ROOM_NOT_FOUND);
         table::borrow(&rs.rooms, room_id).phase
+    }
+
+    #[view]
+    public fun room_result(room_id: u64): u8 acquires RoomStore {
+        // 0 = unresolved, 1 = victory, 2 = defeat/evicted
+        let rs = borrow_global<RoomStore>(@mohayo);
+        assert!(table::contains(&rs.rooms, room_id), E_ROOM_NOT_FOUND);
+        table::borrow(&rs.rooms, room_id).result
     }
 
     #[view]
@@ -320,6 +344,7 @@ module mohayo::engine {
 
     fun spawn_battle(room: &mut Room, room_id: u64) {
         room.battle_index = room.battle_index + 1;
+        room.battle_turns = 0;
         room.enemies = vector::empty();
 
         let difficulty = room.difficulty as u64;
@@ -440,6 +465,8 @@ module mohayo::engine {
         };
     }
 
+    // ============================ internal: turn loop ============================
+
     fun act_all(room: &mut Room, room_id: u64) {
         let mlen = vector::length(&room.members);
         let i = 0;
@@ -468,8 +495,10 @@ module mohayo::engine {
         let plan_len = vector::length(types::member_plan(vector::borrow(&room.members, idx)));
         if (plan_len == 0) return;
         let m = vector::borrow_mut(&mut room.members, idx);
-        let cur_ap = types::member_ap(m);
-        types::member_set_ap(m, cur_ap + 1);
+        let cur_ap = (types::member_ap(m) as u64);
+        let bonus_ap = (types::member_ap_bonus(m) as u64);
+        let new_ap = cur_ap + 1 + bonus_ap;
+        types::member_set_ap(m, if (new_ap > 22) { 22 } else { new_ap as u16 });
         let cur_plan_start = types::member_plan_start(m);
         let plan_idx = cur_plan_start % (plan_len as u64);
         let plan_ref = types::member_plan(m);
@@ -485,8 +514,14 @@ module mohayo::engine {
         let ai = skill_registry::get_ai(ai_id);
         let cycle_len = types::ai_cycle_len(&ai) as u64;
         if (cycle_len == 0) return;
-        let turn = types::enemy_turn_counter(vector::borrow(&room.enemies, idx)) as u64;
-        let skill_id = *vector::borrow(types::ai_skill_cycle(&ai), turn % cycle_len);
+        // Randomized move selection: each turn the enemy picks a uniformly random skill
+        // from its cycle. Repeating a skill in the cycle raises its weight. Seeded from
+        // room rng so combat stays deterministic per room_id/turn (repeatable for tests).
+        let cyc = types::ai_skill_cycle(&ai);
+        let mut_rng = mohayo::rng::new(room.rng_seed + idx + room.turn_id);
+        let pick = mohayo::rng::below(&mut mut_rng, cycle_len);
+        room.rng_seed = room.rng_seed + 1;
+        let skill_id = *vector::borrow(cyc, pick);
         let e_mut = vector::borrow_mut(&mut room.enemies, idx);
         let cur_turn = types::enemy_turn_counter(e_mut);
         types::enemy_set_turn_counter(e_mut, cur_turn + 1);
@@ -495,12 +530,12 @@ module mohayo::engine {
     }
 
     fun execute_skill(room: &mut Room, room_id: u64, actor_idx: u64, actor_is_enemy: bool, s: &Skill) {
-        let mana_cost = types::skill_mana_cost(s);
+        let mana_cost = apply_mana_discount(room, actor_idx, actor_is_enemy, types::skill_mana_cost(s));
+        let ap_cost = apply_ap_discount(room, actor_idx, actor_is_enemy, types::skill_ap_cost(s));
         if (mana_cost > room.mana_pool) return;
-        let ap_cost = types::skill_ap_cost(s);
         if (!actor_is_enemy) {
             let m = vector::borrow(&room.members, actor_idx);
-            if (types::member_ap(m) < ap_cost) return;
+            if ((types::member_ap(m) as u64) < (ap_cost as u64)) return;
         };
         room.mana_pool = room.mana_pool - mana_cost;
         if (!actor_is_enemy) {
@@ -518,12 +553,35 @@ module mohayo::engine {
         resolve_skill(room, room_id, actor_idx, actor_is_enemy, s);
     }
 
+    /// Only players carry resource-discount entries; enemies pay full cost.
+    fun apply_mana_discount(room: &Room, actor_idx: u64, actor_is_enemy: bool, cost: u64): u64 {
+        if (actor_is_enemy) { return cost; };
+        let m = vector::borrow(&room.members, actor_idx);
+        let disc = types::member_mana_discount(m) as u64;
+        if (cost > disc) { cost - disc } else { 0 }
+    }
+
+    fun apply_ap_discount(room: &Room, actor_idx: u64, actor_is_enemy: bool, cost: u16): u16 {
+        if (actor_is_enemy) { return cost; };
+        let m = vector::borrow(&room.members, actor_idx);
+        let disc = types::member_ap_discount(m);
+        if (cost > disc) { cost - disc } else { 0 }
+    }
+
     fun resolve_skill(room: &mut Room, room_id: u64, actor_idx: u64, actor_is_enemy: bool, s: &Skill) {
         event::emit(UnitActed { room_id, is_enemy: actor_is_enemy, index: actor_idx, skill_id: types::skill_id(s) });
 
         let targeting = types::skill_targeting(s);
         let is_ally = targeting == 5 || targeting == 6 || targeting == 7 || targeting == 9 || targeting == 10;
         let guaranteed = is_ally || targeting == 8 || (types::skill_flags(s) & 1) != 0;
+
+        // FLAG_MANA_ALL(bit1): spend the entire room mana pool; damage scales with the amount consumed.
+        if ((types::skill_flags(s) & 2) != 0) {
+            room.mana_all_consumed = room.mana_pool;
+            room.mana_pool = 0;
+        } else {
+            room.mana_all_consumed = 0;
+        };
 
         let targets = select_targets(room, targeting, types::skill_target_count(s), actor_is_enemy, actor_idx);
 
@@ -538,6 +596,11 @@ module mohayo::engine {
                 k = k + 1;
             };
             mut_strike = mut_strike + 1;
+        };
+
+        let sr = types::skill_summon(s);
+        if (types::summon_rule_template_id(sr) != 0) {
+            resolve_summon(room, room_id, s);
         };
 
         let ap_gain = types::skill_ap_gain(s);
@@ -561,11 +624,26 @@ module mohayo::engine {
         let t_idx = types::target_index(t);
 
         if (!guaranteed) {
-            let base_acc = types::skill_base_acc(s) as u64;
+            // Accuracy pipeline: hit = baseAcc − Σ(attacker ACC_DOWN) − Σ(defender EVADE_UP),
+            // clamped to MIN_HIT_RATE. Pure additive; values are per-mille.
+            let base_acc = (types::skill_base_acc(s) as i64);
+            let acc_down = if (actor_is_enemy) {
+                types::enemy_sum_effect_mag(vector::borrow(&room.enemies, actor_idx), 6)
+            } else {
+                types::member_sum_effect_mag(vector::borrow(&room.members, actor_idx), 6)
+            } as u64;
+            let evade = if (t_is_enemy) {
+                types::enemy_sum_effect_mag(vector::borrow(&room.enemies, t_idx), 5)
+            } else {
+                types::member_sum_effect_mag(vector::borrow(&room.members, t_idx), 5)
+            } as u64;
+            let mut_hit: i64 = base_acc - (acc_down as i64) - (evade as i64);
+            let min_hit = (types::MIN_HIT_RATE() as i64);
+            if (mut_hit < min_hit) { mut_hit = min_hit; };
             let mut_rng = mohayo::rng::new(room.rng_seed + t_idx + room.turn_id);
             let roll = mohayo::rng::below(&mut mut_rng, 1000);
             room.rng_seed = room.rng_seed + 1;
-            if (roll >= base_acc) return;
+            if ((roll as i64) >= mut_hit) return;
         };
 
         if (t_is_enemy) {
@@ -575,6 +653,7 @@ module mohayo::engine {
         };
 
         let power = types::skill_power(s);
+        let dealt: u64 = 0;
         if (power > 0) {
             let stat = if (types::skill_kind(s) == 2) {
                 if (actor_is_enemy) { types::enemy_magic(vector::borrow(&room.enemies, actor_idx)) }
@@ -583,8 +662,13 @@ module mohayo::engine {
                 if (actor_is_enemy) { types::enemy_attack(vector::borrow(&room.enemies, actor_idx)) }
                 else { types::member_attack(vector::borrow(&room.members, actor_idx)) }
             };
+            let hp_before = if (t_is_enemy) { types::enemy_hp(vector::borrow(&room.enemies, t_idx)) }
+                            else { types::member_hp(vector::borrow(&room.members, t_idx)) };
             let mut_dmg = compute_damage(room, s, stat, actor_is_enemy, actor_idx, t_is_enemy, t_idx);
             deal_damage(room, room_id, t_is_enemy, t_idx, mut_dmg);
+            let hp_after = if (t_is_enemy) { types::enemy_hp(vector::borrow(&room.enemies, t_idx)) }
+                           else { types::member_hp(vector::borrow(&room.members, t_idx)) };
+            if (hp_before > hp_after) { dealt = hp_before - hp_after; };
         };
 
         let effects = types::skill_effects(s);
@@ -611,11 +695,24 @@ module mohayo::engine {
                     power * m_magic / 1000
                 } else { mag as u64 };
                 heal_target(room, room_id, t_is_enemy, t_idx, heal_amount);
+            } else if (op == 12) { // LIFESTEAL: heal the caster by a pct of damage dealt this hit
+                let ls = (mag as u64) * dealt / 1000;
+                if (ls > 0) {
+                    if (actor_is_enemy) {
+                        heal_target(room, room_id, true, actor_idx, ls);
+                    } else {
+                        heal_target(room, room_id, false, actor_idx, ls);
+                    };
+                };
             } else if (op == 13) { // MANA_DELTA
                 let delta = mag as u64;
                 if (delta > 0) { room.mana_pool = room.mana_pool + delta; }
                 else if (delta <= room.mana_pool) { room.mana_pool = room.mana_pool - delta; }
                 else { room.mana_pool = 0; };
+            } else if (op == 15) { // MANA_DRAIN: pull a flat amount from the room pool
+                let drain = mag as u64;
+                if (drain >= room.mana_pool) { room.mana_pool = 0; }
+                else { room.mana_pool = room.mana_pool - drain; };
             } else if (op == 10) { // DISPEL
                 if (t_is_enemy) {
                     types::enemy_dispel(vector::borrow_mut(&mut room.enemies, t_idx));
@@ -635,6 +732,41 @@ module mohayo::engine {
         };
     }
 
+    // ============================ internal: summon ============================
+
+    /// Spawns the minion(s) declared by a skill's SummonRule.
+    /// FLAG_SUMMON_ALLY(bit2) spawns a friendly decoy into `members`; otherwise it
+    /// spawns an enemy minion into `enemies`. Capped by the room unit limit.
+    fun resolve_summon(room: &mut Room, room_id: u64, s: &Skill) {
+        let sr = types::skill_summon(s);
+        let stid = types::summon_rule_template_id(sr);
+        if (stid == 0) return;
+        if ((types::skill_flags(s) & 4) != 0) {
+            if (vector::length(&room.members) < 10) {
+                let t = skill_registry::get_template(stid);
+                let idx = vector::length(&room.members);
+                let minion = types::make_member(
+                    types::template_max_hp(&t), types::template_max_hp(&t),
+                    types::template_power(&t), types::template_magic(&t), types::template_speed(&t),
+                    0, 0, 0, 0, 0, 0,
+                    vector::empty(), vector::empty(), 0, true, true,
+                );
+                vector::push_back(&mut room.members, minion);
+                event::emit(EnemySpawned { room_id, index: idx, template_id: stid });
+            };
+        } else {
+            let count = types::summon_rule_max_count(sr) as u64;
+            let j = 0;
+            while (j < count && vector::length(&room.enemies) < 10) {
+                let idx = vector::length(&room.enemies);
+                let e = spawn_enemy_with(stid);
+                vector::push_back(&mut room.enemies, e);
+                event::emit(EnemySpawned { room_id, index: idx, template_id: stid });
+                j = j + 1;
+            };
+        };
+    }
+
     // ============================ internal: damage ============================
 
     fun compute_damage(
@@ -643,7 +775,13 @@ module mohayo::engine {
         t_is_enemy: bool, t_idx: u64,
     ): u64 {
         let power = types::skill_power(s);
-        let mut_dmg = power * stat / 1000;
+        let mut_dmg: u64 = 0;
+        if ((types::skill_flags(s) & 2) != 0) {
+            // FLAG_MANA_ALL: base damage on the mana consumed this cast, not on the stat.
+            mut_dmg = power * room.mana_all_consumed / 1000;
+        } else {
+            mut_dmg = power * stat / 1000;
+        };
         let cap = types::skill_damage_cap(s);
         if (cap != 0 && mut_dmg > cap) { mut_dmg = cap; };
 
@@ -775,6 +913,7 @@ module mohayo::engine {
                 event::emit(BattleCleared { room_id, battle_index: room.battle_index, total_battles: room.total_battles });
             } else {
                 room.phase = 2;
+                room.result = 1;
                 let share = room.reward_pool;
                 room.reward_pool = 0;
                 event::emit(VictoryEvt { room_id });
@@ -793,6 +932,18 @@ module mohayo::engine {
         };
         if (all_members_dead) {
             room.phase = 2;
+            room.result = 2;
+            event::emit(DefeatEvt { room_id });
+            return;
+        };
+
+        // Turn-limit timeout: the room is cleared (party evicted) if a battle
+        // drags past the dungeon's per-battle turn budget without resolution.
+        let dungeon = skill_registry::get_dungeon(room.difficulty as u64);
+        let turn_budget = types::dungeon_turn_interval(&dungeon);
+        if (turn_budget > 0 && room.battle_turns > turn_budget) {
+            room.phase = 2;
+            room.result = 2;
             event::emit(DefeatEvt { room_id });
         };
     }

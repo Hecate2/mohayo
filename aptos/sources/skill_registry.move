@@ -100,7 +100,7 @@ module mohayo::skill_registry {
         let i = 0;
         while (i < vector::length(ef)) {
             let e = vector::borrow(ef, i);
-            assert!(types::effect_op(e) >= 1 && types::effect_op(e) <= 14, E_BAD_EFFECT_OP);
+            assert!(types::effect_op(e) >= 1 && types::effect_op(e) <= 15, E_BAD_EFFECT_OP);
             assert!(types::effect_prob(e) >= 1 && types::effect_prob(e) <= 1000, E_BAD_PROB);
             i = i + 1;
         };
