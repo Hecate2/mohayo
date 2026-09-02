@@ -190,9 +190,11 @@ module mohayo::content_registration {
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
             vector[eff(types::OP_EVADE_UP(), 350, 3, 0, 1000)]), 1);                   // 33 回避
         // --- 黑魔法师 ---
-        skill_registry::register_class_skill(account, sk(types::KIND_SUPPORT(), 0, 2, 0, 30,
-            types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_MANA_DELTA(), 60, 1, 0, 1000)]), 3);                  // 34 献祭(HP→魔素)
+        // 28 爆裂魔法(全魔素) 见上; 34 献祭 = 烧血 4 段魔法攻击, 每段命中为房间池 +10 魔素
+        // (战地血泵: 黑魔唯一常规输出 + 全队应急回蓝; 段数×产魔量初值, sim 可调)
+        skill_registry::register_class_skill(account, sk(types::KIND_MAGIC(), 0, 0, 0, 30,
+            types::TGT_RAND_STRIKE_ENEMY(), types::WT_THREAT_ENEMY(), 4, 110, 0, 900, 0,
+            vector[eff(types::OP_MANA_DELTA(), 10, 1, 0, 1000)]), 3);                  // 34 献祭(HP→多段输出→每命中产魔素)
         skill_registry::register_class_skill(account, sk(types::KIND_SUPPORT(), 1, 0, 5, 0,
             types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
             vector[eff(types::OP_ACC_DOWN(), 250, 3, 3, 1000)]), 3);                   // 35 黑幕
@@ -202,10 +204,11 @@ module mohayo::content_registration {
             vector::empty()), 4);                                                       // 36 光弹(固定5弹着)
         skill_registry::register_class_skill(account, sk(types::KIND_SUPPORT(), 1, 1, 8, 0,
             types::TGT_ALL_ALLY(), types::WT_UNIFORM(), 1, 450, 0, 1000, 0,
-            vector[eff(types::OP_HEAL(), 450, 1, 2, 1000)]), 4);                       // 37 圣泉(群回, power×魔攻缩放; 原固定400不随等级成长)
-        skill_registry::register_class_skill(account, sk(types::KIND_SUPPORT(), 1, 0, 4, 0,
-            types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_SHIELD(), 1600, 5, 0, 1000)]), 4);                    // 38 替身人偶
+            vector[eff(types::OP_HEAL(), 450, 1, 2, 1000), eff(types::OP_MANA_DELTA(), 6, 1, 0, 1000)]), 4); // 37 圣泉(群回 power×魔攻; 每治疗目标回池6魔素——奶人回蓝)
+        // 38 替身人偶 —— 召唤无嘲讽、无行动的己方假目标(模板35)吸随机火力; FLAG_SUMMON_ALLY(bit2)
+        skill_registry::register_class_skill(account, types::make_skill(0, types::KIND_SUPPORT(), 1, 0, 0, 0,
+            4, 0, types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000,
+            types::FLAG_SUMMON_ALLY(), vector::empty(), types::make_summon_rule(35, 1, 0)), 4); // 38 替身人偶
         // --- 自选池 ---
         skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 0, 1, 2, 0,
             types::TGT_MOST_WOUNDED_ALLY(), types::WT_HP_DEFICIT_ALLY(), 1, 500, 0, 1000, 0,
@@ -469,6 +472,8 @@ module mohayo::content_registration {
         skill_registry::register_template(account, tmpl(20, 1, 11000, 950, 0, 125, 900, 60, 95)); // 32 火花锯兵
         skill_registry::register_template(account, tmpl(23, 3, 220000, 620, 480, 140, 920, 400, 600)); // 33 机神皇帝(备用机体, 王座变体)
         skill_registry::register_template(account, tmpl(23, 3, 250000, 640, 500, 150, 930, 500, 800)); // 34 机神皇帝(炉召唤)
+        // 35 替身人偶(白魔法师 38 的己方假目标: 有血不行动, 吸随机火力; ai 字段仅占位)
+        skill_registry::register_template(account, tmpl(1, 0, 3000, 0, 0, 30, 0, 0, 0));  // 35 替身人偶(decoy)
 
         // ===================== ENEMY TABLES (1..31, 紧凑编号) =====================
         // make_table_entry(template_id, weight)

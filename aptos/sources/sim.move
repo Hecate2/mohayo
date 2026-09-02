@@ -740,4 +740,56 @@ module mohayo::sim {
             33150, 3390, 3315, 3360, plan_attack());
         report(f4a, f4t);
     }
+
+    // ================================================================
+    //  黑魔献祭(34): 烧血 4 段魔法攻击 + 每段命中为房间池产魔素 —— 验证输出与产魔同时成立。
+    //  覆写 D1 为单只巨型魔素岩(2600hp 待机), 黑魔 Lv40 纯献祭循环 2 回合。
+    // ================================================================
+    #[test]
+    fun sim_sacrifice_mana() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let own = std::signer::address_of(a);
+        character::gm_mint_at_level(a, own, 3, 0, vector[0, 0, 0, 0], vector[43], 40); // 人类黑魔 Lv40
+        let cid = character::owner_latest_char(own);
+        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(4, 1, 2, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon_battles(a, 1, vector[mohayo::types::make_battle_config(4, 1)]);
+        engine::create_room(a, 1);
+        let room_id = skill_registry::next_room_id() - 1;
+        engine::join_room_as_char(a, room_id, cid);
+        engine::start_combat(a, room_id);
+        engine::set_plan(a, room_id, 0, vector[34]);
+        engine::advance_turn(a, room_id);
+        engine::advance_turn(a, room_id);
+        let pool = engine::room_mana(room_id);
+        let (eh, _, _, _, _, _) = engine::enemy_state(room_id, 0);
+        std::debug::print(&vector[pool, eh]);
+        // 魔素池: 自然 2+2×2=6 之外, 命中产魔应显著推高; 巨岩应已受创
+        assert!(pool > 30, 1);   // 献祭每段命中 +10 × ~4 段 × 2 施放 ≈ +70(命中率扣减)
+        assert!(eh < 2600, 2);   // 多段攻击确实在输出
+    }
+
+    // ================================================================
+    //  白魔替身人偶(38): FLAG_SUMMON_ALLY 召唤无行动己方假目标 → 成员数增长。
+    // ================================================================
+    #[test]
+    fun sim_decoy_summon() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let own = std::signer::address_of(a);
+        character::gm_mint_at_level(a, own, 4, 0, vector[0, 0, 0, 0], vector[43], 40); // 人类白魔 Lv40
+        let cid = character::owner_latest_char(own);
+        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(1, 1, 8, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon_battles(a, 1, vector[mohayo::types::make_battle_config(1, 2)]);
+        engine::create_room(a, 1);
+        let room_id = skill_registry::next_room_id() - 1;
+        engine::join_room_as_char(a, room_id, cid);
+        engine::start_combat(a, room_id);
+        engine::set_plan(a, room_id, 0, vector[38]); // 每回召唤一人偶
+        let gi = 0;
+        while (gi < 5) { engine::advance_turn(a, room_id); gi = gi + 1; };
+        let mc = engine::member_count(room_id);
+        std::debug::print(&vector[mc]);
+        assert!(mc >= 3, 1); // 白魔 + ≥2 只人偶(mana 8/回合 足够每回招)
+    }
 }
