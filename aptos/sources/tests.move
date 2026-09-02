@@ -1302,7 +1302,7 @@ module mohayo::tests {
         setup(a);
         content_registration::register_all_content(a);
         // --- skills ---
-        assert!(skill_registry::skill_registered(100), 1);   // 攻击(基础区 key 100)
+        assert!(skill_registry::skill_registered(810), 1);   // 尘幕(自选池 key 810; 基础技已删除)
         assert!(skill_registry::skill_registered(190), 2);  // 待机(基础区 key 190)
         assert!(skill_registry::skill_registered(1655), 3); // 皇帝召唤(D9 区 key 1655)
         // --- dungeon 9 has 4 battles, battle-4 has the 85/15 variant ---
@@ -1360,7 +1360,7 @@ module mohayo::tests {
         engine::join_room(a, 1, 4000, 400, 400, 30);
         engine::start_combat(a, 1);
         assert!(engine::enemy_count(1) == 2, 1);
-        engine::set_plan(a, 1, 0, vector[100]);
+        engine::set_plan(a, 1, 0, vector[820]);
         let guard = 0;
         while (guard < 30 && engine::room_phase(1) == 1) {
             engine::advance_turn(a, 1);

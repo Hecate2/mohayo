@@ -12,17 +12,9 @@
 /// 组内步长 5~10, 新技能在所属区间内取未用 key 注册(skill.id 显式)。
 /// ============================================================
 module mohayo::content {
-    // ---- 100–199 基础/通用技 ----
-    public const SKILL_ATTACK: u64 = 100;        // 攻击
-    public const SKILL_MAGIC_BOLT: u64 = 110;    // 魔法弹
-    public const SKILL_HEAL: u64 = 120;          // 治疗
-    public const SKILL_STRIKE_3: u64 = 130;      // 三段斩
-    public const SKILL_SHIELD: u64 = 140;        // 盾(通用)
-    public const SKILL_STUN: u64 = 150;          // 眩晕打击
-    public const SKILL_MANA_BURST: u64 = 160;    // 魔素爆发
-    public const SKILL_TAUNT: u64 = 170;         // 挑衅
-    public const SKILL_SUMMON: u64 = 180;        // 召唤占位
-    public const SKILL_IDLE: u64 = 190;          // 待机
+    // ---- 100–199 基础/通用技(玩家无基础技: 技能仅来自职业/种族/自选池) ----
+    public const SKILL_SUMMON: u64 = 180;        // 召唤占位(引擎 summon_rule 语义锚)
+    public const SKILL_IDLE: u64 = 190;          // 待机(怪物 AI 宕机/宝箱)
     // ---- 200–299 守卫 ----
     public const SKILL_SHIELD_BASH: u64 = 210;   // 盾击(晕+嘲讽)
     public const SKILL_SHIELD_WALL: u64 = 220;   // 盾墙

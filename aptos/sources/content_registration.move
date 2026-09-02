@@ -45,6 +45,7 @@ module mohayo::content_registration {
             effects, nosummon())
     }
 
+
     public entry fun register_all_content(account: &signer) {
         // ===================== CLASSES =====================
         // make_class_def(base_hp_pct, base_attack_pct, base_magic_pct, base_speed_pct, skill_slots)
@@ -76,43 +77,19 @@ module mohayo::content_registration {
 
         // ===================== PLAYER SKILLS 1..44 (canonical order) =====================
         // --- 基础技 (仅作为可自选池，不自动授予) ---
-        skill_registry::register_skill(account, sk(100,types::KIND_PHYSICAL(), 0, 1, 2, 0,
-            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 100, 0, 950, 0,
-            vector::empty()));                                                          // 100 攻击
-        skill_registry::register_skill(account, sk(110,types::KIND_MAGIC(), 0, 1, 3, 0,
-            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 120, 0, 950, 0,
-            vector::empty()));                                                          // 110 魔法弹
-        skill_registry::register_skill(account, sk(120,types::KIND_SUPPORT(), 0, 1, 4, 0,
-            types::TGT_MOST_WOUNDED_ALLY(), types::WT_HP_DEFICIT_ALLY(), 1, 800, 0, 1000, 0,
-            vector[eff(types::OP_HEAL(), 800, 1, 1, 1000)]));                          // 120 治疗
-        skill_registry::register_skill(account, sk(130,types::KIND_PHYSICAL(), 0, 2, 5, 0,
-            types::TGT_RAND_STRIKE_ENEMY(), types::WT_THREAT_ENEMY(), 3, 100, 0, 900, 0,
-            vector::empty()));                                                          // 130 三段斩
-
+                                
         // --- 通用池 ---
-        skill_registry::register_skill(account, sk(140,types::KIND_SUPPORT(), 1, 0, 2, 0,
-            types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_SHIELD(), 400, 4, 0, 1000)]));                        // 140 盾(通用)
-        skill_registry::register_skill(account, sk(150,types::KIND_PHYSICAL(), 1, 1, 3, 0,
-            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 130, 0, 900, 0,
-            vector[eff(types::OP_STUN(), 1, 2, 1, 350)]));                             // 150 眩晕打击
-        skill_registry::register_skill(account, sk(810,types::KIND_SUPPORT(), 1, 0, 4, 0,
+                        skill_registry::register_skill(account, sk(810,types::KIND_SUPPORT(), 1, 0, 4, 0,
             types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
             vector[eff(types::OP_ACC_DOWN(), 150, 3, 3, 1000)]));                     // 810 烟雾(尘幕)
         // 610 鹰眼(火枪手 class) —— GUAR_NEXT
         skill_registry::register_class_skill(account, sk(610,types::KIND_SUPPORT(), 1, 0, 0, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
             vector[eff(types::OP_GUAR_NEXT(), 1, 2, 0, 1000)]), 5);
-        skill_registry::register_skill(account, sk(160,types::KIND_MAGIC(), 2, 1, 8, 0,
-            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 300, 0, 900, 0,
-            vector::empty()));                                                          // 160 魔素爆发
-        skill_registry::register_skill(account, sk(820,types::KIND_PHYSICAL(), 1, 1, 3, 0,
+                skill_registry::register_skill(account, sk(820,types::KIND_PHYSICAL(), 1, 1, 3, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 140, 0, 950, 0,
             vector[eff(types::OP_DOT(), 20, 3, 1, 1000)]));                          // 820 毒刃(流血20×3, 复审后值; 同源刷新不累加)
-        skill_registry::register_skill(account, sk(170,types::KIND_SUPPORT(), 1, 0, 2, 0,
-            types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_TAUNT(), 1, 3, 0, 1000), eff(types::OP_DMG_IN_MOD(), 150, 3, 0, 1000)])); // 170 挑衅
-
+        
         // --- 种族技 ---
         skill_registry::register_skill(account, sk(710,types::KIND_SUPPORT(), 1, 0, 0, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
@@ -446,9 +423,9 @@ module mohayo::content_registration {
         skill_registry::register_template(account, tmpl(10, 1, 700, 160, 0, 170, 920, 8, 13));// 13 深渊魔犬(高速)
         skill_registry::register_template(account, tmpl(11, 3, 3000, 60, 0, 20, 900, 24, 38));// 14 魔素吞噬者(虹吸)
         // ---- D5 机神前哨(单人攻关门) ----
-        skill_registry::register_template(account, tmpl(12, 1, 1100, 2600, 0, 150, 910, 6, 9)); // 15 机神哨兵
-        skill_registry::register_template(account, tmpl(12, 2, 8200, 3400, 0, 50, 900, 16, 24));// 16 机神魔像
-        skill_registry::register_template(account, tmpl(13, 3, 29400, 3600, 0, 120, 920, 40, 60));// 17 机神督军(弱化皇帝机体)
+        skill_registry::register_template(account, tmpl(12, 1, 1100, 2950, 0, 150, 910, 6, 9)); // 15 机神哨兵
+        skill_registry::register_template(account, tmpl(12, 2, 8200, 3800, 0, 50, 900, 16, 24));// 16 机神魔像
+        skill_registry::register_template(account, tmpl(13, 3, 29400, 4000, 0, 120, 920, 40, 60));// 17 机神督军(弱化皇帝机体)
         // ---- D6 亡者回廊深处 ----
         skill_registry::register_template(account, tmpl(5, 1, 1300, 700, 0, 60, 900, 8, 12)); // 18 白骨卫士
         skill_registry::register_template(account, tmpl(6, 1, 1000, 0, 950, 160, 900, 9, 14));// 19 缚灵(魔攻)

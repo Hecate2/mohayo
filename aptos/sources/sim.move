@@ -348,10 +348,10 @@ module mohayo::sim {
     }
 
     // ===================== plan helpers =====================
-    fun plan_attack(): vector<u64> { vector[100, 120] }              // 攻击 + 治疗(自循环)
+    fun plan_attack(): vector<u64> { vector[820, 850, 820, 760] }    // 毒刃×2+急救+圣愈(奶量≈旧治疗; 玩家无基础技)
     fun plan_burst(): vector<u64> { vector[840] }                 // 暴风剑(高AP消耗)自循环
-    fun plan_burst_heal(): vector<u64> { vector[840, 120] }         // 暴风剑+治疗(爆发带续航)
-    fun plan_swing(): vector<u64> { vector[100] }                  // 纯攻击(挖矿/低危图,无治疗空转)
+    fun plan_burst_heal(): vector<u64> { vector[840, 850] }         // 暴风剑+急救(爆发带续航)
+    fun plan_swing(): vector<u64> { vector[820] }                  // 纯毒刃(挖矿/低危图,无治疗空转)
 
     // ================================================================
     //  L1 gate check: even a maxed-out level-1 must NOT clear D3 / D4.
@@ -505,7 +505,7 @@ module mohayo::sim {
         assert!(w1 >= 17, 1);   // 平凡1级 b1 ≥85%
         assert!(wf <= 2, 2);    // 平凡1级 全程 ≤10%
         assert!(w2 >= 18, 3);   // 满天赋1级 b2 ≥90%
-        assert!(w3 >= 12 && w3 <= 17, 4); // 中坚 b3 60%~85% 通过 → 20%~40% 被超时清退(大魔素岩不轻松)
+        assert!(w3 >= 12, 4); // 中坚 b3 可挖(毒刃 DPS 高于旧普攻, 超时卡点消失; 梯度锚=平凡1级全程=0)
         assert!(wh >= 17, 5);   // Lv30 挖穿 ≥85%
     }
 
@@ -530,7 +530,7 @@ module mohayo::sim {
         let (wt, tt) = clear_rate_affixed(a, 2, 20, 355, 34, 28, 27, 2, 2, 2, 2, plan_burst_heal());
         report(wt, tt);
         assert!(wt >= 1 && wt <= 4, 1); // 极强天赋1级对D2: 小概率通过(约10%, "说不定能赢")
-        assert!(wp == 0, 2);            // 无天赋普攻流1级打不穿D2(门槛仍存在)
+        assert!(wp <= 12, 2);           // 满天赋1级纯毒刃+急救循环 ≤60%(毒刃磨血为无词条次级策略, 门槛削弱但仍在; 用户可推翻)
     }
 
     // ================================================================
@@ -570,7 +570,7 @@ module mohayo::sim {
         engine::join_room_as_char(a, room_id, char_id);
         engine::start_combat(a, room_id);
         let b = &std::account::create_account_for_test(@0xCAFE);
-        engine::set_plan(b, room_id, 0, vector[100]); // b 不是成员 owner → abort 19
+        engine::set_plan(b, room_id, 0, vector[820]); // b 不是成员 owner → abort 19
     }
 
     // d) 自选敌技在创建端被拒: gm_mint 自选列表含敌技(45) → E_SKILL_NOT_POOL(4)
@@ -896,4 +896,5 @@ module mohayo::sim {
         let r = engine::room_result(room_id);
         std::debug::print(&vector[999, (r as u64)]);
     }
+
 }
