@@ -33,7 +33,7 @@ module mohayo::skill_registry {
     const E_UNKNOWN_AI: u64 = 24;
     const E_NOT_POOL_SKILL: u64 = 25;
 
-    const MAX_SKILLS: u64 = 1024;
+    const MAX_SKILLS: u64 = 4096;
     const MAX_AI: u64 = 256;
     const MAX_TEMPLATES: u64 = 512;
     const MAX_TABLES: u64 = 256;
@@ -138,27 +138,34 @@ module mohayo::skill_registry {
 
     // ---- registration ----
 
+    /// 注册技能。`skill.id != 0` 时按显式 key 注册(分组分区, 见 content.move 分区表),
+    /// == 0 时自动分配(顺序 id, 供测试/临时技能)。显式 key 不得与已注册冲突。
     public fun register_skill(account: &signer, s: Skill) acquires Registry {
         let addr = signer::address_of(account);
         assert!(addr == @mohayo, E_NOT_OWNER);
         let r = borrow_global_mut<Registry>(@mohayo);
         validate_skill(&s, false);
-        let id = r.skill_count + 1;
+        let req = types::skill_id(&s);
+        let id = if (req == 0) { r.skill_count + 1 } else { req };
         assert!(id <= MAX_SKILLS, E_SKILL_CAP);
+        assert!(!table::contains(&r.skills, id), E_SKILL_EXISTS);
         let new_s = reconstruct_skill_with_id(&s, id);
         table::add(&mut r.skills, id, new_s);
-        r.skill_count = id;
+        if (id > r.skill_count) { r.skill_count = id; };
     }
 
-    public fun register_class_skill(account: &signer, s: Skill, class_id: u8) acquires Registry {        let addr = signer::address_of(account);
+    public fun register_class_skill(account: &signer, s: Skill, class_id: u8) acquires Registry {
+        let addr = signer::address_of(account);
         assert!(addr == @mohayo, E_NOT_OWNER);
         let r = borrow_global_mut<Registry>(@mohayo);
         validate_skill(&s, true);
-        let id = r.skill_count + 1;
+        let req = types::skill_id(&s);
+        let id = if (req == 0) { r.skill_count + 1 } else { req };
         assert!(id <= MAX_SKILLS, E_SKILL_CAP);
+        assert!(!table::contains(&r.skills, id), E_SKILL_EXISTS);
         let new_s = reconstruct_skill_with_id(&s, id);
         table::add(&mut r.skills, id, new_s);
-        r.skill_count = id;
+        if (id > r.skill_count) { r.skill_count = id; };
         if (!table::contains(&r.class_skills, class_id)) {
             table::add(&mut r.class_skills, class_id, vector::empty());
         };

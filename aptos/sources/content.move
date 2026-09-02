@@ -1,167 +1,107 @@
+/// 技能与内容的 key 常量表。
+/// ============================================================
+/// 技能 KEY 分区表（2026-09-02 定案，组间大空隙、组内留位）：
+///   100–199  基础/通用技(非池/非职业/非种族)
+///   200–299  守卫职业技      300–399  剑士职业技
+///   400–499  黑魔职业技      500–599  白魔职业技
+///   600–699  火枪职业技
+///   700–799  种族技          800–999  自选池技(白名单, content-design §5)
+///  1000–1099 通用敌技(跨关复用)   1100–1199 D2-D4 敌技
+///  1200–1299 D5 敌技  1300–1399 D6  1400–1499 D7  1500–1599 D8
+///  1600–1699 D9 敌技  1700–1799 D10(预留)
+/// 组内步长 5~10, 新技能在所属区间内取未用 key 注册(skill.id 显式)。
+/// ============================================================
 module mohayo::content {
-    use aptos_std::table::{Self, Table};
-    use std::signer;
-
-    const E_ALREADY: u64 = 3;
-
-    public const SKILL_ATTACK: u64 = 1;
-    public const SKILL_MAGIC_BOLT: u64 = 2;
-    public const SKILL_HEAL: u64 = 3;
-    public const SKILL_STRIKE_3: u64 = 4;
-    public const SKILL_SHIELD: u64 = 5;
-    public const SKILL_STUN: u64 = 6;
-    public const SKILL_SMOKE: u64 = 7;
-    public const SKILL_EAGLE_EYE: u64 = 8;
-    public const SKILL_MANA_BURST: u64 = 9;
-    public const SKILL_DOT: u64 = 10;
-    public const SKILL_TAUNT: u64 = 11;
-    public const SKILL_BERSERK: u64 = 12;
-    public const SKILL_STONE_BODY: u64 = 13;
-    public const SKILL_SPIRIT_RETURN: u64 = 14;
-    public const SKILL_STORM: u64 = 15;
-    public const SKILL_DRAGON_SCALE: u64 = 16;
-    public const SKILL_HOLY_LIGHT: u64 = 17;
-    public const SKILL_ANGEL_JUDGMENT: u64 = 18;
-    public const SKILL_SOUL_DRAIN: u64 = 19;
-    public const SKILL_ABYSS_WHISPER: u64 = 20;
-    public const SKILL_SUMMON: u64 = 21;
-    public const SKILL_IDLE: u64 = 22;
-    public const SKILL_FLASH: u64 = 23;
-    public const SKILL_STORM_BLADE: u64 = 24;
-    public const SKILL_MAGIC_SWORD: u64 = 25;
-    public const SKILL_REVOLVER_RAIN: u64 = 26;
-    public const SKILL_DRAGON_BULLET: u64 = 27;
-    public const SKILL_BURST_MAGIC: u64 = 28;
-    public const SKILL_RAPID_STRIKE: u64 = 29;
-    public const SKILL_IRON_CLEAVE: u64 = 30;
-    public const SKILL_SHIELD_BASH: u64 = 31;
-    public const SKILL_SHIELD_WALL: u64 = 32;
-    public const SKILL_GUARD_EVADE: u64 = 33;
-    public const SKILL_SACRIFICE: u64 = 34;
-    public const SKILL_BLACK_VEIL: u64 = 35;
-    public const SKILL_LIGHT_ORB: u64 = 36;
-    public const SKILL_HOLY_SPRING: u64 = 37;
-    public const SKILL_DECOY_DOLL: u64 = 38;
-    public const SKILL_FIRST_AID: u64 = 39;
-    public const SKILL_BLINDING_POWDER: u64 = 40;
-    public const SKILL_ROCK_BULWARK: u64 = 41;
-    public const SKILL_MAGIC_SHIELD: u64 = 42;
-    public const SKILL_DRAGON_BREATH: u64 = 43;
-    public const SKILL_MANA_CLAP: u64 = 44;
-    public const SKILL_SPARK_SAW: u64 = 45;
-    public const SKILL_PARTICLE_SLASH: u64 = 46;
-    public const SKILL_MARSHAL_LEAK: u64 = 47;
-    public const SKILL_FURNACE_LEAK: u64 = 48;
-    public const SKILL_FURNACE_SIPHON: u64 = 49;
-    public const SKILL_FURNACE_SUMMON: u64 = 50;
-    public const SKILL_EMPEROR_CANNON: u64 = 51;
-    public const SKILL_EMPEROR_WHEEL: u64 = 52;
-    public const SKILL_EMPEROR_LEAK: u64 = 53;
-    public const SKILL_EMPEROR_SIPHON: u64 = 54;
-    public const SKILL_EMPEROR_PRESSURE: u64 = 55;
-    public const SKILL_EMPEROR_SUMMON: u64 = 56;
-    // ---- enemy skills 57+ (D2-D8 世界观怪物) ----
-    public const SKILL_RUST_CLAW: u64 = 57;     // 残破机仆·锈爪(单体物理)
-    public const SKILL_VINE_BIND: u64 = 58;     // 唤魔藤蔓·缠绕(单体物理+概率眩晕)
-    public const SKILL_PICK_SWEEP: u64 = 59;    // 亡灵矿工·矿镐横扫(2目标物理)
-    public const SKILL_WRAITH_DRAIN: u64 = 60;  // 怨灵·摄魂(单体魔法)
-    public const SKILL_WRAITH_FEAR: u64 = 61;   // 怨灵·恐惧尖啸(单体降命中)
-    public const SKILL_PRIEST_LASH: u64 = 62;   // 机神祭司·圣光鞭挞(单体魔法)
-    public const SKILL_PRIEST_SUMMON: u64 = 63; // 机神祭司·召唤机仆
-    public const SKILL_MAGMA_SPLASH: u64 = 64;  // 熔火傀儡·熔岩溅射(3目标物理)
-    public const SKILL_DRAGON_SPIT: u64 = 65;   // 熔铁幼龙·龙息(全体魔法)
-    public const SKILL_DIRE_BITE: u64 = 66;     // 深渊魔犬·撕咬(双段单体)
-    public const SKILL_SIPHON: u64 = 67;        // 魔素吞噬者·魔素虹吸(抽房间池)
-    // ---- enemy skills 68..77 (D5-D8 世界观怪物) ----
-    public const SKILL_MARSHAL_CANNON: u64 = 68; // 机神督军·督军炮(收敛重炮, 单体物理)
-    public const SKILL_MARSHAL_REIN: u64 = 69;   // 机神督军·增援(召唤机神哨兵×1)
-    public const SKILL_WIGHT_CLEAVE: u64 = 70;   // 守墓骸王·骸王斩(单体物理)
-    public const SKILL_WIGHT_CALL: u64 = 71;     // 守墓骸王·号令(召唤白骨卫士×2)
-    public const SKILL_DRAGON_CLAW: u64 = 72;    // 渊龙·龙爪(单体物理)
-    public const SKILL_DRAGON_CALL: u64 = 73;    // 渊龙长老·龙裔号令(召唤熔岩幼龙×2)
-    public const SKILL_RIFT_CLAW: u64 = 74;      // 裂痕魔·裂爪(单体物理)
-    public const SKILL_ABYSS_BITE: u64 = 75;     // 深渊魔·深渊撕咬(单体物理+吸血)
-    public const SKILL_RIFT_PRESSURE: u64 = 76;  // 裂隙支配者·裂隙威压(全体玩家降命中)
-    public const SKILL_RIFT_CALL: u64 = 77;      // 裂隙支配者·召唤裂痕魔×2
-
-    public const DUNGEON_D9: u64 = 9;
-    public const D9_BATTLE_1: u64 = 71;
-    public const D9_BATTLE_2: u64 = 72;
-    public const D9_BATTLE_3: u64 = 73;
-    public const D9_CHEST_TABLE: u64 = 75;
-    public const D9_EMPEROR_TABLE: u64 = 74;
-
-    struct ContentState has key {
-        installed: bool,
-        skills: Table<u64, bool>,
-        dungeons: Table<u64, Dungeon>,
-    }
-
-    struct Dungeon has copy, drop, store {
-        difficulty: u8,
-        battles: u8,
-        mana_per_turn: u64,
-        entry_fee: u64,
-        rescue_fee: u64,
-        turn_interval: u64,
-        first_table: u64,
-        final_variant_chest_weight: u64,
-        final_variant_emperor_weight: u64,
-    }
-
-    fun init_module(account: &signer) {
-        move_to(account, ContentState { installed: false, skills: table::new(), dungeons: table::new() });
-    }
-
-    public entry fun install_all(account: &signer) acquires ContentState {
-        let state = borrow_global_mut<ContentState>(signer::address_of(account));
-        assert!(!state.installed, E_ALREADY);
-        let skill_id = 1;
-        while (skill_id <= SKILL_EMPEROR_SUMMON) {
-            table::add(&mut state.skills, skill_id, true);
-            skill_id = skill_id + 1;
-        };
-        let difficulty = 1;
-        while (difficulty <= 8) {
-            table::add(&mut state.dungeons, difficulty, Dungeon {
-                difficulty: difficulty as u8,
-                battles: 1,
-                mana_per_turn: difficulty,
-                entry_fee: if (difficulty == 1) { 0 } else { difficulty * 5 },
-                rescue_fee: difficulty * 10,
-                turn_interval: 5,
-                first_table: difficulty,
-                final_variant_chest_weight: 0,
-                final_variant_emperor_weight: 0,
-            });
-            difficulty = difficulty + 1;
-        };
-        table::add(&mut state.dungeons, 9, Dungeon {
-            difficulty: 9, battles: 4, mana_per_turn: 6, entry_fee: 40, rescue_fee: 80,
-            turn_interval: 5, first_table: D9_BATTLE_1,
-            final_variant_chest_weight: 850, final_variant_emperor_weight: 150,
-        });
-        table::add(&mut state.dungeons, 10, Dungeon {
-            difficulty: 10, battles: 1, mana_per_turn: 4, entry_fee: 10, rescue_fee: 20,
-            turn_interval: 5, first_table: 101,
-            final_variant_chest_weight: 0, final_variant_emperor_weight: 0,
-        });
-        state.installed = true;
-    }
-
-    #[view]
-    public fun installed(address: address): bool acquires ContentState {
-        borrow_global<ContentState>(address).installed
-    }
-
-    #[view]
-    public fun skill_exists(address: address, skill_id: u64): bool acquires ContentState {
-        table::contains(&borrow_global<ContentState>(address).skills, skill_id)
-    }
-
-    #[view]
-    public fun dungeon(address: address, difficulty: u64): (u8, u8, u64, u64, u64, u64, u64, u64) acquires ContentState {
-        let d = table::borrow(&borrow_global<ContentState>(address).dungeons, difficulty);
-        (d.difficulty, d.battles, d.mana_per_turn, d.entry_fee, d.rescue_fee, d.turn_interval, d.final_variant_chest_weight, d.final_variant_emperor_weight)
-    }
+    // ---- 100–199 基础/通用技 ----
+    public const SKILL_ATTACK: u64 = 100;        // 攻击
+    public const SKILL_MAGIC_BOLT: u64 = 110;    // 魔法弹
+    public const SKILL_HEAL: u64 = 120;          // 治疗
+    public const SKILL_STRIKE_3: u64 = 130;      // 三段斩
+    public const SKILL_SHIELD: u64 = 140;        // 盾(通用)
+    public const SKILL_STUN: u64 = 150;          // 眩晕打击
+    public const SKILL_MANA_BURST: u64 = 160;    // 魔素爆发
+    public const SKILL_TAUNT: u64 = 170;         // 挑衅
+    public const SKILL_SUMMON: u64 = 180;        // 召唤占位
+    public const SKILL_IDLE: u64 = 190;          // 待机
+    // ---- 200–299 守卫 ----
+    public const SKILL_SHIELD_BASH: u64 = 210;   // 盾击(晕+嘲讽)
+    public const SKILL_SHIELD_WALL: u64 = 220;   // 盾墙
+    public const SKILL_GUARD_EVADE: u64 = 230;   // 回避
+    // ---- 300–399 剑士 ----
+    public const SKILL_RAPID_STRIKE: u64 = 310;  // 快速剑(三连)
+    public const SKILL_IRON_CLEAVE: u64 = 320;   // 斩铁剑
+    public const SKILL_MAGIC_SWORD: u64 = 330;   // 魔法剑
+    // ---- 400–499 黑魔法师 ----
+    public const SKILL_SACRIFICE: u64 = 410;     // 献祭(烧血多段+每命中产魔)
+    public const SKILL_BLACK_VEIL: u64 = 420;    // 黑幕
+    public const SKILL_BURST_MAGIC: u64 = 430;   // 爆裂魔法(全魔素)
+    // ---- 500–599 白魔法师 ----
+    public const SKILL_LIGHT_ORB: u64 = 510;     // 光弹
+    public const SKILL_HOLY_SPRING: u64 = 520;   // 圣泉(群回+回蓝)
+    public const SKILL_DECOY_DOLL: u64 = 530;    // 替身人偶(ally decoy)
+    // ---- 600–699 火枪手 ----
+    public const SKILL_EAGLE_EYE: u64 = 610;     // 鹰眼(GUAR_NEXT)
+    public const SKILL_REVOLVER_RAIN: u64 = 620; // 左轮弹雨
+    public const SKILL_DRAGON_BULLET: u64 = 630; // 龙击弹
+    // ---- 700–799 种族技 ----
+    public const SKILL_BERSERK: u64 = 710;       // 狂暴(兽人)
+    public const SKILL_STONE_BODY: u64 = 720;    // 磐石(哥布林/巨人)
+    public const SKILL_SPIRIT_RETURN: u64 = 730; // 烈酒(哥布林)
+    public const SKILL_STORM: u64 = 740;         // 暴风(史莱姆)
+    public const SKILL_DRAGON_SCALE: u64 = 750;  // 龙鳞(龙人)
+    public const SKILL_HOLY_LIGHT: u64 = 760;    // 圣愈之光(天使)
+    public const SKILL_ANGEL_JUDGMENT: u64 = 770;// 雷击(天使)
+    public const SKILL_SOUL_DRAIN: u64 = 780;    // 汲魂(恶魔)
+    public const SKILL_ABYSS_WHISPER: u64 = 790; // 低语(恶魔)
+    // ---- 800–999 自选池(白名单) ----
+    public const SKILL_SMOKE: u64 = 810;         // 尘幕
+    public const SKILL_DOT: u64 = 820;           // 毒刃
+    public const SKILL_FLASH: u64 = 830;         // 一闪
+    public const SKILL_STORM_BLADE: u64 = 840;   // 暴风剑
+    public const SKILL_FIRST_AID: u64 = 850;     // 急救包扎
+    public const SKILL_BLINDING_POWDER: u64 = 860; // 致盲粉
+    public const SKILL_ROCK_BULWARK: u64 = 870;  // 岩石壁垒
+    public const SKILL_MAGIC_SHIELD: u64 = 880;  // 魔力护盾
+    public const SKILL_DRAGON_BREATH: u64 = 890; // 龙息
+    public const SKILL_MANA_CLAP: u64 = 900;     // 魔爆术
+    // ---- 1000–1099 通用敌技(跨关复用) ----
+    public const SKILL_PARTICLE_SLASH: u64 = 1010; // 粒子斩
+    public const SKILL_SPARK_SAW: u64 = 1015;      // 火花锯
+    public const SKILL_MARSHAL_LEAK: u64 = 1020;   // 机神泄漏(抽魔, D5/D9)
+    // ---- 1100–1199 D2-D4 敌技 ----
+    public const SKILL_RUST_CLAW: u64 = 1110;      // 残破机仆·锈爪
+    public const SKILL_VINE_BIND: u64 = 1115;      // 唤魔藤蔓·缠绕
+    public const SKILL_PICK_SWEEP: u64 = 1120;     // 亡灵矿工·矿镐横扫
+    public const SKILL_WRAITH_DRAIN: u64 = 1125;   // 怨灵·摄魂
+    public const SKILL_WRAITH_FEAR: u64 = 1130;    // 怨灵·恐惧尖啸
+    public const SKILL_PRIEST_LASH: u64 = 1135;    // 机神祭司·圣光鞭挞
+    public const SKILL_PRIEST_SUMMON: u64 = 1140;  // 机神祭司·召唤机仆
+    public const SKILL_MAGMA_SPLASH: u64 = 1145;   // 熔火傀儡·熔岩溅射
+    public const SKILL_DRAGON_SPIT: u64 = 1150;    // 幼龙·龙息(全体)
+    public const SKILL_DIRE_BITE: u64 = 1155;      // 深渊魔犬·撕咬
+    public const SKILL_SIPHON: u64 = 1160;         // 魔素吞噬者·虹吸
+    // ---- 1200–1299 D5 机神前哨 ----
+    public const SKILL_MARSHAL_CANNON: u64 = 1210; // 机神督军·督军炮
+    public const SKILL_MARSHAL_REIN: u64 = 1215;   // 机神督军·增援
+    // ---- 1300–1399 D6 亡者回廊深处 ----
+    public const SKILL_WIGHT_CLEAVE: u64 = 1310;   // 守墓骸王·骸王斩
+    public const SKILL_WIGHT_CALL: u64 = 1315;     // 守墓骸王·号令
+    // ---- 1400–1499 D7 熔渊龙巢 ----
+    public const SKILL_DRAGON_CLAW: u64 = 1410;    // 渊龙·龙爪
+    public const SKILL_DRAGON_CALL: u64 = 1415;    // 渊龙长老·龙裔号令
+    // ---- 1500–1599 D8 虚空裂隙 ----
+    public const SKILL_RIFT_CLAW: u64 = 1510;      // 裂痕魔·裂爪
+    public const SKILL_ABYSS_BITE: u64 = 1515;     // 深渊魔·深渊撕咬
+    public const SKILL_RIFT_PRESSURE: u64 = 1520;  // 裂隙支配者·威压
+    public const SKILL_RIFT_CALL: u64 = 1525;      // 裂隙支配者·召唤
+    // ---- 1600–1699 D9 机神帝座 ----
+    public const SKILL_FURNACE_LEAK: u64 = 1610;   // 机神魔素炉·泄漏
+    public const SKILL_FURNACE_SIPHON: u64 = 1615; // 机神魔素炉·虹吸
+    public const SKILL_FURNACE_SUMMON: u64 = 1620; // 机神魔素炉·召唤卫兵
+    public const SKILL_EMPEROR_CANNON: u64 = 1630; // 机神皇帝·火花炮
+    public const SKILL_EMPEROR_WHEEL: u64 = 1635;  // 机神皇帝·幻光轮
+    public const SKILL_EMPEROR_LEAK: u64 = 1640;   // 机神皇帝·泄漏
+    public const SKILL_EMPEROR_SIPHON: u64 = 1645; // 机神皇帝·虹吸
+    public const SKILL_EMPEROR_PRESSURE: u64 = 1650; // 机神皇帝·威压
+    public const SKILL_EMPEROR_SUMMON: u64 = 1655; // 机神皇帝·召唤卫兵
 }

@@ -348,10 +348,10 @@ module mohayo::sim {
     }
 
     // ===================== plan helpers =====================
-    fun plan_attack(): vector<u64> { vector[1, 3] }              // 攻击 + 治疗(自循环)
-    fun plan_burst(): vector<u64> { vector[24] }                 // 暴风剑(高AP消耗)自循环
-    fun plan_burst_heal(): vector<u64> { vector[24, 3] }         // 暴风剑+治疗(爆发带续航)
-    fun plan_swing(): vector<u64> { vector[1] }                  // 纯攻击(挖矿/低危图,无治疗空转)
+    fun plan_attack(): vector<u64> { vector[100, 120] }              // 攻击 + 治疗(自循环)
+    fun plan_burst(): vector<u64> { vector[840] }                 // 暴风剑(高AP消耗)自循环
+    fun plan_burst_heal(): vector<u64> { vector[840, 120] }         // 暴风剑+治疗(爆发带续航)
+    fun plan_swing(): vector<u64> { vector[100] }                  // 纯攻击(挖矿/低危图,无治疗空转)
 
     // ================================================================
     //  L1 gate check: even a maxed-out level-1 must NOT clear D3 / D4.
@@ -547,13 +547,13 @@ module mohayo::sim {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
         let own = std::signer::address_of(a);
-        character::gm_mint(a, own, 1, 2, vector[0, 0, 0, 0], vector[39, 43]);
+        character::gm_mint(a, own, 1, 2, vector[0, 0, 0, 0], vector[850, 890]);
         let char_id = character::owner_latest_char(own);
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, char_id);
         engine::start_combat(a, room_id);
-        engine::set_plan(a, room_id, 0, vector[45]); // 火花锯=敌技 → abort 20
+        engine::set_plan(a, room_id, 0, vector[1015]); // 火花锯=敌技 → abort 20
     }
 
     // c) 他人不可代排: 非 owner 的地址 set_plan → E_NOT_PLAN_OWNER(19)
@@ -563,14 +563,14 @@ module mohayo::sim {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
         let own = std::signer::address_of(a);
-        character::gm_mint(a, own, 1, 2, vector[0, 0, 0, 0], vector[39, 43]);
+        character::gm_mint(a, own, 1, 2, vector[0, 0, 0, 0], vector[850, 890]);
         let char_id = character::owner_latest_char(own);
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, char_id);
         engine::start_combat(a, room_id);
         let b = &std::account::create_account_for_test(@0xCAFE);
-        engine::set_plan(b, room_id, 0, vector[1]); // b 不是成员 owner → abort 19
+        engine::set_plan(b, room_id, 0, vector[100]); // b 不是成员 owner → abort 19
     }
 
     // d) 自选敌技在创建端被拒: gm_mint 自选列表含敌技(45) → E_SKILL_NOT_POOL(4)
@@ -579,7 +579,7 @@ module mohayo::sim {
     fun sim_skill_ownership_enemy_self_select_rejected() {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
-        character::gm_mint(a, std::signer::address_of(a), 1, 2, vector[0, 0, 0, 0], vector[45]);
+        character::gm_mint(a, std::signer::address_of(a), 1, 2, vector[0, 0, 0, 0], vector[1015]);
     }
 
     // d2) 自选他人职业技被拒(31=守卫专属盾击) → E_SKILL_NOT_POOL(4)
@@ -588,7 +588,7 @@ module mohayo::sim {
     fun sim_skill_ownership_class_skill_rejected() {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
-        character::gm_mint(a, std::signer::address_of(a), 3, 2, vector[0, 0, 0, 0], vector[31]);
+        character::gm_mint(a, std::signer::address_of(a), 3, 2, vector[0, 0, 0, 0], vector[210]);
     }
 
     // d3) 自选种族技被拒(12=兽人专属狂暴) → E_SKILL_NOT_POOL(4)
@@ -597,7 +597,7 @@ module mohayo::sim {
     fun sim_skill_ownership_race_skill_rejected() {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
-        character::gm_mint(a, std::signer::address_of(a), 1, 2, vector[0, 0, 0, 0], vector[12]);
+        character::gm_mint(a, std::signer::address_of(a), 1, 2, vector[0, 0, 0, 0], vector[710]);
     }
 
     // e) 生产链路端到端: 合法计划可提交并推进战斗
@@ -606,14 +606,14 @@ module mohayo::sim {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
         let own = std::signer::address_of(a);
-        character::gm_mint(a, own, 1, 2, vector[0, 0, 0, 0], vector[39]); // 守卫仅1自选槽(池技:急救包扎)
+        character::gm_mint(a, own, 1, 2, vector[0, 0, 0, 0], vector[850]); // 守卫仅1自选槽(池技:急救包扎)
         let char_id = character::owner_latest_char(own);
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, char_id);
         engine::start_combat(a, room_id);
         // 计划=自选急救(39)+守卫职业技盾击(31), 均在技能集内 → 应通过
-        engine::set_plan(a, room_id, 0, vector[39, 31]);
+        engine::set_plan(a, room_id, 0, vector[850, 210]);
         let guard = 0;
         while (guard < 40) {
             let ph = engine::room_phase(room_id);
@@ -659,9 +659,9 @@ module mohayo::sim {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
         let own = std::signer::address_of(a);
-        character::gm_mint_at_level(a, own, 1, 2, vector[0, 0, 0, 0], vector[39], 40); // 守卫×巨人
+        character::gm_mint_at_level(a, own, 1, 2, vector[0, 0, 0, 0], vector[850], 40); // 守卫×巨人
         let guard = character::owner_latest_char(own);
-        character::gm_mint_at_level(a, own, 3, 0, vector[0, 0, 0, 0], vector[43], 40); // 人类黑魔(脆皮)
+        character::gm_mint_at_level(a, own, 3, 0, vector[0, 0, 0, 0], vector[890], 40); // 人类黑魔(脆皮)
         let squishy = character::owner_latest_char(own);
         // 覆写 D3: 单场 1 敌, 表10(祭司850/怨灵150), 两者技能均为 targeting1 单体
         skill_registry::set_dungeon(a, 3, mohayo::types::make_dungeon_config(10, 1, 15, 0, 0, 0, 120, 1));
@@ -671,7 +671,7 @@ module mohayo::sim {
         engine::join_room_as_char(a, room_id, guard);
         engine::join_room_as_char(a, room_id, squishy);
         engine::start_combat(a, room_id);
-        engine::set_plan(a, room_id, 0, vector[31]); // 守卫: 每回盾击(眩晕40%+嘲讽2轮)
+        engine::set_plan(a, room_id, 0, vector[210]); // 守卫: 每回盾击(眩晕40%+嘲讽2轮)
         engine::set_plan(a, room_id, 1, vector[]);   // 脆皮: 空过
         let guard_i = 0;
         while (guard_i < 8) { engine::advance_turn(a, room_id); guard_i = guard_i + 1; };
@@ -718,11 +718,11 @@ module mohayo::sim {
     fun sim_poison_d1_gate() {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
-        let (p1, t1) = clear_nb_rate(a, 1, 10, 109, 10, 10, 10, 1, vector[10]); // 平凡1级毒刃 b1
+        let (p1, t1) = clear_nb_rate(a, 1, 10, 109, 10, 10, 10, 1, vector[820]); // 平凡1级毒刃 b1
         report(p1, t1);
-        let (pf, tf) = clear_rate(a, 1, 10, 109, 10, 10, 10, vector[10]);      // 平凡1级毒刃 全程
+        let (pf, tf) = clear_rate(a, 1, 10, 109, 10, 10, 10, vector[820]);      // 平凡1级毒刃 全程
         report(pf, tf);
-        let (m1, m2) = clear_rate(a, 1, 10, 355, 34, 28, 27, vector[10]);      // 满天赋1级毒刃 全程(观察)
+        let (m1, m2) = clear_rate(a, 1, 10, 355, 34, 28, 27, vector[820]);      // 满天赋1级毒刃 全程(观察)
         report(m1, m2);
         assert!(p1 >= 8, 1);  // b1 保底可挖
         assert!(pf <= 2, 2);  // 平凡1级磨不穿 D1(b4 超时)
@@ -779,7 +779,7 @@ module mohayo::sim {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
         let own = std::signer::address_of(a);
-        character::gm_mint_at_level(a, own, 3, 0, vector[0, 0, 0, 0], vector[43], 40); // 人类黑魔 Lv40
+        character::gm_mint_at_level(a, own, 3, 0, vector[0, 0, 0, 0], vector[890], 40); // 人类黑魔 Lv40
         let cid = character::owner_latest_char(own);
         skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(4, 1, 2, 0, 0, 0, 120, 1));
         skill_registry::set_dungeon_battles(a, 1, vector[mohayo::types::make_battle_config(4, 1)]);
@@ -787,7 +787,7 @@ module mohayo::sim {
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, cid);
         engine::start_combat(a, room_id);
-        engine::set_plan(a, room_id, 0, vector[34]);
+        engine::set_plan(a, room_id, 0, vector[410]);
         engine::advance_turn(a, room_id);
         engine::advance_turn(a, room_id);
         let pool = engine::room_mana(room_id);
@@ -806,7 +806,7 @@ module mohayo::sim {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
         let own = std::signer::address_of(a);
-        character::gm_mint_at_level(a, own, 4, 0, vector[0, 0, 0, 0], vector[43], 40); // 人类白魔 Lv40
+        character::gm_mint_at_level(a, own, 4, 0, vector[0, 0, 0, 0], vector[890], 40); // 人类白魔 Lv40
         let cid = character::owner_latest_char(own);
         skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(1, 1, 8, 0, 0, 0, 120, 1));
         skill_registry::set_dungeon_battles(a, 1, vector[mohayo::types::make_battle_config(1, 2)]);
@@ -814,7 +814,7 @@ module mohayo::sim {
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, cid);
         engine::start_combat(a, room_id);
-        engine::set_plan(a, room_id, 0, vector[38]); // 每回召唤一人偶
+        engine::set_plan(a, room_id, 0, vector[530]); // 每回召唤一人偶
         let gi = 0;
         while (gi < 5) { engine::advance_turn(a, room_id); gi = gi + 1; };
         let mc = engine::member_count(room_id);
@@ -833,28 +833,28 @@ module mohayo::sim {
         reg(a);
         let own = std::signer::address_of(a);
         // 守卫(巨人, self 急救39)
-        character::gm_mint_at_level(a, own, 1, 2, vector[0, 0, 0, 0], vector[39], 300);
+        character::gm_mint_at_level(a, own, 1, 2, vector[0, 0, 0, 0], vector[850], 300);
         let c_g = character::owner_latest_char(own);
         // 白魔(人类, self 龙息43)
-        character::gm_mint_at_level(a, own, 4, 0, vector[0, 0, 0, 0], vector[43], 300);
+        character::gm_mint_at_level(a, own, 4, 0, vector[0, 0, 0, 0], vector[890], 300);
         let c_w = character::owner_latest_char(own);
         // 黑魔(人类, self 魔爆44)
-        character::gm_mint_at_level(a, own, 3, 0, vector[0, 0, 0, 0], vector[44], 300);
+        character::gm_mint_at_level(a, own, 3, 0, vector[0, 0, 0, 0], vector[900], 300);
         let c_b = character::owner_latest_char(own);
         // 剑士(人类, self 暴风剑24)
-        character::gm_mint_at_level(a, own, 2, 0, vector[0, 0, 0, 0], vector[24], 300);
+        character::gm_mint_at_level(a, own, 2, 0, vector[0, 0, 0, 0], vector[840], 300);
         let c_s = character::owner_latest_char(own);
         let w1 = 0;
         let i1 = 0;
         while (i1 < 3) {
-            w1 = w1 + run_pro4(a, 9, c_g, vector[31, 32], c_w, vector[37, 38], c_b, vector[34], c_s, vector[29, 29, 30]);
+            w1 = w1 + run_pro4(a, 9, c_g, vector[210, 220], c_w, vector[520, 530], c_b, vector[410], c_s, vector[310, 310, 320]);
             i1 = i1 + 1;
         };
         report(w1, 3); // 职业队 D9
         let w2 = 0;
         let i2 = 0;
         while (i2 < 2) {
-            w2 = w2 + run_pro4(a, 5, c_g, vector[31, 32], c_w, vector[37, 38], c_b, vector[34], c_s, vector[29, 29, 30]);
+            w2 = w2 + run_pro4(a, 5, c_g, vector[210, 220], c_w, vector[520, 530], c_b, vector[410], c_s, vector[310, 310, 320]);
             i2 = i2 + 1;
         };
         report(w2, 2); // 职业队 D5
@@ -869,17 +869,17 @@ module mohayo::sim {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
         let own = std::signer::address_of(a);
-        character::gm_mint_at_level(a, own, 3, 0, vector[0, 0, 0, 0], vector[44], 300);
+        character::gm_mint_at_level(a, own, 3, 0, vector[0, 0, 0, 0], vector[900], 300);
         let c_b = character::owner_latest_char(own);
-        character::gm_mint_at_level(a, own, 4, 0, vector[0, 0, 0, 0], vector[43], 300);
+        character::gm_mint_at_level(a, own, 4, 0, vector[0, 0, 0, 0], vector[890], 300);
         let c_w = character::owner_latest_char(own);
         engine::create_room(a, 7);
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, c_b);
         engine::join_room_as_char(a, room_id, c_w);
         engine::start_combat(a, room_id);
-        engine::set_plan(a, room_id, 0, vector[34, 34, 34, 28]);
-        engine::set_plan(a, room_id, 1, vector[37]);
+        engine::set_plan(a, room_id, 0, vector[410, 410, 410, 430]);
+        engine::set_plan(a, room_id, 1, vector[520]);
         let gi = 0;
         while (gi < 120) {
             let ph2 = engine::room_phase(room_id);

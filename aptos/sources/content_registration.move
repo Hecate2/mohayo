@@ -35,12 +35,12 @@ module mohayo::content_registration {
 
     /// Player skill builder (player-side). ammo fields fixed to 0.
     fun sk(
-        kind: u8, ap_cost: u16, ap_gain: u16, mana_cost: u64, hp_cost: u16,
+        id: u64, kind: u8, ap_cost: u16, ap_gain: u16, mana_cost: u64, hp_cost: u16,
         targeting: u8, weight_mode: u8, target_count: u8,
         power: u64, damage_cap: u64, base_acc: u16, flags: u8,
         effects: vector<types::EffectSpec>,
     ): types::Skill {
-        types::make_skill(0, kind, ap_cost, ap_gain, 0, 0, mana_cost, hp_cost,
+        types::make_skill(id, kind, ap_cost, ap_gain, 0, 0, mana_cost, hp_cost,
             targeting, weight_mode, target_count, power, damage_cap, base_acc, flags,
             effects, nosummon())
     }
@@ -76,269 +76,269 @@ module mohayo::content_registration {
 
         // ===================== PLAYER SKILLS 1..44 (canonical order) =====================
         // --- 基础技 (仅作为可自选池，不自动授予) ---
-        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 1, 2, 0,
+        skill_registry::register_skill(account, sk(100,types::KIND_PHYSICAL(), 0, 1, 2, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 100, 0, 950, 0,
-            vector::empty()));                                                          // 1 攻击
-        skill_registry::register_skill(account, sk(types::KIND_MAGIC(), 0, 1, 3, 0,
+            vector::empty()));                                                          // 100 攻击
+        skill_registry::register_skill(account, sk(110,types::KIND_MAGIC(), 0, 1, 3, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 120, 0, 950, 0,
-            vector::empty()));                                                          // 2 魔法弹
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 0, 1, 4, 0,
+            vector::empty()));                                                          // 110 魔法弹
+        skill_registry::register_skill(account, sk(120,types::KIND_SUPPORT(), 0, 1, 4, 0,
             types::TGT_MOST_WOUNDED_ALLY(), types::WT_HP_DEFICIT_ALLY(), 1, 800, 0, 1000, 0,
-            vector[eff(types::OP_HEAL(), 800, 1, 1, 1000)]));                          // 3 治疗
-        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 2, 5, 0,
+            vector[eff(types::OP_HEAL(), 800, 1, 1, 1000)]));                          // 120 治疗
+        skill_registry::register_skill(account, sk(130,types::KIND_PHYSICAL(), 0, 2, 5, 0,
             types::TGT_RAND_STRIKE_ENEMY(), types::WT_THREAT_ENEMY(), 3, 100, 0, 900, 0,
-            vector::empty()));                                                          // 4 三段斩
+            vector::empty()));                                                          // 130 三段斩
 
         // --- 通用池 ---
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 1, 0, 2, 0,
+        skill_registry::register_skill(account, sk(140,types::KIND_SUPPORT(), 1, 0, 2, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_SHIELD(), 400, 4, 0, 1000)]));                        // 5 盾(通用)
-        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 1, 1, 3, 0,
+            vector[eff(types::OP_SHIELD(), 400, 4, 0, 1000)]));                        // 140 盾(通用)
+        skill_registry::register_skill(account, sk(150,types::KIND_PHYSICAL(), 1, 1, 3, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 130, 0, 900, 0,
-            vector[eff(types::OP_STUN(), 1, 2, 1, 350)]));                             // 6 眩晕打击
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 1, 0, 4, 0,
+            vector[eff(types::OP_STUN(), 1, 2, 1, 350)]));                             // 150 眩晕打击
+        skill_registry::register_skill(account, sk(810,types::KIND_SUPPORT(), 1, 0, 4, 0,
             types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_ACC_DOWN(), 150, 3, 3, 1000)]));                     // 7 烟雾(尘幕)
-        // 8 鹰眼(火枪手 class) —— GUAR_NEXT
-        skill_registry::register_class_skill(account, sk(types::KIND_SUPPORT(), 1, 0, 0, 0,
+            vector[eff(types::OP_ACC_DOWN(), 150, 3, 3, 1000)]));                     // 810 烟雾(尘幕)
+        // 610 鹰眼(火枪手 class) —— GUAR_NEXT
+        skill_registry::register_class_skill(account, sk(610,types::KIND_SUPPORT(), 1, 0, 0, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
             vector[eff(types::OP_GUAR_NEXT(), 1, 2, 0, 1000)]), 5);
-        skill_registry::register_skill(account, sk(types::KIND_MAGIC(), 2, 1, 8, 0,
+        skill_registry::register_skill(account, sk(160,types::KIND_MAGIC(), 2, 1, 8, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 300, 0, 900, 0,
-            vector::empty()));                                                          // 9 魔素爆发
-        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 1, 1, 3, 0,
+            vector::empty()));                                                          // 160 魔素爆发
+        skill_registry::register_skill(account, sk(820,types::KIND_PHYSICAL(), 1, 1, 3, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 140, 0, 950, 0,
-            vector[eff(types::OP_DOT(), 20, 3, 1, 1000)]));                          // 10 毒刃(流血20×3, 复审后值; 同源刷新不累加)
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 1, 0, 2, 0,
+            vector[eff(types::OP_DOT(), 20, 3, 1, 1000)]));                          // 820 毒刃(流血20×3, 复审后值; 同源刷新不累加)
+        skill_registry::register_skill(account, sk(170,types::KIND_SUPPORT(), 1, 0, 2, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_TAUNT(), 1, 3, 0, 1000), eff(types::OP_DMG_IN_MOD(), 150, 3, 0, 1000)])); // 11 挑衅
+            vector[eff(types::OP_TAUNT(), 1, 3, 0, 1000), eff(types::OP_DMG_IN_MOD(), 150, 3, 0, 1000)])); // 170 挑衅
 
         // --- 种族技 ---
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 1, 0, 0, 0,
+        skill_registry::register_skill(account, sk(710,types::KIND_SUPPORT(), 1, 0, 0, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_DMG_OUT_MOD(), 250, 4, 0, 1000), eff(types::OP_DMG_IN_MOD(), 250, 4, 0, 1000)])); // 12 狂暴(兽人)
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 1, 0, 0, 0,
+            vector[eff(types::OP_DMG_OUT_MOD(), 250, 4, 0, 1000), eff(types::OP_DMG_IN_MOD(), 250, 4, 0, 1000)])); // 710 狂暴(兽人)
+        skill_registry::register_skill(account, sk(720,types::KIND_SUPPORT(), 1, 0, 0, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_SHIELD(), 1200, 5, 0, 1000)]));                       // 13 磐石之躯(巨人)
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 1, 0, 0, 0,
+            vector[eff(types::OP_SHIELD(), 1200, 5, 0, 1000)]));                       // 720 磐石之躯(巨人)
+        skill_registry::register_skill(account, sk(730,types::KIND_SUPPORT(), 1, 0, 0, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_DISPEL(), 0, 1, 0, 1000), eff(types::OP_HEAL(), 900, 1, 0, 1000)])); // 14 烈酒回魂(矮人)
-        skill_registry::register_skill(account, sk(types::KIND_MAGIC(), 2, 1, 8, 0,
+            vector[eff(types::OP_DISPEL(), 0, 1, 0, 1000), eff(types::OP_HEAL(), 900, 1, 0, 1000)])); // 730 烈酒回魂(矮人)
+        skill_registry::register_skill(account, sk(740,types::KIND_MAGIC(), 2, 1, 8, 0,
             types::TGT_RAND_STRIKE_ENEMY(), types::WT_THREAT_ENEMY(), 4, 140, 0, 900, 0,
-            vector[eff(types::OP_STUN(), 1, 2, 1, 250)]));                             // 15 暴风术(精灵)
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 1, 0, 4, 0,
+            vector[eff(types::OP_STUN(), 1, 2, 1, 250)]));                             // 740 暴风术(精灵)
+        skill_registry::register_skill(account, sk(750,types::KIND_SUPPORT(), 1, 0, 4, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_SHIELD(), 1000, 4, 0, 1000), eff(types::OP_DMG_OUT_MOD(), 180, 3, 0, 1000)])); // 16 龙鳞(龙人)
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 0, 1, 3, 0,
+            vector[eff(types::OP_SHIELD(), 1000, 4, 0, 1000), eff(types::OP_DMG_OUT_MOD(), 180, 3, 0, 1000)])); // 750 龙鳞(龙人)
+        skill_registry::register_skill(account, sk(760,types::KIND_SUPPORT(), 0, 1, 3, 0,
             types::TGT_MOST_WOUNDED_ALLY(), types::WT_HP_DEFICIT_ALLY(), 1, 1200, 0, 950, 0,
-            vector[eff(types::OP_HEAL(), 1200, 1, 1, 1000)]));                        // 17 圣愈之光(天使)
-        skill_registry::register_skill(account, sk(types::KIND_MAGIC(), 2, 1, 6, 0,
+            vector[eff(types::OP_HEAL(), 1200, 1, 1, 1000)]));                        // 760 圣愈之光(天使)
+        skill_registry::register_skill(account, sk(770,types::KIND_MAGIC(), 2, 1, 6, 0,
             types::TGT_RAND_STRIKE_ENEMY(), types::WT_THREAT_ENEMY(), 3, 160, 0, 900, 0,
-            vector[eff(types::OP_STUN(), 1, 2, 1, 300)]));                            // 18 天使雷击(天使)
-        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 1, 1, 0, 0,
+            vector[eff(types::OP_STUN(), 1, 2, 1, 300)]));                            // 770 天使雷击(天使)
+        skill_registry::register_skill(account, sk(780,types::KIND_PHYSICAL(), 1, 1, 0, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 260, 0, 950, 0,
-            vector[eff(types::OP_LIFESTEAL(), 500, 1, 1, 1000)]));                    // 19 汲魂(恶魔)
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 1, 0, 4, 0,
+            vector[eff(types::OP_LIFESTEAL(), 500, 1, 1, 1000)]));                    // 780 汲魂(恶魔)
+        skill_registry::register_skill(account, sk(790,types::KIND_SUPPORT(), 1, 0, 4, 0,
             types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_ACC_DOWN(), 200, 3, 3, 1000)]));                     // 20 深渊低语(恶魔)
+            vector[eff(types::OP_ACC_DOWN(), 200, 3, 3, 1000)]));                     // 790 深渊低语(恶魔)
 
         // --- 占位/备用 (不授予) ---
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 1, 0, 0, 0,
+        skill_registry::register_skill(account, sk(180,types::KIND_SUPPORT(), 1, 0, 0, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_SHIELD(), 200, 2, 0, 1000)]));                       // 21 召唤(占位)
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 0, 0, 0, 0,
+            vector[eff(types::OP_SHIELD(), 200, 2, 0, 1000)]));                       // 180 召唤(占位)
+        skill_registry::register_skill(account, sk(190,types::KIND_SUPPORT(), 0, 0, 0, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector::empty()));                                                          // 22 待机
+            vector::empty()));                                                          // 190 待机
 
         // --- 自选池补强 ---
-        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 1, 1, 4, 0,
+        skill_registry::register_skill(account, sk(830,types::KIND_PHYSICAL(), 1, 1, 4, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 420, 0, 620, 0,
-            vector::empty()));                                                          // 23 一闪(高暴击/难命中)
-        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 3, 1, 5, 0,
+            vector::empty()));                                                          // 830 一闪(高暴击/难命中)
+        skill_registry::register_skill(account, sk(840,types::KIND_PHYSICAL(), 3, 1, 5, 0,
             types::TGT_RAND_STRIKE_ENEMY(), types::WT_THREAT_ENEMY(), 4, 150, 0, 900, 0,
-            vector::empty()));                                                          // 24 暴风剑
+            vector::empty()));                                                          // 840 暴风剑
 
         // --- 剑士 ---
-        skill_registry::register_class_skill(account, sk(types::KIND_MAGIC(), 1, 2, 5, 0,
+        skill_registry::register_class_skill(account, sk(330,types::KIND_MAGIC(), 1, 2, 5, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 280, 0, 950, 0,
-            vector::empty()), 2);                                                       // 25 魔法剑
+            vector::empty()), 2);                                                       // 330 魔法剑
         // --- 火枪手 ---
-        skill_registry::register_class_skill(account, sk(types::KIND_PHYSICAL(), 1, 3, 4, 0,
+        skill_registry::register_class_skill(account, sk(620,types::KIND_PHYSICAL(), 1, 3, 4, 0,
             types::TGT_RAND_STRIKE_ENEMY(), types::WT_THREAT_ENEMY(), 3, 150, 0, 820, 0,
-            vector::empty()), 5);                                                       // 26 左轮弹雨
-        skill_registry::register_class_skill(account, sk(types::KIND_PHYSICAL(), 2, 1, 0, 0,
+            vector::empty()), 5);                                                       // 620 左轮弹雨
+        skill_registry::register_class_skill(account, sk(630,types::KIND_PHYSICAL(), 2, 1, 0, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 420, 0, 950, 0,
-            vector[eff(types::OP_MANA_DELTA(), 40, 1, 0, 1000)]), 5);                  // 27 龙击弹
+            vector[eff(types::OP_MANA_DELTA(), 40, 1, 0, 1000)]), 5);                  // 630 龙击弹
         // --- 黑魔法师 ---
-        skill_registry::register_class_skill(account, sk(types::KIND_MAGIC(), 0, 1, 0, 0,
+        skill_registry::register_class_skill(account, sk(430,types::KIND_MAGIC(), 0, 1, 0, 0,
             types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 3000, 0, 1000, types::FLAG_MANA_ALL(),
-            vector[eff(types::OP_STUN(), 1, 3, 0, 1000)]), 3);                         // 28 爆裂魔法(全魔素)
-        skill_registry::register_class_skill(account, sk(types::KIND_PHYSICAL(), 0, 2, 3, 0,
+            vector[eff(types::OP_STUN(), 1, 3, 0, 1000)]), 3);                         // 430 爆裂魔法(全魔素)
+        skill_registry::register_class_skill(account, sk(310,types::KIND_PHYSICAL(), 0, 2, 3, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 220, 0, 900, 0,
-            vector::empty()), 2);                                                       // 29 快速剑
-        skill_registry::register_class_skill(account, sk(types::KIND_PHYSICAL(), 3, 1, 5, 0,
+            vector::empty()), 2);                                                       // 310 快速剑
+        skill_registry::register_class_skill(account, sk(320,types::KIND_PHYSICAL(), 3, 1, 5, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 340, 0, 950, 0,
-            vector::empty()), 2);                                                       // 30 斩铁剑
+            vector::empty()), 2);                                                       // 320 斩铁剑
         // --- 守卫 ---
-        skill_registry::register_class_skill(account, sk(types::KIND_PHYSICAL(), 1, 1, 4, 0,
+        skill_registry::register_class_skill(account, sk(210,types::KIND_PHYSICAL(), 1, 1, 4, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 260, 0, 900, 0,
-            vector[eff(types::OP_STUN(), 1, 2, 1, 400), eff(types::OP_TAUNT(), 1, 2, 0, 1000)]), 1); // 31 盾击(眩晕40% + 必嘲讽2轮)
-        skill_registry::register_class_skill(account, sk(types::KIND_SUPPORT(), 2, 0, 6, 0,
+            vector[eff(types::OP_STUN(), 1, 2, 1, 400), eff(types::OP_TAUNT(), 1, 2, 0, 1000)]), 1); // 210 盾击(眩晕40% + 必嘲讽2轮)
+        skill_registry::register_class_skill(account, sk(220,types::KIND_SUPPORT(), 2, 0, 6, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_SHIELD(), 1400, 4, 0, 1000)]), 1);                    // 32 盾墙
-        skill_registry::register_class_skill(account, sk(types::KIND_SUPPORT(), 1, 0, 0, 0,
+            vector[eff(types::OP_SHIELD(), 1400, 4, 0, 1000)]), 1);                    // 220 盾墙
+        skill_registry::register_class_skill(account, sk(230,types::KIND_SUPPORT(), 1, 0, 0, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_EVADE_UP(), 350, 3, 0, 1000)]), 1);                   // 33 回避
+            vector[eff(types::OP_EVADE_UP(), 350, 3, 0, 1000)]), 1);                   // 230 回避
         // --- 黑魔法师 ---
         // 28 爆裂魔法(全魔素) 见上; 34 献祭 = 烧血 4 段魔法攻击, 每段命中为房间池 +10 魔素
         // (战地血泵: 黑魔唯一常规输出 + 全队应急回蓝; 段数×产魔量初值, sim 可调)
-        skill_registry::register_class_skill(account, sk(types::KIND_MAGIC(), 0, 0, 0, 30,
+        skill_registry::register_class_skill(account, sk(410,types::KIND_MAGIC(), 0, 0, 0, 30,
             types::TGT_RAND_STRIKE_ENEMY(), types::WT_THREAT_ENEMY(), 4, 110, 0, 900, 0,
-            vector[eff(types::OP_MANA_DELTA(), 10, 1, 0, 1000)]), 3);                  // 34 献祭(HP→多段输出→每命中产魔素)
-        skill_registry::register_class_skill(account, sk(types::KIND_SUPPORT(), 1, 0, 5, 0,
+            vector[eff(types::OP_MANA_DELTA(), 10, 1, 0, 1000)]), 3);                  // 410 献祭(HP→多段输出→每命中产魔素)
+        skill_registry::register_class_skill(account, sk(420,types::KIND_SUPPORT(), 1, 0, 5, 0,
             types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_ACC_DOWN(), 250, 3, 3, 1000)]), 3);                   // 35 黑幕
+            vector[eff(types::OP_ACC_DOWN(), 250, 3, 3, 1000)]), 3);                   // 420 黑幕
         // --- 白魔法师 ---
-        skill_registry::register_class_skill(account, sk(types::KIND_MAGIC(), 1, 2, 5, 0,
+        skill_registry::register_class_skill(account, sk(510,types::KIND_MAGIC(), 1, 2, 5, 0,
             types::TGT_RAND_STRIKE_ENEMY(), types::WT_THREAT_ENEMY(), 5, 160, 0, 950, 0,
-            vector::empty()), 4);                                                       // 36 光弹(固定5弹着)
-        skill_registry::register_class_skill(account, sk(types::KIND_SUPPORT(), 1, 1, 8, 0,
+            vector::empty()), 4);                                                       // 510 光弹(固定5弹着)
+        skill_registry::register_class_skill(account, sk(520,types::KIND_SUPPORT(), 1, 1, 8, 0,
             types::TGT_ALL_ALLY(), types::WT_UNIFORM(), 1, 450, 0, 1000, 0,
-            vector[eff(types::OP_HEAL(), 450, 1, 2, 1000), eff(types::OP_MANA_DELTA(), 6, 1, 0, 1000)]), 4); // 37 圣泉(群回 power×魔攻; 每治疗目标回池6魔素——奶人回蓝)
+            vector[eff(types::OP_HEAL(), 450, 1, 2, 1000), eff(types::OP_MANA_DELTA(), 6, 1, 0, 1000)]), 4); // 520 圣泉(群回 power×魔攻; 每治疗目标回池6魔素——奶人回蓝)
         // 38 替身人偶 —— 召唤无嘲讽、无行动的己方假目标(模板35)吸随机火力; FLAG_SUMMON_ALLY(bit2)
-        skill_registry::register_class_skill(account, types::make_skill(0, types::KIND_SUPPORT(), 1, 0, 0, 0,
+        skill_registry::register_class_skill(account, types::make_skill(530, types::KIND_SUPPORT(), 1, 0, 0, 0,
             4, 0, types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000,
-            types::FLAG_SUMMON_ALLY(), vector::empty(), types::make_summon_rule(35, 1, 0)), 4); // 38 替身人偶
+            types::FLAG_SUMMON_ALLY(), vector::empty(), types::make_summon_rule(35, 1, 0)), 4); // 530 替身人偶
         // --- 自选池 ---
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 0, 1, 2, 0,
+        skill_registry::register_skill(account, sk(850,types::KIND_SUPPORT(), 0, 1, 2, 0,
             types::TGT_MOST_WOUNDED_ALLY(), types::WT_HP_DEFICIT_ALLY(), 1, 500, 0, 1000, 0,
-            vector[eff(types::OP_HEAL(), 500, 1, 1, 1000)]));                          // 39 急救包扎
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 1, 0, 3, 0,
+            vector[eff(types::OP_HEAL(), 500, 1, 1, 1000)]));                          // 850 急救包扎
+        skill_registry::register_skill(account, sk(860,types::KIND_SUPPORT(), 1, 0, 3, 0,
             types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_ACC_DOWN(), 300, 2, 3, 1000)]));                      // 40 致盲粉
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 2, 0, 5, 0,
+            vector[eff(types::OP_ACC_DOWN(), 300, 2, 3, 1000)]));                      // 860 致盲粉
+        skill_registry::register_skill(account, sk(870,types::KIND_SUPPORT(), 2, 0, 5, 0,
             types::TGT_ALL_ALLY(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_SHIELD(), 500, 3, 2, 1000)]));                        // 41 岩石壁垒
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 2, 0, 5, 0,
+            vector[eff(types::OP_SHIELD(), 500, 3, 2, 1000)]));                        // 870 岩石壁垒
+        skill_registry::register_skill(account, sk(880,types::KIND_SUPPORT(), 2, 0, 5, 0,
             types::TGT_ALL_ALLY(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_SHIELD(), 850, 4, 2, 1000)]));                        // 42 魔力护盾(吃魔攻)
-        skill_registry::register_skill(account, sk(types::KIND_MAGIC(), 3, 1, 8, 0,
+            vector[eff(types::OP_SHIELD(), 850, 4, 2, 1000)]));                        // 880 魔力护盾(吃魔攻)
+        skill_registry::register_skill(account, sk(890,types::KIND_MAGIC(), 3, 1, 8, 0,
             types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 220, 0, 900, 0,
-            vector::empty()));                                                          // 43 龙息
-        skill_registry::register_skill(account, sk(types::KIND_MAGIC(), 3, 1, 9, 0,
+            vector::empty()));                                                          // 890 龙息
+        skill_registry::register_skill(account, sk(900,types::KIND_MAGIC(), 3, 1, 9, 0,
             types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 260, 0, 900, 0,
-            vector::empty()));                                                          // 44 魔爆术
+            vector::empty()));                                                          // 900 魔爆术
 
         // ===================== ENEMY SKILLS 45..56 (canonical order) =====================
-        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+        skill_registry::register_skill(account, sk(1015,types::KIND_PHYSICAL(), 0, 0, 0, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 1400, 0, 900, 0,
-            vector::empty()));                                                          // 45 火花锯
-        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+            vector::empty()));                                                          // 1015 火花锯
+        skill_registry::register_skill(account, sk(1010,types::KIND_PHYSICAL(), 0, 0, 0, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 680, 0, 900, 0,
-            vector::empty()));                                                          // 46 粒子斩
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 0, 0, 0, 0,
+            vector::empty()));                                                          // 1010 粒子斩
+        skill_registry::register_skill(account, sk(1020,types::KIND_SUPPORT(), 0, 0, 0, 0,
             types::TGT_ROOM_ALL(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_MANA_DRAIN(), 160, 1, 0, 1000)]));                    // 47 督军泄漏(抽魔素)
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 0, 0, 0, 0,
+            vector[eff(types::OP_MANA_DRAIN(), 160, 1, 0, 1000)]));                    // 1020 督军泄漏(抽魔素)
+        skill_registry::register_skill(account, sk(1610,types::KIND_SUPPORT(), 0, 0, 0, 0,
             types::TGT_ROOM_ALL(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_MANA_DRAIN(), 200, 1, 0, 1000)]));                    // 48 炉泄漏
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 0, 0, 0, 0,
+            vector[eff(types::OP_MANA_DRAIN(), 200, 1, 0, 1000)]));                    // 1610 炉泄漏
+        skill_registry::register_skill(account, sk(1615,types::KIND_SUPPORT(), 0, 0, 0, 0,
             types::TGT_ROOM_ALL(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_MANA_DRAIN(), 320, 1, 0, 1000)]));                    // 49 炉虹吸(强抽)
-        // 50 炉召唤(机神卫兵) —— 敌方阵营召唤，flags=0
-        skill_registry::register_skill(account, types::make_skill(0, types::KIND_SUPPORT(), 0, 0, 0, 0,
+            vector[eff(types::OP_MANA_DRAIN(), 320, 1, 0, 1000)]));                    // 1615 炉虹吸(强抽)
+        // 1620 炉召唤(机神卫兵) —— 敌方阵营召唤，flags=0
+        skill_registry::register_skill(account, types::make_skill(1620, types::KIND_SUPPORT(), 0, 0, 0, 0,
             0, 0, types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000,
             0, vector::empty(), types::make_summon_rule(27, 2, 0)));
-        skill_registry::register_skill(account, sk(types::KIND_MAGIC(), 0, 0, 0, 0,
+        skill_registry::register_skill(account, sk(1630,types::KIND_MAGIC(), 0, 0, 0, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 2800, 0, 880, 0,
-            vector::empty()));                                                          // 51 皇帝火花炮
-        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+            vector::empty()));                                                          // 1630 皇帝火花炮
+        skill_registry::register_skill(account, sk(1635,types::KIND_PHYSICAL(), 0, 0, 0, 0,
             types::TGT_RAND_STRIKE_ENEMY(), types::WT_UNIFORM(), 4, 450, 0, 850, 0,
-            vector[eff(types::OP_STUN(), 1, 2, 3, 300)]));                            // 52 皇帝幻光轮
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 0, 0, 0, 0,
+            vector[eff(types::OP_STUN(), 1, 2, 3, 300)]));                            // 1635 皇帝幻光轮
+        skill_registry::register_skill(account, sk(1640,types::KIND_SUPPORT(), 0, 0, 0, 0,
             types::TGT_ROOM_ALL(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_MANA_DRAIN(), 260, 1, 0, 1000)]));                    // 53 皇帝泄漏
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 0, 0, 0, 0,
+            vector[eff(types::OP_MANA_DRAIN(), 260, 1, 0, 1000)]));                    // 1640 皇帝泄漏
+        skill_registry::register_skill(account, sk(1645,types::KIND_SUPPORT(), 0, 0, 0, 0,
             types::TGT_ROOM_ALL(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_MANA_DRAIN(), 420, 1, 0, 1000)]));                    // 54 皇帝虹吸
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 0, 0, 0, 0,
+            vector[eff(types::OP_MANA_DRAIN(), 420, 1, 0, 1000)]));                    // 1645 皇帝虹吸
+        skill_registry::register_skill(account, sk(1650,types::KIND_SUPPORT(), 0, 0, 0, 0,
             types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_ACC_DOWN(), 250, 4, 3, 1000), eff(types::OP_STUN(), 1, 2, 3, 300)])); // 55 帝王威压
-        // 56 皇帝召唤(机神卫兵) —— 敌方阵营召唤，flags=0
-        skill_registry::register_skill(account, types::make_skill(0, types::KIND_SUPPORT(), 0, 0, 0, 0,
+            vector[eff(types::OP_ACC_DOWN(), 250, 4, 3, 1000), eff(types::OP_STUN(), 1, 2, 3, 300)])); // 1650 帝王威压
+        // 1655 皇帝召唤(机神卫兵) —— 敌方阵营召唤，flags=0
+        skill_registry::register_skill(account, types::make_skill(1655, types::KIND_SUPPORT(), 0, 0, 0, 0,
             0, 0, types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000,
             0, vector::empty(), types::make_summon_rule(27, 2, 0)));
 
         // ===================== ENEMY SKILLS 57..67 (D2-D8 世界观怪物) =====================
         // 注: 敌技 targeting 以"施放者视角"书写; 引擎按阵营自动镜像(打玩家侧用 1-4)。
-        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+        skill_registry::register_skill(account, sk(1110,types::KIND_PHYSICAL(), 0, 0, 0, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 700, 0, 920, 0,
-            vector::empty()));                                                          // 57 锈爪
-        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+            vector::empty()));                                                          // 1110 锈爪
+        skill_registry::register_skill(account, sk(1115,types::KIND_PHYSICAL(), 0, 0, 0, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 800, 0, 900, 0,
-            vector[eff(types::OP_STUN(), 1, 3, 1, 500)]));                              // 58 缠绕(50%概率晕2回合行动——早期控制体验的方差核心)
-        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+            vector[eff(types::OP_STUN(), 1, 3, 1, 500)]));                              // 1115 缠绕(50%概率晕2回合行动——早期控制体验的方差核心)
+        skill_registry::register_skill(account, sk(1120,types::KIND_PHYSICAL(), 0, 0, 0, 0,
             types::TGT_RAND_MULTI_ENEMY(), types::WT_THREAT_ENEMY(), 2, 500, 0, 880, 0,
-            vector::empty()));                                                          // 59 矿镐横扫
-        skill_registry::register_skill(account, sk(types::KIND_MAGIC(), 0, 0, 0, 0,
+            vector::empty()));                                                          // 1120 矿镐横扫
+        skill_registry::register_skill(account, sk(1125,types::KIND_MAGIC(), 0, 0, 0, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 900, 0, 920, 0,
-            vector::empty()));                                                          // 60 摄魂(走魔攻)
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 0, 0, 0, 0,
+            vector::empty()));                                                          // 1125 摄魂(走魔攻)
+        skill_registry::register_skill(account, sk(1130,types::KIND_SUPPORT(), 0, 0, 0, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 0, 0, 900, 0,
-            vector[eff(types::OP_ACC_DOWN(), 300, 3, 1, 1000)]));                       // 61 恐惧尖啸
-        skill_registry::register_skill(account, sk(types::KIND_MAGIC(), 0, 0, 0, 0,
+            vector[eff(types::OP_ACC_DOWN(), 300, 3, 1, 1000)]));                       // 1130 恐惧尖啸
+        skill_registry::register_skill(account, sk(1135,types::KIND_MAGIC(), 0, 0, 0, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 1000, 0, 920, 0,
-            vector::empty()));                                                          // 62 圣光鞭挞(走魔攻)
-        // 63 召唤机仆 —— 敌方阵营召唤残破机仆(模板5)×2，flags=0
-        skill_registry::register_skill(account, types::make_skill(0, types::KIND_SUPPORT(), 0, 0, 0, 0,
+            vector::empty()));                                                          // 1135 圣光鞭挞(走魔攻)
+        // 1140 召唤机仆 —— 敌方阵营召唤残破机仆(模板5)×2，flags=0
+        skill_registry::register_skill(account, types::make_skill(1140, types::KIND_SUPPORT(), 0, 0, 0, 0,
             0, 0, types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000,
             0, vector::empty(), types::make_summon_rule(5, 2, 0)));
-        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+        skill_registry::register_skill(account, sk(1145,types::KIND_PHYSICAL(), 0, 0, 0, 0,
             types::TGT_RAND_MULTI_ENEMY(), types::WT_THREAT_ENEMY(), 3, 520, 0, 880, 0,
-            vector::empty()));                                                          // 64 熔岩溅射
-        skill_registry::register_skill(account, sk(types::KIND_MAGIC(), 0, 0, 0, 0,
+            vector::empty()));                                                          // 1145 熔岩溅射
+        skill_registry::register_skill(account, sk(1150,types::KIND_MAGIC(), 0, 0, 0, 0,
             types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 600, 0, 900, 0,
-            vector::empty()));                                                          // 65 龙息(敌,全体魔攻)
-        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+            vector::empty()));                                                          // 1150 龙息(敌,全体魔攻)
+        skill_registry::register_skill(account, sk(1155,types::KIND_PHYSICAL(), 0, 0, 0, 0,
             types::TGT_RAND_STRIKE_ENEMY(), types::WT_THREAT_ENEMY(), 2, 650, 0, 900, 0,
-            vector::empty()));                                                          // 66 撕咬(双段)
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 0, 0, 0, 0,
+            vector::empty()));                                                          // 1155 撕咬(双段)
+        skill_registry::register_skill(account, sk(1160,types::KIND_SUPPORT(), 0, 0, 0, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_MANA_DRAIN(), 160, 1, 0, 1000)]));                     // 67 魔素虹吸(自施,单次抽池)
+            vector[eff(types::OP_MANA_DRAIN(), 160, 1, 0, 1000)]));                     // 1160 魔素虹吸(自施,单次抽池)
 
         // ===================== ENEMY SKILLS 68..77 (D5-D8 世界观怪物) =====================
-        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+        skill_registry::register_skill(account, sk(1210,types::KIND_PHYSICAL(), 0, 0, 0, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 950, 0, 920, 0,
-            vector::empty()));                                                          // 68 督军炮(机神督军收敛重炮)
-        // 69 督军增援: 召唤机神哨兵(模板15)×1 —— 战斗雪球感: 拖越久敌人越多
-        skill_registry::register_skill(account, types::make_skill(0, types::KIND_SUPPORT(), 0, 0, 0, 0,
+            vector::empty()));                                                          // 1210 督军炮(机神督军收敛重炮)
+        // 1215 督军增援: 召唤机神哨兵(模板15)×1 —— 战斗雪球感: 拖越久敌人越多
+        skill_registry::register_skill(account, types::make_skill(1215, types::KIND_SUPPORT(), 0, 0, 0, 0,
             0, 0, types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000,
             0, vector::empty(), types::make_summon_rule(15, 1, 0)));
-        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+        skill_registry::register_skill(account, sk(1310,types::KIND_PHYSICAL(), 0, 0, 0, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 900, 0, 920, 0,
-            vector::empty()));                                                          // 70 骸王斩
-        // 71 骸王号令: 召唤白骨卫士(模板18)×2
-        skill_registry::register_skill(account, types::make_skill(0, types::KIND_SUPPORT(), 0, 0, 0, 0,
+            vector::empty()));                                                          // 1310 骸王斩
+        // 1315 骸王号令: 召唤白骨卫士(模板18)×2
+        skill_registry::register_skill(account, types::make_skill(1315, types::KIND_SUPPORT(), 0, 0, 0, 0,
             0, 0, types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000,
             0, vector::empty(), types::make_summon_rule(18, 2, 0)));
-        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+        skill_registry::register_skill(account, sk(1410,types::KIND_PHYSICAL(), 0, 0, 0, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 1000, 0, 920, 0,
-            vector::empty()));                                                          // 72 龙爪(物理)
-        // 73 龙裔号令: 召唤熔岩幼龙(模板21)×2
-        skill_registry::register_skill(account, types::make_skill(0, types::KIND_SUPPORT(), 0, 0, 0, 0,
+            vector::empty()));                                                          // 1410 龙爪(物理)
+        // 1415 龙裔号令: 召唤熔岩幼龙(模板21)×2
+        skill_registry::register_skill(account, types::make_skill(1415, types::KIND_SUPPORT(), 0, 0, 0, 0,
             0, 0, types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000,
             0, vector::empty(), types::make_summon_rule(21, 2, 0)));
-        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+        skill_registry::register_skill(account, sk(1510,types::KIND_PHYSICAL(), 0, 0, 0, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 900, 0, 900, 0,
-            vector::empty()));                                                          // 74 裂爪(物理)
-        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+            vector::empty()));                                                          // 1510 裂爪(物理)
+        skill_registry::register_skill(account, sk(1515,types::KIND_PHYSICAL(), 0, 0, 0, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 700, 0, 920, 0,
-            vector[eff(types::OP_LIFESTEAL(), 350, 1, 1, 1000)]));                      // 75 深渊撕咬(物理+35%吸血)
-        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 0, 0, 0, 0,
+            vector[eff(types::OP_LIFESTEAL(), 350, 1, 1, 1000)]));                      // 1515 深渊撕咬(物理+35%吸血)
+        skill_registry::register_skill(account, sk(1520,types::KIND_SUPPORT(), 0, 0, 0, 0,
             types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_ACC_DOWN(), 250, 3, 3, 1000)]));                       // 76 裂隙威压(全体玩家降命中)
-        // 77 裂隙召唤: 召唤裂痕魔(模板24)×2
-        skill_registry::register_skill(account, types::make_skill(0, types::KIND_SUPPORT(), 0, 0, 0, 0,
+            vector[eff(types::OP_ACC_DOWN(), 250, 3, 3, 1000)]));                       // 1520 裂隙威压(全体玩家降命中)
+        // 1525 裂隙召唤: 召唤裂痕魔(模板24)×2
+        skill_registry::register_skill(account, types::make_skill(1525, types::KIND_SUPPORT(), 0, 0, 0, 0,
             0, 0, types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000,
             0, vector::empty(), types::make_summon_rule(24, 2, 0)));
 
