@@ -228,10 +228,10 @@ module mohayo::content_registration {
 
         // ===================== ENEMY SKILLS 45..56 (canonical order) =====================
         skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
-            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 1000, 0, 900, 0,
+            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 1400, 0, 900, 0,
             vector::empty()));                                                          // 45 火花锯
         skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
-            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 420, 0, 900, 0,
+            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 680, 0, 900, 0,
             vector::empty()));                                                          // 46 粒子斩
         skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 0, 0, 0, 0,
             types::TGT_ROOM_ALL(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
@@ -290,51 +290,53 @@ module mohayo::content_registration {
 
         // ===================== ENEMY TEMPLATES (ids 1..30, in order) =====================
         // make_enemy_template(ai_id, threat, max_hp, power, magic, speed, base_acc, rew_min, rew_max, ods)
-        // ---- 石头系（AI1 待机，不攻击；D1 挖矿）----
-        skill_registry::register_template(account, tmpl(1, 0, 80, 0, 0, 5, 0, 3, 5));        // 1 碎石
-        skill_registry::register_template(account, tmpl(1, 0, 220, 0, 0, 4, 0, 6, 9));       // 2 石头
-        skill_registry::register_template(account, tmpl(1, 0, 700, 0, 0, 3, 0, 12, 18));     // 3 大石头
-        skill_registry::register_template(account, tmpl(1, 0, 2600, 0, 0, 2, 0, 25, 40));    // 4 巨型岩石
+        // ---- 魔素岩系（AI1 待机，不攻击；D1 灰烬矿坑挖矿）----
+        // 血量按 120 回合/场的清退阀倒推：碎晶岩≈平凡1级可挖穿的下限；
+        // 大魔素岩让"中坚矿工"(atk≈135) 逼近回合预算(有时超时清退)；巨型魔素岩只有更高等级能啃。
+        skill_registry::register_template(account, tmpl(1, 0, 35, 0, 0, 5, 0, 1, 2));        // 1 碎晶岩
+        skill_registry::register_template(account, tmpl(1, 0, 90, 0, 0, 4, 0, 3, 5));        // 2 魔素岩
+        skill_registry::register_template(account, tmpl(1, 0, 735, 0, 0, 3, 0, 8, 12));      // 3 大魔素岩
+        skill_registry::register_template(account, tmpl(1, 0, 2600, 0, 0, 2, 0, 18, 30));    // 4 巨型魔素岩
         // ---- 哥布林系（AI2）----
         skill_registry::register_template(account, tmpl(2, 1, 160, 60, 0, 90, 920, 2, 3));   // 5 哥布林
         skill_registry::register_template(account, tmpl(2, 1, 280, 90, 0, 130, 920, 3, 4)); // 6 狼
         skill_registry::register_template(account, tmpl(2, 2, 900, 150, 0, 95, 900, 8, 12));// 7 哥布林王
-        // ---- 兽人系（AI2/AI3）----
-        skill_registry::register_template(account, tmpl(2, 1, 420, 110, 0, 80, 900, 4, 6));  // 8 兽人士兵
-        skill_registry::register_template(account, tmpl(2, 2, 950, 180, 0, 85, 900, 7, 10));// 9 兽人战士
-        skill_registry::register_template(account, tmpl(3, 2, 2800, 240, 80, 90, 900, 15, 25)); // 10 兽人酋长
-        // ---- 遗迹系（AI2/AI3）----
-        skill_registry::register_template(account, tmpl(2, 1, 320, 90, 120, 160, 900, 5, 7));// 11 幽灵
-        skill_registry::register_template(account, tmpl(2, 2, 1400, 150, 0, 40, 900, 10, 15)); // 12 石魔像
-        skill_registry::register_template(account, tmpl(3, 2, 3600, 220, 0, 45, 900, 20, 30)); // 13 守卫石像
-        // ---- 灼热系（D5 关口）----
-        skill_registry::register_template(account, tmpl(2, 1, 640, 150, 0, 150, 910, 6, 9)); // 14 地狱猎犬
-        skill_registry::register_template(account, tmpl(2, 2, 4800, 260, 0, 50, 900, 16, 24)); // 15 火焰魔像
-        skill_registry::register_template(account, tmpl(3, 3, 12000, 340, 180, 120, 900, 40, 60)); // 16 督军
-        skill_registry::register_template(account, tmpl(2, 1, 2000, 160, 0, 30, 900, 18, 28)); // 17 焦岩
-        skill_registry::register_template(account, tmpl(3, 3, 8000, 300, 150, 110, 900, 35, 55)); // 18 熔岩督军
-        // ---- 机神系（D7-D9）----
-        skill_registry::register_template(account, tmpl(5, 2, 9000, 260, 100, 100, 900, 45, 70)); // 19 机神卫兵
-        skill_registry::register_template(account, tmpl(5, 1, 6000, 300, 0, 130, 900, 30, 50)); // 20 火花机
-        skill_registry::register_template(account, tmpl(3, 3, 20000, 360, 160, 120, 900, 80, 120)); // 21 机神队长
-        skill_registry::register_template(account, tmpl(5, 2, 26000, 380, 0, 70, 900, 70, 110)); // 22 装甲巨像
-        skill_registry::register_template(account, tmpl(3, 2, 14000, 340, 240, 40, 900, 55, 85)); // 23 炮台
-        skill_registry::register_template(account, tmpl(3, 3, 42000, 420, 220, 110, 900, 150, 220)); // 24 要塞统领
-        skill_registry::register_template(account, tmpl(3, 2, 18000, 380, 320, 50, 900, 90, 140)); // 25 火力瞭望塔
+        // ---- 兽人系（AI2/AI3，D3 关口）----
+        skill_registry::register_template(account, tmpl(2, 1, 420, 190, 0, 80, 900, 4, 6));  // 8 兽人士兵
+        skill_registry::register_template(account, tmpl(2, 2, 950, 320, 0, 85, 900, 7, 10)); // 9 兽人战士
+        skill_registry::register_template(account, tmpl(3, 2, 2800, 460, 180, 90, 900, 15, 25)); // 10 兽人酋长
+        // ---- 遗迹系（AI2/AI3，D4 关口，幽灵走魔攻）----
+        skill_registry::register_template(account, tmpl(2, 1, 320, 120, 240, 160, 900, 5, 7));// 11 幽灵
+        skill_registry::register_template(account, tmpl(2, 2, 1400, 280, 0, 40, 900, 10, 15)); // 12 石魔像
+        skill_registry::register_template(account, tmpl(3, 2, 3600, 420, 0, 45, 900, 20, 30)); // 13 守卫石像
+        // ---- 灼热系（D5 关口，高威胁）----
+        skill_registry::register_template(account, tmpl(2, 1, 1100, 2600, 0, 150, 910, 6, 9)); // 14 地狱猎犬
+        skill_registry::register_template(account, tmpl(2, 2, 8200, 3400, 0, 50, 900, 16, 24)); // 15 火焰魔像
+        skill_registry::register_template(account, tmpl(3, 3, 29400, 4300, 2650, 120, 900, 40, 60)); // 16 督军
+        skill_registry::register_template(account, tmpl(2, 1, 3400, 2300, 0, 30, 900, 18, 28)); // 17 焦岩
+        skill_registry::register_template(account, tmpl(3, 3, 15000, 3600, 2150, 110, 900, 35, 55)); // 18 熔岩督军
+        // ---- 机神系（D7-D9，最高威胁）----
+        skill_registry::register_template(account, tmpl(5, 2, 9000, 720, 260, 100, 900, 45, 70)); // 19 机神卫兵
+        skill_registry::register_template(account, tmpl(5, 1, 6000, 820, 0, 130, 900, 30, 50)); // 20 火花机
+        skill_registry::register_template(account, tmpl(3, 3, 20000, 1050, 480, 120, 900, 80, 120)); // 21 机神队长
+        skill_registry::register_template(account, tmpl(5, 2, 26000, 1150, 0, 70, 900, 70, 110)); // 22 装甲巨像
+        skill_registry::register_template(account, tmpl(3, 2, 14000, 1000, 740, 40, 900, 55, 85)); // 23 炮台
+        skill_registry::register_template(account, tmpl(3, 3, 42000, 1300, 700, 110, 900, 150, 220)); // 24 要塞统领
+        skill_registry::register_template(account, tmpl(3, 2, 18000, 1120, 990, 50, 900, 90, 140)); // 25 火力瞭望塔
         // 26 机神魔素炉 —— 不攻击(魔法/物攻0)，抽魔+召唤；被摧毁时 60% 召唤 机神皇帝(30)同场再战
         skill_registry::register_template(account, types::make_enemy_template(6, 2, 60000, 0, 0, 20, 0, 0, 0,
             types::make_on_death_spawn(30, 1, 600)));
         skill_registry::register_template(account, tmpl(1, 0, 50, 0, 0, 10, 0, 200, 300));  // 27 王座宝箱(待机)
-        skill_registry::register_template(account, tmpl(5, 1, 11000, 340, 0, 125, 900, 60, 95)); // 28 火花锯兵
+        skill_registry::register_template(account, tmpl(5, 1, 11000, 950, 0, 125, 900, 60, 95)); // 28 火花锯兵
         skill_registry::register_template(account, tmpl(7, 3, 220000, 620, 480, 140, 920, 400, 600)); // 29 机神皇帝(备用机体, 王座变体)
         skill_registry::register_template(account, tmpl(7, 3, 250000, 640, 500, 150, 930, 500, 800)); // 30 机神皇帝(炉召唤)
 
         // ===================== ENEMY TABLES (ids 1..32, in order) =====================
         // make_table_entry(template_id, weight)
-        skill_registry::register_table(account, vector[te(1, 1000)]);                          // 1 D1b1 碎石
-        skill_registry::register_table(account, vector[te(2, 1000)]);                          // 2 D1b2 石头
-        skill_registry::register_table(account, vector[te(3, 1000)]);                          // 3 D1b3 大石头
-        skill_registry::register_table(account, vector[te(4, 1000)]);                          // 4 D1b4 巨型岩石
+        skill_registry::register_table(account, vector[te(1, 1000)]);                          // 1 D1b1 碎晶岩
+        skill_registry::register_table(account, vector[te(2, 1000)]);                          // 2 D1b2 魔素岩
+        skill_registry::register_table(account, vector[te(3, 1000)]);                          // 3 D1b3 大魔素岩
+        skill_registry::register_table(account, vector[te(4, 1000)]);                          // 4 D1b4 巨型魔素岩
         skill_registry::register_table(account, vector[te(5, 800), te(6, 200)]);               // 5 D2b1
         skill_registry::register_table(account, vector[te(6, 1000)]);                          // 6 D2b2
         skill_registry::register_table(account, vector[te(7, 700), te(5, 300)]);               // 7 D2b3
@@ -366,7 +368,7 @@ module mohayo::content_registration {
 
         // ===================== DUNGEONS D1..D10 =====================
         // make_dungeon_config(table, enemy_count, mana/turn, reward_base, entry_fee, rescue_fee, turn_interval, battles)
-        skill_registry::set_dungeon(account, 1, dng(1, 2, 1, 0, 0, 10, BATTLE_TURN_CAP, 4));   // D1 采石矿场(免费)
+        skill_registry::set_dungeon(account, 1, dng(1, 2, 2, 0, 0, 10, BATTLE_TURN_CAP, 4)); // D1 灰烬矿坑(免费)；mana 2/回合保证"每回合挥一镐"节奏
         skill_registry::set_dungeon_battles(account, 1, vector[bt(1, 2), bt(2, 2), bt(3, 2), bt(4, 1)]);
         skill_registry::set_dungeon(account, 2, dng(5, 3, 2, 0, 5, 15, BATTLE_TURN_CAP, 3));   // D2 哥布林营地
         skill_registry::set_dungeon_battles(account, 2, vector[bt(5, 3), bt(6, 3), bt(7, 3)]);
@@ -395,7 +397,7 @@ module mohayo::content_registration {
 
     // ===================== private helpers =====================
     fun ai(account: &signer, cycle: vector<u64>) {
-        skill_registry::register_ai(account, types::make_monster_ai(cycle, 0));
+        skill_registry::register_ai(account, types::make_monster_ai(cycle, (vector::length(&cycle) as u8)));
     }
 
     fun tmpl(ai_id: u64, threat: u8, hp: u64, power: u64, magic: u64, speed: u64,

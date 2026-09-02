@@ -770,7 +770,7 @@ module mohayo::tests {
         let dungeon = types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1);
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
-        engine::join_room(a, 1, 500, 100, 50, 30);
+        engine::join_room(a, 1, 10000, 100, 50, 30);
         engine::start_combat(a, 1);
         let (hp1, _mh, _a, _m, _s, _alive) = engine::enemy_state(1, 0);
         // Plan: self-buff then attack
@@ -801,7 +801,7 @@ module mohayo::tests {
         let dungeon = types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1);
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
-        engine::join_room(a, 1, 500, 100, 50, 30);
+        engine::join_room(a, 1, 10000, 100, 50, 30);
         engine::start_combat(a, 1);
         let (hp1, _mh, _a, _m, _s, _alive) = engine::enemy_state(1, 0);
         // Plan: debuff enemy then attack

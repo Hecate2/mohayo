@@ -134,6 +134,29 @@ module mohayo::engine {
         event::emit(MemberJoined { room_id, player: signer::address_of(account) });
     }
 
+    /// Test-only join that also sets the character's resource-affix fields
+    /// (mana/ap discount, ap bonus, mana regen) so the simulator can model a
+    /// "talented" build independently of its flat stats. Production join copies
+    /// these from Character via the normal path.
+    #[test_only]
+    public fun join_room_affixed(
+        account: &signer, room_id: u64,
+        max_hp: u64, attack: u64, magic: u64, speed: u64,
+        mana_discount: u16, ap_discount: u16, ap_bonus: u16, mana_gain_bonus: i64,
+    ) acquires RoomStore {
+        let rs = borrow_global_mut<RoomStore>(@mohayo);
+        let room = table::borrow_mut(&mut rs.rooms, room_id);
+        assert!(room.phase == 0 || room.phase == 3, E_NOT_JOINABLE);
+        assert!(vector::length(&room.members) < 10, E_ROOM_FULL);
+        let member = types::make_member(
+            max_hp, max_hp, attack, magic, speed,
+            0, mana_discount, ap_discount, ap_bonus, mana_gain_bonus,
+            0, vector::empty(), vector::empty(), 0, true, false,
+        );
+        vector::push_back(&mut room.members, member);
+        event::emit(MemberJoined { room_id, player: signer::address_of(account) });
+    }
+
     public entry fun leave_room(account: &signer, room_id: u64) acquires RoomStore {
         let addr = signer::address_of(account);
         let rs = borrow_global_mut<RoomStore>(@mohayo);
@@ -654,8 +677,12 @@ module mohayo::engine {
 
         let power = types::skill_power(s);
         let dealt: u64 = 0;
-        if (power > 0) {
-            let stat = if (types::skill_kind(s) == 2) {
+        // Only attack-type skills (physical/magic) resolve `power` as hit damage.
+        // Support skills (heal/shield/buff) carry non-zero power too (e.g. heal
+        // scales by it) but must NOT strike their own target with it.
+        let s_kind = types::skill_kind(s);
+        if (power > 0 && (s_kind == 1 || s_kind == 2)) {
+            let stat = if (s_kind == 2) {
                 if (actor_is_enemy) { types::enemy_magic(vector::borrow(&room.enemies, actor_idx)) }
                 else { types::member_magic(vector::borrow(&room.members, actor_idx)) }
             } else {
@@ -891,13 +918,35 @@ module mohayo::engine {
         };
     }
 
-    fun handle_member_death(_room: &mut Room, room_id: u64, idx: u64) {
+    fun handle_member_death(room: &mut Room, room_id: u64, idx: u64) {
+        {
+            let m = vector::borrow_mut(&mut room.members, idx);
+            types::member_set_alive(m, false);
+            types::member_clear_effects(m);
+        };
         event::emit(UnitDied { room_id, is_enemy: false, index: idx });
     }
 
     // ============================ internal: end check ============================
 
     fun check_end(room: &mut Room, room_id: u64) {
+        // Defeat is checked FIRST: a mutual wipe (party dies the same action the
+        // last enemy dies) is a loss, never a victory — the party must SURVIVE to win.
+        let all_members_dead = true;
+        let mlen = vector::length(&room.members);
+        let j = 0;
+        while (j < mlen) {
+            let alive = types::member_alive(vector::borrow(&room.members, j));
+            if (alive) { all_members_dead = false; break; };
+            j = j + 1;
+        };
+        if (all_members_dead && mlen > 0) {
+            room.phase = 2;
+            room.result = 2;
+            event::emit(DefeatEvt { room_id });
+            return;
+        };
+
         let all_enemies_dead = true;
         let elen = vector::length(&room.enemies);
         let i = 0;
@@ -919,21 +968,6 @@ module mohayo::engine {
                 event::emit(VictoryEvt { room_id });
                 let _ = share;
             };
-            return;
-        };
-
-        let all_members_dead = true;
-        let mlen = vector::length(&room.members);
-        let j = 0;
-        while (j < mlen) {
-            let alive = types::member_alive(vector::borrow(&room.members, j));
-            if (alive) { all_members_dead = false; break; };
-            j = j + 1;
-        };
-        if (all_members_dead) {
-            room.phase = 2;
-            room.result = 2;
-            event::emit(DefeatEvt { room_id });
             return;
         };
 
