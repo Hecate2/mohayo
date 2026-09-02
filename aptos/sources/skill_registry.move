@@ -31,6 +31,7 @@ module mohayo::skill_registry {
     const E_BATTLE_CAP: u64 = 22;
     const E_CLASS_SKILL_BOUND: u64 = 23;
     const E_UNKNOWN_AI: u64 = 24;
+    const E_NOT_POOL_SKILL: u64 = 25;
 
     const MAX_SKILLS: u64 = 1024;
     const MAX_AI: u64 = 256;
@@ -56,6 +57,7 @@ module mohayo::skill_registry {
         variant_count: Table<u64, u64>,
         variants: Table<u64, vector<VariantEntry>>,
         class_skills: Table<u8, vector<u64>>,
+        pool_skills: vector<u64>,
         next_room_id: u64,
     }
 
@@ -76,6 +78,7 @@ module mohayo::skill_registry {
             variant_count: table::new(),
             variants: table::new(),
             class_skills: table::new(),
+            pool_skills: vector::empty(),
             next_room_id: 1,
         });
     }
@@ -147,8 +150,7 @@ module mohayo::skill_registry {
         r.skill_count = id;
     }
 
-    public fun register_class_skill(account: &signer, s: Skill, class_id: u8) acquires Registry {
-        let addr = signer::address_of(account);
+    public fun register_class_skill(account: &signer, s: Skill, class_id: u8) acquires Registry {        let addr = signer::address_of(account);
         assert!(addr == @mohayo, E_NOT_OWNER);
         let r = borrow_global_mut<Registry>(@mohayo);
         validate_skill(&s, true);
@@ -162,6 +164,23 @@ module mohayo::skill_registry {
         };
         let list = table::borrow_mut(&mut r.class_skills, class_id);
         vector::push_back(list, id);
+    }
+
+    /// 将已注册技能 id 登记进「自选池」白名单(content-design.md §5)。
+    /// 红线: 玩家自选技能只允许从该集合挑选 —— 职业技/种族技/敌技一律不在池内。
+    public fun add_pool_skill(account: &signer, id: u64) acquires Registry {
+        let addr = signer::address_of(account);
+        assert!(addr == @mohayo, E_NOT_OWNER);
+        let r = borrow_global_mut<Registry>(@mohayo);
+        assert!(table::contains(&r.skills, id), E_SKILL_NOT_FOUND);
+        assert!(!vector::contains(&r.pool_skills, &id), E_SKILL_EXISTS);
+        vector::push_back(&mut r.pool_skills, id);
+    }
+
+    #[view]
+    public fun is_pool_skill(id: u64): bool acquires Registry {
+        let r = borrow_global<Registry>(@mohayo);
+        vector::contains(&r.pool_skills, &id)
     }
 
     public fun register_ai(account: &signer, ai: MonsterAI) acquires Registry {

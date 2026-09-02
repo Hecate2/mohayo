@@ -391,7 +391,7 @@ module mohayo::sim {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
         let own = std::signer::address_of(a);
-        character::gm_mint(a, own, 1, 2, vector[0, 0, 0, 0], vector[1, 3]);
+        character::gm_mint(a, own, 1, 2, vector[0, 0, 0, 0], vector[39, 43]);
         let char_id = character::owner_latest_char(own);
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
@@ -407,7 +407,7 @@ module mohayo::sim {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
         let own = std::signer::address_of(a);
-        character::gm_mint(a, own, 1, 2, vector[0, 0, 0, 0], vector[1, 3]);
+        character::gm_mint(a, own, 1, 2, vector[0, 0, 0, 0], vector[39, 43]);
         let char_id = character::owner_latest_char(own);
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
@@ -426,20 +426,38 @@ module mohayo::sim {
         character::gm_mint(a, std::signer::address_of(a), 1, 2, vector[0, 0, 0, 0], vector[45]);
     }
 
+    // d2) 自选他人职业技被拒(31=守卫专属盾击) → E_SKILL_NOT_POOL(4)
+    #[test]
+    #[expected_failure(abort_code = 4)]
+    fun sim_skill_ownership_class_skill_rejected() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        character::gm_mint(a, std::signer::address_of(a), 3, 2, vector[0, 0, 0, 0], vector[31]);
+    }
+
+    // d3) 自选种族技被拒(12=兽人专属狂暴) → E_SKILL_NOT_POOL(4)
+    #[test]
+    #[expected_failure(abort_code = 4)]
+    fun sim_skill_ownership_race_skill_rejected() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        character::gm_mint(a, std::signer::address_of(a), 1, 2, vector[0, 0, 0, 0], vector[12]);
+    }
+
     // e) 生产链路端到端: 合法计划可提交并推进战斗
     #[test]
     fun sim_skill_ownership_owned_plan_ok() {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
         let own = std::signer::address_of(a);
-        character::gm_mint(a, own, 1, 2, vector[0, 0, 0, 0], vector[3]); // 守卫仅1自选槽
+        character::gm_mint(a, own, 1, 2, vector[0, 0, 0, 0], vector[39]); // 守卫仅1自选槽(池技:急救包扎)
         let char_id = character::owner_latest_char(own);
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, char_id);
         engine::start_combat(a, room_id);
-        // 计划=自选治疗(3)+守卫职业技盾击(31), 均在技能集内 → 应通过
-        engine::set_plan(a, room_id, 0, vector[3, 31]);
+        // 计划=自选急救(39)+守卫职业技盾击(31), 均在技能集内 → 应通过
+        engine::set_plan(a, room_id, 0, vector[39, 31]);
         let guard = 0;
         while (guard < 40) {
             let ph = engine::room_phase(room_id);

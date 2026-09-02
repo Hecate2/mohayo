@@ -6,6 +6,7 @@ module mohayo::character {
     use std::signer;
     use std::vector;
     use mohayo::types::{Self, ClassDef, RaceDef, AffixTemplate};
+    use mohayo::skill_registry;
     use mohayo::content;
 
     const E_NOT_OWNER: u64 = 1;
@@ -483,12 +484,12 @@ module mohayo::character {
             vector::push_back(&mut skills, race_skill_id2);
         };
         let max_self = (types::class_def_skill_slots(class) as u64) + (types::race_def_self_select_bonus(race_def) as u64);
-        // 红线: 自选池技能必须落在玩家技能区 1..=44(content::SKILL_MANA_CLAP)。
-        // 敌技区(45+)/非法 id 一律拒绝 —— 玩家的技能只来自 职业/种族/自选池 三来源。
+        // 红线: 自选池技能必须是 skill_registry 登记的自选池白名单(content-design §5)。
+        // 基础技/占位/职业技/种族技/敌技一律拒绝 —— 玩家的技能只来自 职业/种族/自选池 三来源。
         let mut_p = 0;
         while (mut_p < vector::length(self_select)) {
             let sid = *vector::borrow(self_select, mut_p);
-            assert!(sid >= 1 && sid <= content::SKILL_MANA_CLAP, E_SKILL_NOT_POOL);
+            assert!(skill_registry::is_pool_skill(sid), E_SKILL_NOT_POOL);
             mut_p = mut_p + 1;
         };
         let mut_j = 0;
@@ -505,7 +506,6 @@ module mohayo::character {
     }
 
     fun get_class_skill_ids_for(class_id: u8): vector<u64> {
-        use mohayo::skill_registry;
         skill_registry::get_class_skill_ids(class_id)
     }
 

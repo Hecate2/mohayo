@@ -1,7 +1,13 @@
 # 摸哈游（Mohayo）：技术实现设计
 
-> 配套文档：`gameplay-design.md`
-> 核心问题聚焦：**链选型、Conflux Core Space 代付 gas 是否必要、Discord/Telegram 用户能否自己付 gas、以及整体合约与客户端架构**。
+> **⚠️ 文档状态声明（2026-09-02）**：本文 §1–§8 主体写于 **EVM/Solidity 迁移前时代**（Conflux eSpace/Foundry/Hardhat 语境），
+> 已不是当前实现的权威描述。当前实现已重写为 **Aptos Move**（仓库 `aptos/sources/`：`types`/`skill_registry`/`engine`/`character`/
+> `content_registration`/`sim` 等模块）。迁移后仍被本仓库权威使用的章节：**§2.6.1（Move 版技能计划归属与拥有权校验）** 与
+> §2.5 原语表（op 语义在 Move 引擎中以 `types.move` 为准，DOT 结算见 op8 行）。其余章节（链选型/代付 gas/Foundry 工具链/菜市
+> Solidity 结构等）仅作历史与设计意图参考，勿据此实现。
+
+
+
 
 ---
 
@@ -233,7 +239,7 @@ struct OnDeathSpawn {
 | EVADE_UP | 回避提升（防御方侧的命中惩罚，见命中判定管线） | 多来源叠加，受全局命中下限保护 | 是 |
 | ACC_DOWN | **命中率降低**（攻击方侧的命中惩罚，见命中判定管线）：`magnitude`=千分比惩罚、`duration`=持续回合；可由玩家技能/道具或怪物技能施加；作用于施放者的对立方——对敌单体/全体施加、或以 ROOM_ALL 烟幕同时施加于**敌我双方**（含施放者自己） | 多来源叠加，受全局命中下限保护 | 是 |
 | GUAR_NEXT | **火枪手「鹰眼」**（红线的唯一豁口，`gameplay-design.md` §4.9）：作用于**自己**，施放时固定 `duration=2`（见下方时序）；期间自己的所有技能跳过命中掷骰。仅火枪手职业技可携带此 op（`SkillRegistry` 注册层校验：仅职业绑定技能表可配，自选池/道具/词条来源禁配）。已存在时**替换** duration（不累加） | 不叠加（已存在则替换持续时间） | 是（敌方 DISPEL 可剥鹰眼，是设计内的反制） |
-| DOT | 持续伤害（每回合结算时扣血，走伤害上限） | 各来源独立计时 | 是 |
+| DOT | 持续伤害：**每回合开始结算**（`magnitude`=每跳固定值，不随属性缩放）——回合初先造成伤害（先扣护盾层再扣 HP，走正常伤害/死亡管线：DOT 致死会触发死亡召唤等既有结算），**再**递减 `duration`（次数 = duration；dur=3 → 3 跳）。同一来源叠加时刷新 duration 并累加 magnitude（见 `add_effect` 规则）。毒刃为唯一现状使用者（固定 150×3） | 同名叠加刷新 | 是 |
 | HEAL | 即时/持续治疗 | 即时无叠加 | — |
 | DISPEL | 驱散目标身上**标记为可驱散**的效果——对敌施放时剥增益（如 SHIELD、TAUNT），对己施放时净化负面（如 STUN、DOT）；驱散哪些方向由技能的 `targeting` + effect 配置决定 | 即时 | — |
 | TAUNT | 嘲讽：被嘲讽者的**单体攻击**（`RAND_SINGLE_ENEMY`）随机目标强制重定向为嘲讽者；**多体/全体攻击不受影响**（防双坦吸干全部伤害，`gameplay-design.md` §4.8）；嘲讽者若出现在多体目标列表中则正常受击（不豁免）；**嘲讽者死亡时 TAUNT 立即失效** | 互斥（后者覆盖） | 是 |
@@ -380,9 +386,11 @@ struct RoomMember {
 不存在任何其他来源（无等级解锁授予、无初始白送基础技、无 GM 隐藏渠道）。该红线在两处强制执行：
 
 1. **创建端（`character.merge_skills`）**：技能权威源 = `Character.skill_ids`，**存于角色自身存储**（不复制进房间成员，
-   避免每个成员冗余一套技能集 → 省 gas）。自选池挑选（`self_select`）逐 id 校验落在**玩家技能区 `1..=44`
-   （`content::SKILL_MANA_CLAP`）**；敌技区（`45+`）与非法 id 一律拒绝（`abort E_SKILL_NOT_POOL`）。职业技/种族技由
-   官方内容注册（`register_class_skill` / `race_def`）注入，视为可信来源，同样落在玩家区。
+   避免每个成员冗余一套技能集 → 省 gas）。自选池挑选（`self_select`）逐 id 校验必须 ∈ **自选池白名单**
+   （`skill_registry.pool_skills`，由 `content_registration` 显式登记 content-design.md §5 的十技：
+   尘幕/毒刃/一闪/暴风剑/急救包扎/致盲粉/岩石壁垒/魔力护盾/龙息/魔爆术）；职业技、种族技、基础技与占位技、
+   以及全部敌技（45+）**一律不在池内**，自选即拒绝（`abort E_SKILL_NOT_POOL`）。职业技/种族技由官方内容注册
+   （`register_class_skill` / `race_def`）注入，视为可信来源。
 2. **执行端（`engine.set_plan` / `cancel_plan`）**：房间成员 `Member` 携带 `owner: address` 与 `char_id: u64`（不复制技能）：
    - **只能给自己排**：提交者必须等于 `member.owner`（队长也无效，`gameplay-design.md` §4.3 的链上强制落地）；
    - **只用自己拥有的技能**：`char_id != 0` 时，提交的整条计划逐 id 校验 ∈ `Character.skill_ids`，否则 `abort`

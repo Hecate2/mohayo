@@ -1,4 +1,8 @@
 # 摸哈游（Mohayo）：测试机制设计
+> **⚠️ 文档状态声明（2026-09-02）**：本文描述的是 **EVM 时代的 Foundry/Hardhat 测试体系**（`forge`/`out/`/Hardhat 部署），
+> 已被废弃。当前实现为 **Aptos Move**，测试入口 = `aptos move test`（`aptos/sources/tests.move` 模块级单元测试 +
+> `sim.move` 蒙特卡洛通关率仿真/平衡标定）。本文仅作历史参考。
+
 
 > 配套文档：`technical-design.md`（技术实现）、`gameplay-design.md`（玩法）、`content-design.md`（内容）
 > 本文档定义整套测试机制：**Foundry 合约测试（单元/模糊/不变式）→ Anvil 私链集成测试 → Hardhat 部署与运维 → CLI/Bot 客户端集成测试（预留）**。
