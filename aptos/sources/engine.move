@@ -651,6 +651,12 @@ module mohayo::engine {
         let targeting = types::skill_targeting(s);
         let is_ally = targeting == 5 || targeting == 6 || targeting == 7 || targeting == 9 || targeting == 10;
         let guaranteed = is_ally || targeting == 8 || (types::skill_flags(s) & 1) != 0;
+        // GUAR_NEXT(op7, 火枪手鹰眼): 攻击方自身带该效果时其所有技能跳过命中掷骰。
+        // 施放回合挂上 dur2, 下一回合初 tick 后仍生效 → "空放一回合换下回合绝对命中"。
+        if (!guaranteed && !actor_is_enemy) {
+            let guar_holder = vector::borrow(&room.members, actor_idx);
+            if (types::member_sum_effect_mag(guar_holder, 7) > 0) { guaranteed = true; };
+        };
 
         // FLAG_MANA_ALL(bit1): spend the entire room mana pool; damage scales with the amount consumed.
         if ((types::skill_flags(s) & 2) != 0) {
@@ -1151,6 +1157,20 @@ module mohayo::engine {
                 };
             };
         } else {
+            // TAUNT(op11, 守卫盾击拉怪): 敌方单体攻击(RAND_SINGLE, targeting==1)的目标选择
+            // 先扫描我方存活嘲讽者, 取最早者强制重定向; 多体/全体/我方技能不受影响。
+            if (actor_is_enemy && targeting == 1) {
+                let tl = vector::length(&room.members);
+                let ti = 0;
+                while (ti < tl) {
+                    let tm = vector::borrow(&room.members, ti);
+                    if (types::member_alive(tm) && types::member_has_effect(tm, 11)) {
+                        vector::push_back(&mut targets, types::make_target(false, ti));
+                        return targets;
+                    };
+                    ti = ti + 1;
+                };
+            };
             // Random targeting: 1-3 = enemy side, 5-6 = ally side
             let targets_enemies = if (actor_is_enemy) {
                 targeting >= 5 && targeting <= 7

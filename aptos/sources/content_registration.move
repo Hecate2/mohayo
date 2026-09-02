@@ -182,7 +182,7 @@ module mohayo::content_registration {
         // --- 守卫 ---
         skill_registry::register_class_skill(account, sk(types::KIND_PHYSICAL(), 1, 1, 4, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 260, 0, 900, 0,
-            vector[eff(types::OP_STUN(), 1, 2, 1, 400)]), 1);                          // 31 盾击
+            vector[eff(types::OP_STUN(), 1, 2, 1, 400), eff(types::OP_TAUNT(), 1, 2, 0, 1000)]), 1); // 31 盾击(眩晕40% + 必嘲讽2轮)
         skill_registry::register_class_skill(account, sk(types::KIND_SUPPORT(), 2, 0, 6, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
             vector[eff(types::OP_SHIELD(), 1400, 4, 0, 1000)]), 1);                    // 32 盾墙

@@ -730,6 +730,63 @@ module mohayo::tests {
     }
 
     #[test]
+    fun test_guar_next_grants_hit() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        // skill1 = 鹰眼(自施, GUAR_NEXT op7 dur2) —— 走职业技注册(op7 仅职业技可配);
+        // skill2 = 低命中攻击(acc300)
+        skill_registry::register_class_skill(a, types::make_skill(
+            0, 3, 0, 0, 0, 0, 0, 0, 9, 0, 1, 0, 0, 1000, 0,
+            vector[types::make_effect_spec(7, 2, 1, 0, 1000)],
+            types::make_summon_rule(0, 0, 0)), 5);
+        skill_registry::register_skill(a, types::make_skill(
+            0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 1, 100, 0, 300, 0,
+            vector::empty(), types::make_summon_rule(0, 0, 0)));
+        skill_registry::register_ai(a, simple_ai(2));             // ai1 = 敌人低命中普攻(干扰项)
+        skill_registry::register_template(a, simple_template(1)); // 敌人 hp1000
+        skill_registry::register_table(a, vector[types::make_table_entry(1, 1000)]);
+        skill_registry::set_dungeon(a, 1, types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1));
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 2000, 200, 100, 30);
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[1, 2]); // 鹰眼 → 攻击 循环
+        engine::advance_turn(a, 1);              // r1: 鹰眼
+        engine::advance_turn(a, 1);              // r2: 攻击(acc300) 因 GUAR_NEXT 必中 → 100×200/1000=20
+        let (h1, _, _, _, _, _) = engine::enemy_state(1, 0);
+        assert!(h1 == 980, 1); // 若 op7 未生效则大概率 1000(miss)
+    }
+
+    #[test]
+    fun test_taunt_redirects_single_attack() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        // skill1 = 敌人单体攻击(必中); skill2 = 玩家自嘲(TAUNT op11 dur9)
+        skill_registry::register_skill(a, types::make_skill(
+            0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 100, 0, 1000, 0,
+            vector::empty(), types::make_summon_rule(0, 0, 0)));
+        skill_registry::register_skill(a, types::make_skill(
+            0, 3, 0, 0, 0, 0, 0, 0, 9, 0, 1, 0, 0, 1000, 0,
+            vector[types::make_effect_spec(11, 9, 1, 0, 1000)],
+            types::make_summon_rule(0, 0, 0)));
+        skill_registry::register_ai(a, simple_ai(1));             // ai1 = 敌人单体攻击
+        skill_registry::register_template(a, simple_template(1)); // 敌人 hp1000 atk500 → 50/击
+        skill_registry::register_table(a, vector[types::make_table_entry(1, 1000)]);
+        skill_registry::set_dungeon(a, 1, types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1));
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 2000, 10, 10, 30); // 成员0(非嘲讽者)
+        engine::join_room(a, 1, 2000, 10, 10, 30); // 成员1(嘲讽者)
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[]); // 成员0 空过
+        engine::set_plan(a, 1, 1, vector[2]); // 成员1 每回合同步施放嘲讽
+        let guard = 0;
+        while (guard < 6) { engine::advance_turn(a, 1); guard = guard + 1; };
+        let (h0, _, _, _, _, _) = engine::member_state(1, 0);
+        let (h1, _, _, _, _, _) = engine::member_state(1, 1);
+        assert!(h0 == 2000, 1); // 成员0 全程未被单体攻击打中
+        assert!(h1 < 2000, 2);  // 成员1(嘲讽者)承受了全部单体火力
+    }
+
+    #[test]
     fun test_stun_prevents_action() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
