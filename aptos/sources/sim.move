@@ -859,4 +859,41 @@ module mohayo::sim {
         };
         report(w2, 2); // 职业队 D5
     }
+    // ================================================================
+    //  mana 经济观测: 黑魔献祭(每命中+10×4) + 白魔圣泉(每治疗+6/人) 双产魔源下
+    //  房间池随回合的增长曲线, 评估是否会失控抬高 28 爆裂的蓄池威力。
+    //  黑魔 plan [34×3, 28](献祭产魔→周期性爆裂), 白魔 [37]。D7 实战。
+    // ================================================================
+    #[test]
+    fun sim_mana_econ_observe() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let own = std::signer::address_of(a);
+        character::gm_mint_at_level(a, own, 3, 0, vector[0, 0, 0, 0], vector[44], 300);
+        let c_b = character::owner_latest_char(own);
+        character::gm_mint_at_level(a, own, 4, 0, vector[0, 0, 0, 0], vector[43], 300);
+        let c_w = character::owner_latest_char(own);
+        engine::create_room(a, 7);
+        let room_id = skill_registry::next_room_id() - 1;
+        engine::join_room_as_char(a, room_id, c_b);
+        engine::join_room_as_char(a, room_id, c_w);
+        engine::start_combat(a, room_id);
+        engine::set_plan(a, room_id, 0, vector[34, 34, 34, 28]);
+        engine::set_plan(a, room_id, 1, vector[37]);
+        let gi = 0;
+        while (gi < 120) {
+            let ph2 = engine::room_phase(room_id);
+            if (ph2 == 1) { engine::advance_turn(a, room_id); }
+            else if (ph2 == 3) { engine::advance_battle(a, room_id); }
+            else { break; };
+            if ((gi + 1) % 10 == 0) {
+                let mp = engine::room_mana(room_id);
+                let ph3 = engine::room_phase(room_id);
+                std::debug::print(&vector[(gi + 1), mp, (ph3 as u64)]);
+            };
+            gi = gi + 1;
+        };
+        let r = engine::room_result(room_id);
+        std::debug::print(&vector[999, (r as u64)]);
+    }
 }
