@@ -712,11 +712,11 @@ module mohayo::sim {
             30000, 26000, 13000, 600, plan_attack(),
             26000, 22000, 15000, 550, plan_burst_heal());
         report(d5a, d5t);
-        let (d9a, d9t) = clear_rate_duo(a, 9, 3,
+        let (d9a, d9t) = clear_rate_duo(a, 9, 10,
             30000, 26000, 13000, 600, plan_attack(),
             26000, 22000, 15000, 550, plan_burst_heal());
         report(d9a, d9t);
-        let (t9a, t9t) = clear_rate_trio(a, 9, 3,
+        let (t9a, t9t) = clear_rate_trio(a, 9, 10,
             30000, 26000, 13000, 600, plan_attack(),
             26000, 22000, 15000, 550, plan_burst_heal(),
             24000, 18000, 18000, 600, plan_burst_heal());

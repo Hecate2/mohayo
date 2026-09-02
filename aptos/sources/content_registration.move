@@ -523,11 +523,12 @@ module mohayo::content_registration {
         skill_registry::set_dungeon_battles(account, 7, vector[bt(21, 3), bt(22, 2), bt(23, 1)]);
         skill_registry::set_dungeon(account, 8, dng(24, 3, 6, 0, 35, 70, BATTLE_TURN_CAP, 3)); // D8 虚空裂隙
         skill_registry::set_dungeon_battles(account, 8, vector[bt(24, 3), bt(25, 3), bt(26, 1)]);
-        // D9 机神帝座 —— 4 战; b3 炉毁 60% 召皇帝, b4 变体 85% 宝箱 / 15% 皇帝备用机体
+        // D9 机神帝座 —— 4 战; b3 炉毁 60% 召皇帝, b4 变体 70% 宝箱 / 30% 皇帝备用机体
+        // (组队标定 2026-09-02: 由 85/15 上调皇帝路, 防顶配 duo/trio 100% 稳过, 贴 §3.1 60~90% 上限)
         skill_registry::set_dungeon(account, 9, dng(27, 3, 7, 0, 40, 100, BATTLE_TURN_CAP, 4));
         skill_registry::set_dungeon_battles(account, 9, vector[bt(27, 4), bt(28, 4), bt(29, 3), bt(30, 1)]);
-        skill_registry::add_battle_variant(account, 9, 4, 30, 850);   // 王座宝箱
-        skill_registry::add_battle_variant(account, 9, 4, 31, 150);   // 皇帝备用机体
+        skill_registry::add_battle_variant(account, 9, 4, 30, 700);   // 王座宝箱
+        skill_registry::add_battle_variant(account, 9, 4, 31, 300);   // 皇帝备用机体
         // D10 超级难关 —— 占位(单场宝箱怪=待机, 砍开即胜), 后续配置
         skill_registry::set_dungeon(account, 10, dng(30, 1, 5, 0, 50, 200, BATTLE_TURN_CAP, 1));
     }
