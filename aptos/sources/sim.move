@@ -285,42 +285,42 @@ module mohayo::sim {
     fun sim_d9_harder_than_d5() {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
-        let (w5, t5) = clear_rate(a, 5, 40, 30000, 26000, 13000, 600, plan_attack());
+        // 样本刻意取小(8): D9 solo 对 near-max 也近乎必败, 每场都拖到 120 回合清退,
+        // 大样本会令测试超时(此前 40 样本即超时)。
+        let (w5, t5) = clear_rate(a, 5, 8, 30000, 26000, 13000, 600, plan_attack());
         // D5
         report(w5, t5);
-        let (w9, t9) = clear_rate(a, 9, 40, 30000, 26000, 13000, 600, plan_attack());
+        let (w9, t9) = clear_rate(a, 9, 8, 30000, 26000, 13000, 600, plan_attack());
         // D9
         report(w9, t9);
         assert!(w9 <= w5, 1);
-        assert!(t9 >= 25, 2); // legibility guard only
+        assert!(t9 >= 5, 2); // legibility guard only
     }
 
     // ================================================================
     //  Resource-affix chaining: identical flat stats, only the resource-affix
-    //  fields differ. A costly burst skill (暴风剑 id 24: ap_cost 3) needs 3 AP;
-    //  the average build regenerates +1 AP/turn so the burst only fires ~1/3 of
-    //  turns and the fight drags until the dungeon's damage overwhelms it. A build
-    //  with ap_discount 2 + ap_bonus 2 pays 1 AP and regains +3/turn → the burst
-    //  loops every turn, or content is killed fast. Talent therefore changes which
-    //  skills you can afford to dedicate plan slots to, not just raw power.
+    //  fields differ. A costly burst skill (暴风剑 id 24: ap 3 / mana 5) needs
+    //  3 AP and 5 mana; on D1's 2-mana/turn mine the average build fires it
+    //  ~every 3rd turn, so grinding 巨型魔素岩 drags to/past the 120-turn cap;
+    //  a build with ap_discount 2 + ap_bonus 2 (+ mana -2/+2) fires it EVERY
+    //  turn and clears comfortably. 舞台选 D1(无伤时间赛跑)而非 D5: D5 敌伤
+    //  极高时玻璃炮无论有无词条都是 0 胜, 分层被淹没 —— 资源词条的本质是
+    //  "连续施放大技的能力", 时间赛跑是最干净的观测场(挖矿=连续大招)。
     // ================================================================
     #[test]
     fun sim_resource_chain_power() {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
-        // Glass-cannon burst solo on D5 (no heal in plan → survival = kill speed).
-        // hit the same 暴风剑, the average build fires it ~1/3 of turns and the fight
-        // drags until D5's damage overwhelms its thin HP; the talented build loops it
-        // every turn and finishes before death.
-        let (wa, ta) = clear_rate(a, 5, 25, 7000, 8000, 1500, 300, plan_burst());
-        // D5 average(no affix) burst-only
+        let (wa, ta) = clear_rate(a, 1, 25, 4000, 95, 100, 80, plan_burst());
+        // D1 average(no affix) burst-only
         report(wa, ta);
-        // Talented: ap_discount 2 → cost 1; ap_bonus 2 → ap_gen +3/turn → loops every turn.
-        let (wt, tt) = clear_rate_affixed(a, 5, 25, 7000, 8000, 1500, 300, 0, 2, 2, 0, plan_burst());
-        // D5 talented(ap-2,ap+2) burst-only
+        let (wt, tt) = clear_rate_affixed(a, 1, 25, 4000, 95, 100, 80, 2, 2, 2, 2, plan_burst());
+        // D1 talented(ap/md-2, ap/mg+2) burst-only
         report(wt, tt);
-        // Talented must be plainly better than average on the same burst-only plan.
+        // 天赋必须显著优于平民(连发大招的能力); 平民挖巨型魔素岩大概率超时清退
         assert!(wt > wa, 1);
+        assert!(wa <= 8, 2);   // 平民至多 1/3 挖穿(其余被 120 回合清退阀清退)
+        assert!(wt >= 22, 3);  // 天赋基本能连发挖穿
     }
 
     // ================================================================

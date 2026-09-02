@@ -303,6 +303,42 @@ module mohayo::content_registration {
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
             vector[eff(types::OP_MANA_DRAIN(), 160, 1, 0, 1000)]));                     // 67 魔素虹吸(自施,单次抽池)
 
+        // ===================== ENEMY SKILLS 68..77 (D5-D8 世界观怪物) =====================
+        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 950, 0, 920, 0,
+            vector::empty()));                                                          // 68 督军炮(机神督军收敛重炮)
+        // 69 督军增援: 召唤机神哨兵(模板41)×1 —— 战斗雪球感: 拖越久敌人越多
+        skill_registry::register_skill(account, types::make_skill(0, types::KIND_SUPPORT(), 0, 0, 0, 0,
+            0, 0, types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000,
+            0, vector::empty(), types::make_summon_rule(41, 1, 0)));
+        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 900, 0, 920, 0,
+            vector::empty()));                                                          // 70 骸王斩
+        // 71 骸王号令: 召唤白骨卫士(模板44)×2
+        skill_registry::register_skill(account, types::make_skill(0, types::KIND_SUPPORT(), 0, 0, 0, 0,
+            0, 0, types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000,
+            0, vector::empty(), types::make_summon_rule(44, 2, 0)));
+        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 1000, 0, 920, 0,
+            vector::empty()));                                                          // 72 龙爪(物理)
+        // 73 龙裔号令: 召唤熔岩幼龙(模板47)×2
+        skill_registry::register_skill(account, types::make_skill(0, types::KIND_SUPPORT(), 0, 0, 0, 0,
+            0, 0, types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000,
+            0, vector::empty(), types::make_summon_rule(47, 2, 0)));
+        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 900, 0, 900, 0,
+            vector::empty()));                                                          // 74 裂爪(物理)
+        skill_registry::register_skill(account, sk(types::KIND_PHYSICAL(), 0, 0, 0, 0,
+            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 700, 0, 920, 0,
+            vector[eff(types::OP_LIFESTEAL(), 350, 1, 1, 1000)]));                      // 75 深渊撕咬(物理+35%吸血)
+        skill_registry::register_skill(account, sk(types::KIND_SUPPORT(), 0, 0, 0, 0,
+            types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
+            vector[eff(types::OP_ACC_DOWN(), 250, 3, 3, 1000)]));                       // 76 裂隙威压(全体玩家降命中)
+        // 77 裂隙召唤: 召唤裂痕魔(模板50)×2
+        skill_registry::register_skill(account, types::make_skill(0, types::KIND_SUPPORT(), 0, 0, 0, 0,
+            0, 0, types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000,
+            0, vector::empty(), types::make_summon_rule(50, 2, 0)));
+
         // ===================== MONSTER AIs =====================
         // make_monster_ai(skill_cycle, cycle_len) ; skill selection is RANDOMIZED
         // per turn (engine picks a uniform-random index into the cycle each action).
@@ -347,6 +383,36 @@ module mohayo::content_registration {
         ai(account, vector[content::SKILL_SIPHON,                             // 17 魔素吞噬者:虹吸为主
             content::SKILL_SIPHON,
             content::SKILL_RUST_CLAW]);
+        // ---- 世界观重做: D5-D8 新怪 AI (18..29) ----
+        ai(account, vector[content::SKILL_PARTICLE_SLASH]);                   // 18 机神哨兵:粒子斩
+        ai(account, vector[content::SKILL_PARTICLE_SLASH]);                   // 19 机神魔像:粒子斩(与旧火焰魔像同伤档)
+        ai(account, vector[content::SKILL_MARSHAL_CANNON,                     // 20 机神督军:炮/斩/泄漏/低频增援(雪球罕见但致命)
+            content::SKILL_MARSHAL_CANNON,
+            content::SKILL_PARTICLE_SLASH,
+            content::SKILL_PARTICLE_SLASH,
+            content::SKILL_MARSHAL_LEAK,
+            content::SKILL_MARSHAL_REIN]);
+        ai(account, vector[content::SKILL_PICK_SWEEP]);                       // 21 白骨卫士:横扫
+        ai(account, vector[content::SKILL_WRAITH_DRAIN,                       // 22 缚灵:摄魂+恐惧
+            content::SKILL_WRAITH_FEAR,
+            content::SKILL_WRAITH_DRAIN]);
+        ai(account, vector[content::SKILL_WIGHT_CLEAVE,                       // 23 守墓骸王:斩/横扫/号令
+            content::SKILL_PICK_SWEEP,
+            content::SKILL_WIGHT_CALL]);
+        ai(account, vector[content::SKILL_DRAGON_SPIT]);                      // 24 熔岩幼龙:龙息(全体)
+        ai(account, vector[content::SKILL_DRAGON_SPIT,                        // 25 渊炎龙:龙息/龙爪
+            content::SKILL_DRAGON_CLAW,
+            content::SKILL_DRAGON_SPIT]);
+        ai(account, vector[content::SKILL_DRAGON_CLAW,                        // 26 渊龙长老:爪/号令/龙息
+            content::SKILL_DRAGON_CALL,
+            content::SKILL_DRAGON_SPIT,
+            content::SKILL_DRAGON_CLAW]);
+        ai(account, vector[content::SKILL_RIFT_CLAW]);                        // 27 裂痕魔:裂爪
+        ai(account, vector[content::SKILL_ABYSS_BITE]);                       // 28 深渊魔:深渊撕咬(吸血)
+        ai(account, vector[content::SKILL_RIFT_PRESSURE,                      // 29 裂隙支配者:威压/召唤/裂爪
+            content::SKILL_RIFT_CALL,
+            content::SKILL_RIFT_CLAW,
+            content::SKILL_RIFT_CLAW]);
 
         // ===================== ENEMY TEMPLATES (ids 1..30, in order) =====================
         // make_enemy_template(ai_id, threat, max_hp, power, magic, speed, base_acc, rew_min, rew_max, ods)
@@ -402,6 +468,19 @@ module mohayo::content_registration {
         skill_registry::register_template(account, tmpl(15, 2, 1900, 0, 210, 110, 920, 18, 28));// 38 熔铁幼龙(D4,全体龙息)
         skill_registry::register_template(account, tmpl(16, 1, 700, 160, 0, 170, 920, 8, 13));  // 39 深渊魔犬(D4,高速)
         skill_registry::register_template(account, tmpl(17, 3, 3000, 60, 0, 20, 900, 24, 38));  // 40 魔素吞噬者(D4,虹吸)
+        // ---- 世界观重做: D5-D8 新怪 (41..52) ----
+        skill_registry::register_template(account, tmpl(18, 1, 1100, 2600, 0, 150, 910, 6, 9));  // 41 机神哨兵(D5)
+        skill_registry::register_template(account, tmpl(19, 2, 8200, 3400, 0, 50, 900, 16, 24)); // 42 机神魔像(D5)
+        skill_registry::register_template(account, tmpl(20, 3, 29400, 3600, 0, 120, 920, 40, 60));// 43 机神督军(D5,弱化皇帝机体: 炮/泄漏/增援)
+        skill_registry::register_template(account, tmpl(21, 1, 1300, 700, 0, 60, 900, 8, 12));   // 44 白骨卫士(D6)
+        skill_registry::register_template(account, tmpl(22, 1, 1000, 0, 950, 160, 900, 9, 14));  // 45 缚灵(D6,走魔攻)
+        skill_registry::register_template(account, tmpl(23, 3, 14000, 950, 0, 80, 920, 40, 60)); // 46 守墓骸王(D6,号令)
+        skill_registry::register_template(account, tmpl(24, 2, 2600, 0, 1150, 130, 910, 15, 22));// 47 熔岩幼龙(D7,龙息)
+        skill_registry::register_template(account, tmpl(25, 2, 6000, 900, 1400, 90, 910, 25, 38));// 48 渊炎龙(D7,龙息+爪)
+        skill_registry::register_template(account, tmpl(26, 3, 22000, 1200, 1600, 110, 920, 80, 120)); // 49 渊龙长老(D7,龙裔号令)
+        skill_registry::register_template(account, tmpl(27, 1, 1500, 1400, 0, 170, 910, 18, 26));// 50 裂痕魔(D8)
+        skill_registry::register_template(account, tmpl(28, 2, 4200, 1700, 0, 140, 910, 30, 45));// 51 深渊魔(D8,吸血)
+        skill_registry::register_template(account, tmpl(29, 3, 42000, 1650, 0, 100, 920, 150, 240)); // 52 裂隙支配者(D8,威压/召唤)
 
         // ===================== ENEMY TABLES (ids 1..32, in order) =====================
         // make_table_entry(template_id, weight)
@@ -447,6 +526,20 @@ module mohayo::content_registration {
         skill_registry::register_table(account, vector[te(37, 600), te(39, 400)]);           // 39 D4b1 傀儡+魔犬
         skill_registry::register_table(account, vector[te(38, 700), te(37, 300)]);           // 40 D4b2 熔铁幼龙
         skill_registry::register_table(account, vector[te(40, 600), te(39, 400)]);           // 41 D4b3 吞噬者+魔犬护卫
+        // ---- 世界观重做: D5-D8 新表 (42..54) ----
+        skill_registry::register_table(account, vector[te(41, 1000)]);                        // 42 D5b1 机神哨兵×3
+        skill_registry::register_table(account, vector[te(42, 700), te(41, 300)]);           // 43 D5b2 魔像+哨兵
+        skill_registry::register_table(account, vector[te(43, 1000)]);                        // 44 D5b3 机神督军(基准)
+        skill_registry::register_table(account, vector[te(43, 750), te(42, 180), te(41, 70)]); // 45 D5b3 混沌变体
+        skill_registry::register_table(account, vector[te(44, 1000)]);                        // 46 D6b1 白骨卫士×3
+        skill_registry::register_table(account, vector[te(44, 650), te(45, 350)]);           // 47 D6b2 卫士+缚灵
+        skill_registry::register_table(account, vector[te(46, 1000)]);                        // 48 D6b3 守墓骸王
+        skill_registry::register_table(account, vector[te(47, 800), te(48, 200)]);           // 49 D7b1 幼龙群
+        skill_registry::register_table(account, vector[te(48, 800), te(47, 200)]);           // 50 D7b2 渊炎龙
+        skill_registry::register_table(account, vector[te(49, 1000)]);                        // 51 D7b3 渊龙长老
+        skill_registry::register_table(account, vector[te(50, 700), te(51, 300)]);           // 52 D8b1 裂痕魔群
+        skill_registry::register_table(account, vector[te(51, 800), te(50, 200)]);           // 53 D8b2 深渊魔
+        skill_registry::register_table(account, vector[te(52, 1000)]);                        // 54 D8b3 裂隙支配者
 
         // ===================== DUNGEONS D1..D10 =====================
         // make_dungeon_config(table, enemy_count, mana/turn, reward_base, entry_fee, rescue_fee, turn_interval, battles)
@@ -458,16 +551,16 @@ module mohayo::content_registration {
         skill_registry::set_dungeon_battles(account, 3, vector[bt(36, 3), bt(37, 3), bt(38, 1)]);
         skill_registry::set_dungeon(account, 4, dng(39, 3, 4, 0, 15, 30, BATTLE_TURN_CAP, 3));// D4 熔铁深渊
         skill_registry::set_dungeon_battles(account, 4, vector[bt(39, 3), bt(40, 2), bt(41, 2)]);
-        // D5 灼热前线 —— 单人攻关门；b3 督军战加入混沌变体(20% 拖出猎犬/魔像，提升随机性)
-        skill_registry::set_dungeon(account, 5, dng(14, 3, 4, 0, 20, 40, BATTLE_TURN_CAP, 3));
-        skill_registry::set_dungeon_battles(account, 5, vector[bt(14, 3), bt(15, 3), bt(16, 1)]);
-        skill_registry::add_battle_variant(account, 5, 3, 17, 200);
-        skill_registry::set_dungeon(account, 6, dng(18, 3, 5, 0, 25, 50, BATTLE_TURN_CAP, 3)); // D6 熔岩神殿
-        skill_registry::set_dungeon_battles(account, 6, vector[bt(18, 3), bt(19, 4), bt(20, 1)]);
-        skill_registry::set_dungeon(account, 7, dng(21, 4, 6, 0, 30, 60, BATTLE_TURN_CAP, 3)); // D7 机神前哨
-        skill_registry::set_dungeon_battles(account, 7, vector[bt(21, 4), bt(22, 3), bt(23, 1)]);
-        skill_registry::set_dungeon(account, 8, dng(24, 4, 6, 0, 35, 70, BATTLE_TURN_CAP, 4)); // D8 钢铁要塞
-        skill_registry::set_dungeon_battles(account, 8, vector[bt(24, 4), bt(25, 2), bt(26, 3), bt(27, 1)]);
+        // D5 机神前哨 —— 单人攻关门；b3 督军战加入混沌变体(20% 拖出魔像/哨兵，提升随机性)
+        skill_registry::set_dungeon(account, 5, dng(42, 3, 4, 0, 20, 40, BATTLE_TURN_CAP, 3));
+        skill_registry::set_dungeon_battles(account, 5, vector[bt(42, 3), bt(43, 3), bt(44, 1)]);
+        skill_registry::add_battle_variant(account, 5, 3, 45, 200);
+        skill_registry::set_dungeon(account, 6, dng(46, 3, 5, 0, 25, 50, BATTLE_TURN_CAP, 3)); // D6 亡者回廊深处
+        skill_registry::set_dungeon_battles(account, 6, vector[bt(46, 3), bt(47, 3), bt(48, 1)]);
+        skill_registry::set_dungeon(account, 7, dng(49, 3, 6, 0, 30, 60, BATTLE_TURN_CAP, 3)); // D7 熔渊龙巢
+        skill_registry::set_dungeon_battles(account, 7, vector[bt(49, 3), bt(50, 2), bt(51, 1)]);
+        skill_registry::set_dungeon(account, 8, dng(52, 3, 6, 0, 35, 70, BATTLE_TURN_CAP, 3)); // D8 虚空裂隙
+        skill_registry::set_dungeon_battles(account, 8, vector[bt(52, 3), bt(53, 3), bt(54, 1)]);
         // D9 机神王座 —— 4 战；b3 炉毁 60% 召唤皇帝，b4 变体 85% 宝箱 / 15% 皇帝备用机体
         skill_registry::set_dungeon(account, 9, dng(28, 3, 7, 0, 40, 100, BATTLE_TURN_CAP, 4));
         skill_registry::set_dungeon_battles(account, 9, vector[bt(28, 4), bt(29, 4), bt(30, 3), bt(31, 1)]);

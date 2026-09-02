@@ -72,6 +72,17 @@ module mohayo::content {
     public const SKILL_DRAGON_SPIT: u64 = 65;   // 熔铁幼龙·龙息(全体魔法)
     public const SKILL_DIRE_BITE: u64 = 66;     // 深渊魔犬·撕咬(双段单体)
     public const SKILL_SIPHON: u64 = 67;        // 魔素吞噬者·魔素虹吸(抽房间池)
+    // ---- enemy skills 68..77 (D5-D8 世界观怪物) ----
+    public const SKILL_MARSHAL_CANNON: u64 = 68; // 机神督军·督军炮(收敛重炮, 单体物理)
+    public const SKILL_MARSHAL_REIN: u64 = 69;   // 机神督军·增援(召唤机神哨兵×1)
+    public const SKILL_WIGHT_CLEAVE: u64 = 70;   // 守墓骸王·骸王斩(单体物理)
+    public const SKILL_WIGHT_CALL: u64 = 71;     // 守墓骸王·号令(召唤白骨卫士×2)
+    public const SKILL_DRAGON_CLAW: u64 = 72;    // 渊龙·龙爪(单体物理)
+    public const SKILL_DRAGON_CALL: u64 = 73;    // 渊龙长老·龙裔号令(召唤熔岩幼龙×2)
+    public const SKILL_RIFT_CLAW: u64 = 74;      // 裂痕魔·裂爪(单体物理)
+    public const SKILL_ABYSS_BITE: u64 = 75;     // 深渊魔·深渊撕咬(单体物理+吸血)
+    public const SKILL_RIFT_PRESSURE: u64 = 76;  // 裂隙支配者·裂隙威压(全体玩家降命中)
+    public const SKILL_RIFT_CALL: u64 = 77;      // 裂隙支配者·召唤裂痕魔×2
 
     public const DUNGEON_D9: u64 = 9;
     public const D9_BATTLE_1: u64 = 71;
