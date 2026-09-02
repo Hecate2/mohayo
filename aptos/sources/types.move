@@ -202,6 +202,8 @@ module mohayo::types {
         plan_start: u64,
         alive: bool,
         is_summon: bool,
+        owner: address,
+        char_id: u64,
     }
 
     struct Enemy has copy, drop, store {
@@ -319,11 +321,11 @@ module mohayo::types {
         ap: u16, mana_discount: u16, ap_discount: u16, ap_bonus: u16,
         mana_gain_bonus: i64, class_id: u8,
         effects: vector<ActiveEffect>, plan: vector<u64>, plan_start: u64,
-        alive: bool, is_summon: bool,
+        alive: bool, is_summon: bool, owner: address, char_id: u64,
     ): Member {
         Member { hp, max_hp, attack, magic, speed, ap, mana_discount,
                  ap_discount, ap_bonus, mana_gain_bonus, class_id,
-                 effects, plan, plan_start, alive, is_summon }
+                 effects, plan, plan_start, alive, is_summon, owner, char_id }
     }
 
     public fun make_enemy(
@@ -453,6 +455,8 @@ module mohayo::types {
     public fun member_ap(m: &Member): u16 { m.ap }
     public fun member_alive(m: &Member): bool { m.alive }
     public fun member_is_summon(m: &Member): bool { m.is_summon }
+    public fun member_owner(m: &Member): address { m.owner }
+    public fun member_char_id(m: &Member): u64 { m.char_id }
     public fun member_effects(m: &Member): &vector<ActiveEffect> { &m.effects }
     public fun member_plan(m: &Member): &vector<u64> { &m.plan }
     public fun member_plan_start(m: &Member): u64 { m.plan_start }

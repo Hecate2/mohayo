@@ -7,6 +7,7 @@ module mohayo::engine {
     use std::vector;
     use mohayo::types::{Self, Skill, Member, Enemy, Target};
     use mohayo::skill_registry;
+    use mohayo::character;
 
     const E_ROOM_NOT_FOUND: u64 = 3;
     const E_BAD_INDEX: u64 = 4;
@@ -18,6 +19,8 @@ module mohayo::engine {
     const E_NOT_LEADER: u64 = 6;
     const E_NOT_INTERMISSION: u64 = 17;
     const E_LAST_BATTLE: u64 = 18;
+    const E_NOT_PLAN_OWNER: u64 = 19;
+    const E_SKILL_NOT_OWNED: u64 = 20;
 
     // ============================ resource ============================
 
@@ -116,7 +119,12 @@ module mohayo::engine {
         event::emit(RoomCreated { room_id: rid, leader: addr });
     }
 
-    public entry fun join_room(
+    /// Test/sim panel join: a bare stat block with NO character binding
+    /// (char_id = 0 → plan skill-ownership checks are skipped). #[test_only] so it
+    /// can never be a production entry: real players must go through
+    /// `join_room_as_char`, which binds the Character (owner + skill set).
+    #[test_only]
+    public fun join_room(
         account: &signer, room_id: u64,
         max_hp: u64, attack: u64, magic: u64, speed: u64,
     ) acquires RoomStore {
@@ -128,16 +136,16 @@ module mohayo::engine {
             max_hp, max_hp, attack, magic, speed,
             0, 0, 0, 0, 0, 0,
             vector::empty(), vector::empty(), 0,
-            true, false,
+            true, false, signer::address_of(account), 0,
         );
         vector::push_back(&mut room.members, member);
         event::emit(MemberJoined { room_id, player: signer::address_of(account) });
     }
 
-    /// Test-only join that also sets the character's resource-affix fields
-    /// (mana/ap discount, ap bonus, mana regen) so the simulator can model a
-    /// "talented" build independently of its flat stats. Production join copies
-    /// these from Character via the normal path.
+    // Test-only join that also sets the character's resource-affix fields
+    // (mana/ap discount, ap bonus, mana regen) so the simulator can model a
+    // "talented" build independently of its flat stats. Production join copies
+    // these from Character via the normal path.
     #[test_only]
     public fun join_room_affixed(
         account: &signer, room_id: u64,
@@ -152,6 +160,29 @@ module mohayo::engine {
             max_hp, max_hp, attack, magic, speed,
             0, mana_discount, ap_discount, ap_bonus, mana_gain_bonus,
             0, vector::empty(), vector::empty(), 0, true, false,
+            signer::address_of(account), 0,
+        );
+        vector::push_back(&mut room.members, member);
+        event::emit(MemberJoined { room_id, player: signer::address_of(account) });
+    }
+
+    /// Production join: binds this room slot to `char_id`. The caller must own
+    /// the character (技能权威源 = Character.skill_ids, 存在角色自身存储)。成员只携带
+    /// owner + char_id 引用 —— 不复制技能集进房间(省 gas)，计划提交时按需校验。
+    public entry fun join_room_as_char(
+        account: &signer, room_id: u64, char_id: u64,
+    ) acquires RoomStore {
+        assert!(character::char_owner(char_id) == signer::address_of(account), E_NOT_PLAN_OWNER);
+        let (_hp, max_hp, atk, mag, spd) = character::get_stats(char_id);
+        let rs = borrow_global_mut<RoomStore>(@mohayo);
+        let room = table::borrow_mut(&mut rs.rooms, room_id);
+        assert!(room.phase == 0 || room.phase == 3, E_NOT_JOINABLE);
+        assert!(vector::length(&room.members) < 10, E_ROOM_FULL);
+        let member = types::make_member(
+            max_hp, max_hp, atk, mag, spd,
+            0, 0, 0, 0, 0, 0,
+            vector::empty(), vector::empty(), 0,
+            true, false, signer::address_of(account), char_id,
         );
         vector::push_back(&mut room.members, member);
         event::emit(MemberJoined { room_id, player: signer::address_of(account) });
@@ -189,6 +220,21 @@ module mohayo::engine {
         let room = table::borrow_mut(&mut rs.rooms, room_id);
         assert!(room.phase == 1, E_NOT_COMBAT);
         assert!(member_index < vector::length(&room.members), E_BAD_INDEX);
+        {
+            let m = vector::borrow(&room.members, member_index);
+            // 只能给自己排(队长也不能替别人排, gameplay-design §4.3)
+            assert!(signer::address_of(account) == types::member_owner(m), E_NOT_PLAN_OWNER);
+            // 只用自己拥有的技能: 权威源 = Character.skill_ids(角色自身存储)。
+            // 提交时刻一次性校验, 回合执行零额外检查(省 gas)。char_id=0 为 test-only 面板通道。
+            let cid = types::member_char_id(m);
+            if (cid != 0) {
+                let pi = 0;
+                while (pi < vector::length(&plan)) {
+                    assert!(character::char_owns_skill(cid, *vector::borrow(&plan, pi)), E_SKILL_NOT_OWNED);
+                    pi = pi + 1;
+                };
+            };
+        };
         let m = vector::borrow_mut(&mut room.members, member_index);
         types::member_set_plan(m, plan);
         types::member_set_plan_start(m, 0);
@@ -199,6 +245,10 @@ module mohayo::engine {
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
         assert!(member_index < vector::length(&room.members), E_BAD_INDEX);
+        {
+            let m = vector::borrow(&room.members, member_index);
+            assert!(signer::address_of(account) == types::member_owner(m), E_NOT_PLAN_OWNER);
+        };
         let m = vector::borrow_mut(&mut room.members, member_index);
         types::member_set_plan(m, vector::empty());
         types::member_set_plan_start(m, 0);
@@ -776,7 +826,7 @@ module mohayo::engine {
                     types::template_max_hp(&t), types::template_max_hp(&t),
                     types::template_power(&t), types::template_magic(&t), types::template_speed(&t),
                     0, 0, 0, 0, 0, 0,
-                    vector::empty(), vector::empty(), 0, true, true,
+                    vector::empty(), vector::empty(), 0, true, true, @mohayo, 0,
                 );
                 vector::push_back(&mut room.members, minion);
                 event::emit(EnemySpawned { room_id, index: idx, template_id: stid });

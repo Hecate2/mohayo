@@ -376,4 +376,79 @@ module mohayo::sim {
         assert!(wt >= 1 && wt <= 4, 1); // 极强天赋1级对D2: 小概率通过(约10%, "说不定能赢")
         assert!(wp == 0, 2);            // 无天赋普攻流1级打不穿D2(门槛仍存在)
     }
+
+    // ================================================================
+    //  技能归属红线(用户定案): 玩家的技能只来自 职业/种族/自选池 三来源。
+    //  a) 创建端: 自选池逐 id 白名单(1..=44 玩家区), 敌技(45+)被拒;
+    //  b) 执行端: 生产入口 join_room_as_char 绑定角色, set_plan 提交时校验
+    //     计划技能 ∈ Character.skill_ids(权威源=角色自身存储), 敌技无法进计划;
+    //  c) 只能给自己排(owner 校验), 他人不可代排。
+    // ================================================================
+    // b) 敌技进计划被拒: 生产 join 后 set_plan 排敌技(45) → E_SKILL_NOT_OWNED(20)
+    #[test]
+    #[expected_failure(abort_code = 20)]
+    fun sim_skill_ownership_enemy_plan_rejected() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let own = std::signer::address_of(a);
+        character::gm_mint(a, own, 1, 2, vector[0, 0, 0, 0], vector[1, 3]);
+        let char_id = character::owner_latest_char(own);
+        engine::create_room(a, 1);
+        let room_id = skill_registry::next_room_id() - 1;
+        engine::join_room_as_char(a, room_id, char_id);
+        engine::start_combat(a, room_id);
+        engine::set_plan(a, room_id, 0, vector[45]); // 火花锯=敌技 → abort 20
+    }
+
+    // c) 他人不可代排: 非 owner 的地址 set_plan → E_NOT_PLAN_OWNER(19)
+    #[test]
+    #[expected_failure(abort_code = 19)]
+    fun sim_skill_ownership_foreign_plan_rejected() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let own = std::signer::address_of(a);
+        character::gm_mint(a, own, 1, 2, vector[0, 0, 0, 0], vector[1, 3]);
+        let char_id = character::owner_latest_char(own);
+        engine::create_room(a, 1);
+        let room_id = skill_registry::next_room_id() - 1;
+        engine::join_room_as_char(a, room_id, char_id);
+        engine::start_combat(a, room_id);
+        let b = &std::account::create_account_for_test(@0xCAFE);
+        engine::set_plan(b, room_id, 0, vector[1]); // b 不是成员 owner → abort 19
+    }
+
+    // d) 自选敌技在创建端被拒: gm_mint 自选列表含敌技(45) → E_SKILL_NOT_POOL(4)
+    #[test]
+    #[expected_failure(abort_code = 4)]
+    fun sim_skill_ownership_enemy_self_select_rejected() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        character::gm_mint(a, std::signer::address_of(a), 1, 2, vector[0, 0, 0, 0], vector[45]);
+    }
+
+    // e) 生产链路端到端: 合法计划可提交并推进战斗
+    #[test]
+    fun sim_skill_ownership_owned_plan_ok() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let own = std::signer::address_of(a);
+        character::gm_mint(a, own, 1, 2, vector[0, 0, 0, 0], vector[3]); // 守卫仅1自选槽
+        let char_id = character::owner_latest_char(own);
+        engine::create_room(a, 1);
+        let room_id = skill_registry::next_room_id() - 1;
+        engine::join_room_as_char(a, room_id, char_id);
+        engine::start_combat(a, room_id);
+        // 计划=自选治疗(3)+守卫职业技盾击(31), 均在技能集内 → 应通过
+        engine::set_plan(a, room_id, 0, vector[3, 31]);
+        let guard = 0;
+        while (guard < 40) {
+            let ph = engine::room_phase(room_id);
+            if (ph == 1) { engine::advance_turn(a, room_id); }
+            else if (ph == 3) { engine::advance_battle(a, room_id); }
+            else { break; };
+            guard = guard + 1;
+        };
+        // 能跑到这里即说明归属校验不误伤合法计划(角色血薄, 被碎石磨死也属正常模拟)
+        assert!(guard > 0, 1);
+    }
 }

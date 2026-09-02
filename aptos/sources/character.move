@@ -6,6 +6,7 @@ module mohayo::character {
     use std::signer;
     use std::vector;
     use mohayo::types::{Self, ClassDef, RaceDef, AffixTemplate};
+    use mohayo::content;
 
     const E_NOT_OWNER: u64 = 1;
     const E_UNKNOWN_CLASS: u64 = 2;
@@ -55,6 +56,7 @@ module mohayo::character {
 
     struct Character has store {
         id: u64,
+        owner: address,
         class_id: u8,
         race: u8,
         level: u16,
@@ -183,7 +185,7 @@ module mohayo::character {
         let store = borrow_global_mut<CharacterStore>(@mohayo);
         let id = store.count + 1;
         let c = Character {
-            id, class_id, race, level: 1,
+            id, owner, class_id, race, level: 1,
             hp, max_hp: hp, attack: atk, magic: mag, speed: spd,
             skill_ids: skills,
             ability_bonuses,
@@ -223,7 +225,7 @@ module mohayo::character {
         let store = borrow_global_mut<CharacterStore>(@mohayo);
         let id = store.count + 1;
         let c = Character {
-            id, class_id, race, level,
+            id, owner, class_id, race, level,
             hp, max_hp: hp, attack: atk, magic: mag, speed: spd,
             skill_ids: skills,
             ability_bonuses,
@@ -309,6 +311,31 @@ module mohayo::character {
         assert!(table::contains(&store.characters, id), E_NOT_FOUND);
         let c = table::borrow(&store.characters, id);
         c.skill_ids
+    }
+
+    #[view]
+    public fun char_owner(id: u64): address acquires CharacterStore {
+        let store = borrow_global<CharacterStore>(@mohayo);
+        assert!(table::contains(&store.characters, id), E_NOT_FOUND);
+        table::borrow(&store.characters, id).owner
+    }
+
+    /// Returns true iff `char_id` owns skill `sid` (权威源 = Character.skill_ids, 角色自身存储)。
+    #[view]
+    public fun char_owns_skill(char_id: u64, sid: u64): bool acquires CharacterStore {
+        let store = borrow_global<CharacterStore>(@mohayo);
+        if (!table::contains(&store.characters, char_id)) return false;
+        let c = table::borrow(&store.characters, char_id);
+        vector::contains(&c.skill_ids, &sid)
+    }
+
+    /// Latest char id created by `owner` (0 if none). 测试/工具链用: 模拟器取 mint 出的角色。
+    #[view]
+    public fun owner_latest_char(owner: address): u64 acquires CharacterStore {
+        let store = borrow_global<CharacterStore>(@mohayo);
+        if (!table::contains(&store.owner_chars, owner)) return 0;
+        let list = table::borrow(&store.owner_chars, owner);
+        if (vector::length(list) == 0) { 0 } else { *vector::borrow(list, vector::length(list) - 1) }
     }
 
     #[view]
@@ -456,6 +483,14 @@ module mohayo::character {
             vector::push_back(&mut skills, race_skill_id2);
         };
         let max_self = (types::class_def_skill_slots(class) as u64) + (types::race_def_self_select_bonus(race_def) as u64);
+        // 红线: 自选池技能必须落在玩家技能区 1..=44(content::SKILL_MANA_CLAP)。
+        // 敌技区(45+)/非法 id 一律拒绝 —— 玩家的技能只来自 职业/种族/自选池 三来源。
+        let mut_p = 0;
+        while (mut_p < vector::length(self_select)) {
+            let sid = *vector::borrow(self_select, mut_p);
+            assert!(sid >= 1 && sid <= content::SKILL_MANA_CLAP, E_SKILL_NOT_POOL);
+            mut_p = mut_p + 1;
+        };
         let mut_j = 0;
         let mut_k = 0;
         while (mut_j < vector::length(self_select) && mut_k < max_self) {
