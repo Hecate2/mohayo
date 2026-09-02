@@ -178,6 +178,88 @@ module mohayo::sim {
         (wins, samples)
     }
 
+    // ===================== party (multi-member) helpers =====================
+    // 组队仿真: 同一房间多名成员(各自面板+计划)打完整座地下城。成员经 #[test_only]
+    // 面板 join(owner=同 signer, char_id=0 免检), 用于 D5-D9 组队胜率标定。
+
+    fun run_duo(
+        a: &signer, difficulty: u64,
+        h1: u64, atk1: u64, m1: u64, s1: u64, p1: vector<u64>,
+        h2: u64, atk2: u64, m2: u64, s2: u64, p2: vector<u64>,
+    ): u64 {
+        engine::create_room(a, difficulty);
+        let room_id = skill_registry::next_room_id() - 1;
+        engine::join_room(a, room_id, h1, atk1, m1, s1);
+        engine::join_room(a, room_id, h2, atk2, m2, s2);
+        engine::start_combat(a, room_id);
+        engine::set_plan(a, room_id, 0, p1);
+        engine::set_plan(a, room_id, 1, p2);
+        let guard = 0;
+        while (guard < 800) {
+            let ph = engine::room_phase(room_id);
+            if (ph == 1) { engine::advance_turn(a, room_id); }
+            else if (ph == 3) { engine::advance_battle(a, room_id); }
+            else { break; };
+            guard = guard + 1;
+        };
+        if (engine::room_result(room_id) == 1) { 1 } else { 0 }
+    }
+
+    public fun clear_rate_duo(
+        a: &signer, difficulty: u64, samples: u64,
+        h1: u64, atk1: u64, m1: u64, s1: u64, p1: vector<u64>,
+        h2: u64, atk2: u64, m2: u64, s2: u64, p2: vector<u64>,
+    ): (u64, u64) {
+        let wins = 0;
+        let i = 0;
+        while (i < samples) {
+            wins = wins + run_duo(a, difficulty, h1, atk1, m1, s1, p1, h2, atk2, m2, s2, p2);
+            i = i + 1;
+        };
+        (wins, samples)
+    }
+
+    fun run_trio(
+        a: &signer, difficulty: u64,
+        h1: u64, atk1: u64, m1: u64, s1: u64, p1: vector<u64>,
+        h2: u64, atk2: u64, m2: u64, s2: u64, p2: vector<u64>,
+        h3: u64, atk3: u64, m3: u64, s3: u64, p3: vector<u64>,
+    ): u64 {
+        engine::create_room(a, difficulty);
+        let room_id = skill_registry::next_room_id() - 1;
+        engine::join_room(a, room_id, h1, atk1, m1, s1);
+        engine::join_room(a, room_id, h2, atk2, m2, s2);
+        engine::join_room(a, room_id, h3, atk3, m3, s3);
+        engine::start_combat(a, room_id);
+        engine::set_plan(a, room_id, 0, p1);
+        engine::set_plan(a, room_id, 1, p2);
+        engine::set_plan(a, room_id, 2, p3);
+        let guard = 0;
+        while (guard < 800) {
+            let ph = engine::room_phase(room_id);
+            if (ph == 1) { engine::advance_turn(a, room_id); }
+            else if (ph == 3) { engine::advance_battle(a, room_id); }
+            else { break; };
+            guard = guard + 1;
+        };
+        if (engine::room_result(room_id) == 1) { 1 } else { 0 }
+    }
+
+    public fun clear_rate_trio(
+        a: &signer, difficulty: u64, samples: u64,
+        h1: u64, atk1: u64, m1: u64, s1: u64, p1: vector<u64>,
+        h2: u64, atk2: u64, m2: u64, s2: u64, p2: vector<u64>,
+        h3: u64, atk3: u64, m3: u64, s3: u64, p3: vector<u64>,
+    ): (u64, u64) {
+        let wins = 0;
+        let i = 0;
+        while (i < samples) {
+            wins = wins + run_trio(a, difficulty, h1, atk1, m1, s1, p1, h2, atk2, m2, s2, p2, h3, atk3, m3, s3, p3);
+            i = i + 1;
+        };
+        (wins, samples)
+    }
+
     fun reg(a: &signer) {
         character::init_for_test(a);
         skill_registry::init_for_test(a);
@@ -570,5 +652,40 @@ module mohayo::sim {
         report(m1, m2);
         assert!(p1 >= 8, 1);  // b1 保底可挖
         assert!(pf <= 2, 2);  // 平凡1级磨不穿 D1(b4 超时)
+    }
+
+    // ================================================================
+    //  组队观察: near-max 面板 双人/三人 vs D5/D9。把 D9"满编组队也未必通关"
+    //  从定性变成可测量曲线。计划: 成员0=输出带奶(攻击+治疗), 其余=暴风剑带奶。
+    // ================================================================
+    #[test]
+    fun sim_party_observe() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        // near-max duo/trio vs D5/D9 (顶配面板对照)
+        let (d5a, d5t) = clear_rate_duo(a, 5, 3,
+            30000, 26000, 13000, 600, plan_attack(),
+            26000, 22000, 15000, 550, plan_burst_heal());
+        report(d5a, d5t);
+        let (d9a, d9t) = clear_rate_duo(a, 9, 3,
+            30000, 26000, 13000, 600, plan_attack(),
+            26000, 22000, 15000, 550, plan_burst_heal());
+        report(d9a, d9t);
+        let (t9a, t9t) = clear_rate_trio(a, 9, 3,
+            30000, 26000, 13000, 600, plan_attack(),
+            26000, 22000, 15000, 550, plan_burst_heal(),
+            24000, 18000, 18000, 600, plan_burst_heal());
+        report(t9a, t9t);
+        // 常规满级队(人类剑士无词条 Lv300 ≈ 33150/3390/3315/3360) duo/trio vs D9
+        // 常规队无资源词条 → 用 攻击+治疗 基本循环(非暴风剑资源流)
+        let (cd9a, cd9t) = clear_rate_duo(a, 9, 3,
+            33150, 3390, 3315, 3360, plan_attack(),
+            33150, 3390, 3315, 3360, plan_attack());
+        report(cd9a, cd9t);
+        let (ct9a, ct9t) = clear_rate_trio(a, 9, 3,
+            33150, 3390, 3315, 3360, plan_attack(),
+            33150, 3390, 3315, 3360, plan_attack(),
+            33150, 3390, 3315, 3360, plan_attack());
+        report(ct9a, ct9t);
     }
 }
