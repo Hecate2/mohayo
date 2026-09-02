@@ -527,4 +527,29 @@ module mohayo::sim {
         assert!(guard_drop > 0, 1);     // 守卫确实吃到单体火力
         assert!(squish_drop == 0, 2);   // 嘲讽拉怪: 脆皮全程零受击(taunt 未实现时脆皮会吃 2~4 击)
     }
+
+    // ================================================================
+    //  多人魔素聚合(校验#4 多人面): 房间 mana 池每回合 = mana_per_turn +
+    //  Σ(存活成员 mana_gain_bonus)。两名成员各带「魔素产量+1」词条 →
+    //  D1(mana2) 每回合 +4。多人堆魔素词条 = 大魔法连续施放的基础(共享池曲线)。
+    // ================================================================
+    #[test]
+    fun sim_multi_mana_regen() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        engine::create_room(a, 1);
+        let room_id = skill_registry::next_room_id() - 1;
+        engine::join_room_affixed(a, room_id, 4000, 300, 300, 100, 0, 0, 0, 1); // A: 魔素产量+1
+        engine::join_room_affixed(a, room_id, 4000, 300, 300, 100, 0, 0, 0, 1); // B: 魔素产量+1
+        engine::start_combat(a, room_id);
+        // 两成员都空过(plan 空, 不消耗 mana): 池应每回合 + (2 + 1 + 1) = +4
+        engine::set_plan(a, room_id, 0, vector[]);
+        engine::set_plan(a, room_id, 1, vector[]);
+        let gi = 0;
+        while (gi < 5) { engine::advance_turn(a, room_id); gi = gi + 1; };
+        let pool = engine::room_mana(room_id);
+        std::debug::print(&vector[pool]);
+        // 起点 mana2(mana_per_turn) + 5 回合 × 4 = 22; 若多人词条未被聚合则 2+5×2=12
+        assert!(pool == 22, 1);
+    }
 }
