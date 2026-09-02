@@ -201,8 +201,8 @@ module mohayo::content_registration {
             types::TGT_RAND_STRIKE_ENEMY(), types::WT_THREAT_ENEMY(), 5, 160, 0, 950, 0,
             vector::empty()), 4);                                                       // 36 光弹(固定5弹着)
         skill_registry::register_class_skill(account, sk(types::KIND_SUPPORT(), 1, 1, 8, 0,
-            types::TGT_ALL_ALLY(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_HEAL(), 400, 1, 2, 1000)]), 4);                       // 37 圣泉(群回)
+            types::TGT_ALL_ALLY(), types::WT_UNIFORM(), 1, 450, 0, 1000, 0,
+            vector[eff(types::OP_HEAL(), 450, 1, 2, 1000)]), 4);                       // 37 圣泉(群回, power×魔攻缩放; 原固定400不随等级成长)
         skill_registry::register_class_skill(account, sk(types::KIND_SUPPORT(), 1, 0, 4, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
             vector[eff(types::OP_SHIELD(), 1600, 5, 0, 1000)]), 4);                    // 38 替身人偶
