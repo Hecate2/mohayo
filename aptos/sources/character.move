@@ -8,6 +8,7 @@ module mohayo::character {
     use mohayo::types::{Self, ClassDef, RaceDef, AffixTemplate};
     use mohayo::skill_registry;
     use mohayo::content;
+    use mohayo::rng;
 
     const E_NOT_OWNER: u64 = 1;
     const E_UNKNOWN_CLASS: u64 = 2;
@@ -67,6 +68,7 @@ module mohayo::character {
         magic: u64,
         speed: u64,
         skill_ids: vector<u64>,
+        self_select: vector<u64>, // 自选池技能(未合并, 命运骰子重掷需保留)
         ability_bonuses: vector<u16>,  // [HP, ATK, MAG, SPD]
         resource_types: vector<u8>,
         mana_discount: u16,
@@ -189,6 +191,7 @@ module mohayo::character {
             id, owner, class_id, race, level: 1,
             hp, max_hp: hp, attack: atk, magic: mag, speed: spd,
             skill_ids: skills,
+            self_select: skill_ids,
             ability_bonuses,
             resource_types,
             mana_discount: mana_disc,
@@ -229,6 +232,7 @@ module mohayo::character {
             id, owner, class_id, race, level,
             hp, max_hp: hp, attack: atk, magic: mag, speed: spd,
             skill_ids: skills,
+            self_select: skill_ids,
             ability_bonuses,
             resource_types,
             mana_discount: mana_disc,
@@ -257,6 +261,105 @@ module mohayo::character {
         let class = get_class(c.class_id);
         let race_def = get_race(c.race);
         let (hp, atk, mag, spd) = compute_stats(c.class_id, &class, c.race, &race_def, &c.ability_bonuses, level);
+        c.hp = hp;
+        c.max_hp = hp;
+        c.attack = atk;
+        c.magic = mag;
+        c.speed = spd;
+    }
+
+    // ---- 重掷 / 重建(道具: 命运骰子 / 重生卷轴, content-design §7) ----
+
+    /// 用 rng 掷出随机种族: 先按三层稀有度权重抽层, 再在层内均匀抽种族(读 RaceStore 池)。
+    public fun roll_random_race(rng: &mut mohayo::rng::Rng): u8 acquires RaceStore {
+        let store = borrow_global<RaceStore>(@mohayo);
+        let w0 = (*vector::borrow(&store.race_tier_weights, 0)) as u64;
+        let w1 = (*vector::borrow(&store.race_tier_weights, 1)) as u64;
+        let w2 = (*vector::borrow(&store.race_tier_weights, 2)) as u64;
+        let roll = rng::below(rng, w0 + w1 + w2);
+        if (roll < w0) {
+            pick_race(rng, &store.common_races)
+        } else if (roll < w0 + w1) {
+            pick_race(rng, &store.rare_races)
+        } else {
+            pick_race(rng, &store.legendary_races)
+        }
+    }
+
+    fun pick_race(rng: &mut mohayo::rng::Rng, pool: &vector<u8>): u8 {
+        let pick = rng::below(rng, vector::length(pool));
+        *vector::borrow(pool, pick)
+    }
+
+    /// 用 rng 掷出词条档位+资源词条: 4 项能力各掷 1..10 档, 再均匀掷 0..4 条资源词条(类型 0..3)。
+    public fun roll_random_affix_tiers(rng: &mut mohayo::rng::Rng): vector<u8> {
+        let tiers = vector<u8>[];
+        let i = 0;
+        while (i < 4) {
+            let t = rng::below(rng, 10) + 1;
+            vector::push_back(&mut tiers, (t as u8));
+            i = i + 1;
+        };
+        let nres = (rng::below(rng, 5) as u8); // 0..4 条资源词条
+        let r = 0;
+        while (r < nres) {
+            let rt = rng::below(rng, 4);
+            vector::push_back(&mut tiers, (rt as u8));
+            r = r + 1;
+        };
+        tiers
+    }
+
+    /// 命运骰子: 换种族+词条, 保留职业/等级/已选自选技; 仅关卡外(room_id==0)可用。
+    public fun reroll_character(char_id: u64, new_race: u8, new_affix_tiers: vector<u8>)
+    acquires ClassStore, RaceStore, AffixStore, CharacterStore {
+        let store = borrow_global_mut<CharacterStore>(@mohayo);
+        assert!(table::contains(&store.characters, char_id), E_NOT_FOUND);
+        let c = table::borrow_mut(&mut store.characters, char_id);
+        assert!(c.room_id == 0, E_IN_ROOM);
+        let class = get_class(c.class_id);
+        let race_def = get_race(new_race);
+        // 仅重掷词条(能力+资源), 自选技列表保留
+        let (ability_bonuses, resource_types, mana_disc, ap_disc, ap_bon, mana_gain) = compute_affixes(&new_affix_tiers);
+        let skills = merge_skills(c.class_id, &class, new_race, &race_def, &c.self_select);
+        let (hp, atk, mag, spd) = compute_stats(c.class_id, &class, new_race, &race_def, &ability_bonuses, c.level);
+        c.race = new_race;
+        c.skill_ids = skills;
+        c.ability_bonuses = ability_bonuses;
+        c.resource_types = resource_types;
+        c.mana_discount = mana_disc;
+        c.ap_discount = ap_disc;
+        c.ap_bonus = ap_bon;
+        c.mana_gain_bonus = mana_gain;
+        c.hp = hp;
+        c.max_hp = hp;
+        c.attack = atk;
+        c.magic = mag;
+        c.speed = spd;
+    }
+
+    /// 重生卷轴: 整体重建 —— 换种族+词条, 等级重置为 1, 自选技清空(技能=职业技+新种族技); 仅关卡外可用。
+    public fun rebuild_character(char_id: u64, new_race: u8, new_affix_tiers: vector<u8>)
+    acquires ClassStore, RaceStore, AffixStore, CharacterStore {
+        let store = borrow_global_mut<CharacterStore>(@mohayo);
+        assert!(table::contains(&store.characters, char_id), E_NOT_FOUND);
+        let c = table::borrow_mut(&mut store.characters, char_id);
+        assert!(c.room_id == 0, E_IN_ROOM);
+        let class = get_class(c.class_id);
+        let race_def = get_race(new_race);
+        let (ability_bonuses, resource_types, mana_disc, ap_disc, ap_bon, mana_gain) = compute_affixes(&new_affix_tiers);
+        let skills = merge_skills(c.class_id, &class, new_race, &race_def, &vector::empty<u64>());
+        let (hp, atk, mag, spd) = compute_stats(c.class_id, &class, new_race, &race_def, &ability_bonuses, 1);
+        c.race = new_race;
+        c.level = 1;
+        c.skill_ids = skills;
+        c.self_select = vector::empty();
+        c.ability_bonuses = ability_bonuses;
+        c.resource_types = resource_types;
+        c.mana_discount = mana_disc;
+        c.ap_discount = ap_disc;
+        c.ap_bonus = ap_bon;
+        c.mana_gain_bonus = mana_gain;
         c.hp = hp;
         c.max_hp = hp;
         c.attack = atk;
@@ -312,6 +415,14 @@ module mohayo::character {
         assert!(table::contains(&store.characters, id), E_NOT_FOUND);
         let c = table::borrow(&store.characters, id);
         c.skill_ids
+    }
+
+    #[view]
+    public fun get_self_select(id: u64): vector<u64> acquires CharacterStore {
+        let store = borrow_global<CharacterStore>(@mohayo);
+        assert!(table::contains(&store.characters, id), E_NOT_FOUND);
+        let c = table::borrow(&store.characters, id);
+        c.self_select
     }
 
     #[view]

@@ -13,21 +13,35 @@
 module mohayo::item {
     use std::signer;
     use std::table::{Self, Table};
-    use std::vector;
 
     // ===================== 道具类型 id（按组留区间: 组内小步长, 同组可扩展） =====================
     public const ITEM_LEAD_BULLET: u64 = 1;     // 铅弹(火枪左轮弹药, 战斗不可直接使用)
     public const ITEM_DRAGON_BULLET: u64 = 2;   // 龙击弹(火枪龙击弹弹药, 同上)
     public const ITEM_MANA_FIREWORK: u64 = 100; // 魔素礼花(战斗中使用: 大幅增加房间魔素)
+    // ---- 战斗消耗品 (content-design §7 恢复/干扰类) ----
+    public const ITEM_HEALING_POTION: u64 = 101;  // 疗伤药水(小额治疗, 占行动位)
+    public const ITEM_SPRING_OF_LIFE: u64 = 102;  // 生命之泉(大额治疗, 仅掉落)
+    public const ITEM_SMOKE_BOMB: u64 = 103;      // 烟幕弹(降全体命中率, 敌我双方, 占行动位)
+    public const ITEM_PHOENIX_FEATHER: u64 = 104; // 不死鸟之羽(复活本场被击败的一名队友, 占行动位)
+    // ---- 角色类(重生/重掷, 仅掉落, 关卡外使用) ----
+    public const ITEM_REBIRTH_SCROLL: u64 = 200;  // 重生卷轴(整体重建角色)
+    public const ITEM_DICE_OF_FATE: u64 = 201;    // 命运骰子(种族+词条全重掷)
+    // ---- 入场类 ----
+    public const ITEM_DAILY_TICKET: u64 = 300;    // 每日挑战券(每日免费领取, 绑定不可交易)
+    public const ITEM_CHALLENGE_TICKET: u64 = 301; // 挑战券(无视当日入场次数限制, 可交易)
 
     // ===================== 分组 =====================
     public const GROUP_AMMO: u8 = 1;              // 弹药(战斗中不可直接使用, 技能自动消耗)
     public const GROUP_COMBAT_CONSUMABLE: u8 = 2; // 战斗消耗品(可入计划队列)
-    public const GROUP_MISC: u8 = 3;              // 其它/材料(预留)
+    public const GROUP_CHARACTER_META: u8 = 4;    // 角色类(重生/重掷, 关卡外)
+    public const GROUP_ENTRY: u8 = 5;             // 入场类(挑战券/每日挑战券)
 
     // ===================== 效果种类(战斗内) =====================
     public const EFFECT_NONE: u8 = 0;
     public const EFFECT_MANA_BOOST: u8 = 1;       // 增加房间魔素池(effect_value 为增量)
+    public const EFFECT_HEAL: u8 = 2;             // 治疗我方一名(取血量亏空最高的存活者, effect_value 为治疗量)
+    public const EFFECT_SMOKE_ALL: u8 = 3;        // 降场上全体(敌我双方)命中率(effect_value = ACC_DOWN 千分比)
+    public const EFFECT_REVIVE: u8 = 4;           // 复活本场一名被击败的队友(effect_value = 复活后 HP)
 
     // ===================== 计划队列中的道具技能段 =====================
     /// 道具占计划队列的技能 id 段: ITEM_SKILL_BASE + item_type (0xF000=61440, 文档 §2.6 保留段)
@@ -41,6 +55,7 @@ module mohayo::item {
     const E_NOT_FOUND: u64 = 3;
     const E_NO_ITEM: u64 = 4;
     const E_ZERO: u64 = 5;
+    const E_BOUND: u64 = 6;
 
     /// 道具定义(key-value, 按类型分组)
     struct ItemDef has copy, drop, store {
@@ -50,6 +65,7 @@ module mohayo::item {
         effect_kind: u8,
         effect_value: u64,
         decimals: u8,
+        bound: bool, // 绑定道具(不可转移, 如每日挑战券) —— technical-design §2.5 +10 绑定标志
     }
 
     struct DefStore has key {
@@ -84,10 +100,11 @@ module mohayo::item {
         effect_kind: u8,
         effect_value: u64,
         decimals: u8,
+        bound: bool,
     ) acquires DefStore, Vault {
         assert!(signer::address_of(account) == @mohayo, E_NOT_OWNER);
         if (!exists<DefStore>(@mohayo)) { init_module(account); };
-        let d = ItemDef { name, group, combat_usable, effect_kind, effect_value, decimals };
+        let d = ItemDef { name, group, combat_usable, effect_kind, effect_value, decimals, bound };
         let ds = borrow_global_mut<DefStore>(@mohayo);
         if (table::contains(&ds.defs, item_type)) {
             *table::borrow_mut(&mut ds.defs, item_type) = d;
@@ -108,12 +125,21 @@ module mohayo::item {
         credit_raw(item_type, to, (whole_units as u128) * ONE);
     }
 
-    /// 玩家转移(任意 raw 数量, 允许拆散交易)
-    public entry fun transfer(account: &signer, item_type: u64, to: address, raw: u128) acquires Vault {
+    /// 玩家转移(任意 raw 数量, 允许拆散交易; 绑定道具不可转移)
+    public entry fun transfer(account: &signer, item_type: u64, to: address, raw: u128) acquires DefStore, Vault {
         let addr = signer::address_of(account);
         assert!(addr != to, E_ZERO);
+        assert!(!is_bound(item_type), E_BOUND);
         assert!(try_consume_raw(item_type, addr, raw), E_NO_ITEM);
         credit_raw(item_type, to, raw);
+    }
+
+    /// 道具是否绑定(绑定 = 不可转移, 防止可交易资产汇聚后涌向同一强角色)
+    #[view]
+    public fun is_bound(item_type: u64): bool acquires DefStore {
+        let ds = borrow_global<DefStore>(@mohayo);
+        if (!table::contains(&ds.defs, item_type)) { return false; };
+        table::borrow(&ds.defs, item_type).bound
     }
 
     /// 内部入账(raw 单位)
@@ -182,11 +208,11 @@ module mohayo::item {
     }
 
     #[view]
-    public fun def_of(item_type: u64): (vector<u8>, u8, bool, u8, u64, u8) acquires DefStore {
+    public fun def_of(item_type: u64): (vector<u8>, u8, bool, u8, u64, u8, bool) acquires DefStore {
         let ds = borrow_global<DefStore>(@mohayo);
         assert!(table::contains(&ds.defs, item_type), E_NOT_FOUND);
         let d = table::borrow(&ds.defs, item_type);
-        (d.name, d.group, d.combat_usable, d.effect_kind, d.effect_value, d.decimals)
+        (d.name, d.group, d.combat_usable, d.effect_kind, d.effect_value, d.decimals, d.bound)
     }
 
     #[view]

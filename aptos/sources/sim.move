@@ -12,6 +12,7 @@ module mohayo::sim {
     use mohayo::character;
     use mohayo::skill_registry;
     use mohayo::content_registration;
+    use mohayo::use_item;
 
     /// Play one full dungeon run for a single-member party with flat stats (no
     /// resource affixes). Returns 1 if cleared, 0 otherwise.
@@ -339,6 +340,7 @@ module mohayo::sim {
         character::init_for_test(a);
         skill_registry::init_for_test(a);
         engine::init_for_test(a);
+        use_item::init_for_test(a);
         content_registration::register_all_content(a);
     }
 
@@ -981,5 +983,230 @@ module mohayo::sim {
         std::debug::print(&vector[rb, (ra as u64)]);
         assert!(rb == 1, 1);             // 收款方 1 整份(1.5e18 → 整除 1)
         assert!(ra == 500000000000000000, 2); // 转出方剩 0.5 份 raw
+    }
+    // ================================================================
+    //  火枪手弹药长线验证: 60 发铅弹打穿单只巨型魔素岩(2600hp)整场战斗。
+    //  左轮 3 发/施放 × 段伤≈201 → 约 13 施放(39 发)击杀; 验证全程扣减与余量。
+    // ================================================================
+    #[test]
+    fun sim_ammo_long_clear() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let own = std::signer::address_of(a);
+        character::gm_mint_at_level(a, own, 5, 0, vector[0, 0, 0, 0], vector[850], 300); // 火枪手 Lv300
+        let cid = character::owner_latest_char(own);
+        item::gm_mint(a, item::ITEM_LEAD_BULLET, own, 60);
+        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(4, 1, 30, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon_battles(a, 1, vector[mohayo::types::make_battle_config(4, 1)]);
+        engine::create_room(a, 1);
+        let room_id = skill_registry::next_room_id() - 1;
+        engine::join_room_as_char(a, room_id, cid);
+        engine::start_combat(a, room_id);
+        engine::set_plan(a, room_id, 0, vector[620]); // 左轮弹雨(3 发/施放)
+        let guard = 0;
+        while (guard < 200) {
+            let ph = engine::room_phase(room_id);
+            if (ph == 1) { engine::advance_turn(a, room_id); }
+            else { break; };
+            guard = guard + 1;
+        };
+        let bal = item::balance_whole(item::ITEM_LEAD_BULLET, own);
+        let res = engine::room_result(room_id);
+        let (eh, _, _, _, _, _) = engine::enemy_state(room_id, 0);
+        std::debug::print(&vector[bal, (res as u64), eh]);
+        assert!(res == 1, 1);   // 打穿
+        assert!(bal >= 0 && bal < 60, 2); // 弹药确实消耗
+    }
+
+    // ================================================================
+    //  战斗消耗品基本效果验证(content-design §7 恢复/干扰/复活类)。
+    //  本轮只做"效果确实发生 + 道具确实消耗"的宽松断言(数值策划未精调)。
+    // ================================================================
+    #[test]
+    fun sim_item_heal_potion() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let own = std::signer::address_of(a);
+        // 火枪手: 无铅弹 → 左轮(620)每次空过不还手, 机仆单回合只磨少量血
+        character::gm_mint_at_level(a, own, 5, 0, vector[0, 0, 0, 0], vector[], 40);
+        let cid = character::owner_latest_char(own);
+        item::gm_mint(a, item::ITEM_HEALING_POTION, own, 5);
+        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(5, 1, 10, 0, 0, 0, 120, 1)); // 机仆(会还手)
+        skill_registry::set_dungeon_battles(a, 1, vector[mohayo::types::make_battle_config(5, 1)]);
+        engine::create_room(a, 1);
+        let room_id = skill_registry::next_room_id() - 1;
+        engine::join_room_as_char(a, room_id, cid);
+        engine::start_combat(a, room_id);
+        engine::set_plan(a, room_id, 0, vector[620]); // 空过, 故意挨打
+        let i = 0;
+        while (i < 5) { engine::advance_turn(a, room_id); i = i + 1; }; // 磨血 5 回合
+        let (hp1, _, _, _, _, _) = engine::member_state(room_id, 0);
+        engine::set_plan(a, room_id, 0, vector[61541]); // 疗伤药水(占 1 回合)
+        engine::advance_turn(a, room_id);
+        let (hp2, mh, _, _, _, _) = engine::member_state(room_id, 0);
+        let bal = item::balance_whole(item::ITEM_HEALING_POTION, own);
+        let (eh, _, _, _, _, _) = engine::enemy_state(room_id, 0);
+        std::debug::print(&vector[hp1, hp2, mh, eh, bal]);
+        assert!(hp2 > hp1, 1); // 治疗生效(400 > 机仆单回合伤害)
+        assert!(bal == 4, 2);  // 消耗 1 份
+    }
+
+    #[test]
+    fun sim_item_smoke_bomb() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let own = std::signer::address_of(a);
+        character::gm_mint_at_level(a, own, 5, 0, vector[0, 0, 0, 0], vector[], 40);
+        let cid = character::owner_latest_char(own);
+        item::gm_mint(a, item::ITEM_SMOKE_BOMB, own, 2);
+        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(4, 1, 10, 0, 0, 0, 120, 1)); // 魔素岩(不还手, 安全)
+        skill_registry::set_dungeon_battles(a, 1, vector[mohayo::types::make_battle_config(4, 1)]);
+        engine::create_room(a, 1);
+        let room_id = skill_registry::next_room_id() - 1;
+        engine::join_room_as_char(a, room_id, cid);
+        engine::start_combat(a, room_id);
+        engine::set_plan(a, room_id, 0, vector[61543]); // 烟幕弹(103+61440)
+        engine::advance_turn(a, room_id);
+        let mc = engine::member_effect_count(room_id, 0);
+        let ec = engine::enemy_effect_count(room_id, 0);
+        let (mop, _, mmag) = engine::member_effect(room_id, 0, 0);
+        let bal = item::balance_whole(item::ITEM_SMOKE_BOMB, own);
+        std::debug::print(&vector[bal, mc, ec, (mop as u64), (mmag as u64)]);
+        assert!(mc >= 1 && ec >= 1, 1);      // 敌我双方都吃到 ACC_DOWN
+        assert!(mop == 6 && mmag == 300, 2); // op=6(ACC_DOWN) 幅度 300‰
+        assert!(bal == 1, 3);                // 消耗 1 份
+    }
+
+    #[test]
+    fun sim_item_phoenix_revive() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let aaddr = std::signer::address_of(a);
+        let b = &std::account::create_account_for_test(@0xBEEF);
+        let baddr = std::signer::address_of(b);
+        // a: Lv300 守卫(耐打)持不死鸟之羽; b: Lv1 弱角色 → 被渊炎龙全体龙息每回合秒杀
+        character::gm_mint_at_level(a, aaddr, 1, 0, vector[0, 0, 0, 0], vector[850], 300);
+        character::gm_mint_at_level(a, baddr, 1, 0, vector[0, 0, 0, 0], vector[], 1);
+        let ca = character::owner_latest_char(aaddr);
+        let cb = character::owner_latest_char(baddr);
+        item::gm_mint(a, item::ITEM_PHOENIX_FEATHER, aaddr, 5);
+        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(22, 1, 10, 0, 0, 0, 120, 1)); // 渊炎龙(全体龙息)
+        skill_registry::set_dungeon_battles(a, 1, vector[mohayo::types::make_battle_config(22, 1)]);
+        engine::create_room(a, 1);
+        let room_id = skill_registry::next_room_id() - 1;
+        engine::join_room_as_char(a, room_id, ca);
+        engine::join_room_as_char(b, room_id, cb);
+        engine::start_combat(a, room_id);
+        engine::set_plan(a, room_id, 0, vector[61544]); // 不死鸟之羽
+        let feathers_before = item::balance_whole(item::ITEM_PHOENIX_FEATHER, aaddr);
+        let guard = 0;
+        while (guard < 8 && engine::room_phase(room_id) == 1) {
+            engine::advance_turn(a, room_id);
+            guard = guard + 1;
+        };
+        let feathers = item::balance_whole(item::ITEM_PHOENIX_FEATHER, aaddr);
+        let (_, _, _, _, _, aalive) = engine::member_state(room_id, 0);
+        let (bh, bm, _, _, _, balive) = engine::member_state(room_id, 1);
+        let res = engine::room_result(room_id);
+        std::debug::print(&vector[bh, bm, (balive as u64), aalive, feathers, guard, (res as u64)]);
+        assert!(feathers < feathers_before, 1); // 羽毛在复活判定路径上被消耗(渊炎龙每回合秒 b)
+        assert!(aalive == 1, 2);                // a 全程存活, 战斗未崩
+    }
+
+    // ================================================================
+    //  角色类 / 入场类道具(content-design §7): 命运骰子 / 重生卷轴 / 挑战券。
+    // ================================================================
+    #[test]
+    fun sim_item_dice_of_fate() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let own = std::signer::address_of(a);
+        character::gm_mint_at_level(a, own, 2, 0, vector[0, 0, 0, 0], vector[850], 40); // 剑士 Lv40
+        let cid = character::owner_latest_char(own);
+        item::gm_mint(a, item::ITEM_DICE_OF_FATE, own, 1);
+        use_item::dice_of_fate(a, cid);
+        let (cls, race, lvl, _, _, _, _, _, _, _) = character::get_character(cid);
+        let ss = character::get_self_select(cid);
+        let bal = item::balance_whole(item::ITEM_DICE_OF_FATE, own);
+        std::debug::print(&vector[(cls as u64), (race as u64), (lvl as u64), bal, std::vector::length(&ss)]);
+        assert!((cls as u64) == 2, 1);                 // 职业保留
+        assert!((lvl as u64) == 40, 2);                // 等级保留
+        assert!(std::vector::length(&ss) == 1, 3);     // 自选技保留
+        assert!(bal == 0, 4);                          // 骰子消耗
+    }
+
+    #[test]
+    fun sim_item_rebirth_scroll() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let own = std::signer::address_of(a);
+        character::gm_mint_at_level(a, own, 2, 0, vector[0, 0, 0, 0], vector[850], 40);
+        let cid = character::owner_latest_char(own);
+        item::gm_mint(a, item::ITEM_REBIRTH_SCROLL, own, 1);
+        use_item::rebirth_scroll(a, cid);
+        let (cls, race, lvl, _, _, _, _, _, _, _) = character::get_character(cid);
+        let ss = character::get_self_select(cid);
+        let bal = item::balance_whole(item::ITEM_REBIRTH_SCROLL, own);
+        std::debug::print(&vector[(cls as u64), (race as u64), (lvl as u64), std::vector::length(&ss), bal]);
+        assert!(bal == 0, 1);                          // 卷轴消耗
+        assert!((lvl as u64) == 1, 2);                 // 等级重置为 1
+        assert!(std::vector::length(&ss) == 0, 3);     // 自选技清空
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 6)]
+    fun sim_item_bound_transfer_rejected() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let own = std::signer::address_of(a);
+        let b = &std::account::create_account_for_test(@0xCAFE);
+        let baddr = std::signer::address_of(b);
+        item::gm_mint(a, item::ITEM_DAILY_TICKET, own, 1);
+        assert!(item::is_bound(item::ITEM_DAILY_TICKET), 1); // 确认绑定标记
+        item::transfer(a, item::ITEM_DAILY_TICKET, baddr, item::one()); // 绑定 → E_BOUND(6)
+    }
+
+    #[test]
+    fun sim_item_daily_ticket_credit() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let own = std::signer::address_of(a);
+        init_timestamp();
+        use_item::claim_daily_ticket(a);             // 每日免费领 1 张绑定券
+        assert!(item::balance_whole(item::ITEM_DAILY_TICKET, own) == 1, 1);
+        use_item::use_daily_ticket(a);               // 兑成 1 额外入场额度
+        assert!(item::balance_whole(item::ITEM_DAILY_TICKET, own) == 0, 2);
+        assert!(use_item::entry_credits(own) == 1, 3);
+    }
+
+    #[test]
+    fun sim_item_challenge_ticket_credit() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        let own = std::signer::address_of(a);
+        item::gm_mint(a, item::ITEM_CHALLENGE_TICKET, own, 2); // 可交易挑战券, GM 铸 2 张
+        use_item::use_challenge_ticket(a);
+        use_item::use_challenge_ticket(a);
+        assert!(item::balance_whole(item::ITEM_CHALLENGE_TICKET, own) == 0, 1);
+        assert!(use_item::entry_credits(own) == 2, 2);
+        let c1 = use_item::daily_available(own);     // 今日未领 → 可领(需 timestamp 已始)
+        assert!(c1, 3);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 2)]
+    fun sim_item_daily_ticket_twice() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        reg(a);
+        init_timestamp();
+        use_item::claim_daily_ticket(a);
+        use_item::claim_daily_ticket(a); // 同一天再领 → E_ALREADY_CLAIMED(2)
+    }
+
+    /// 初始化 aptos_framework 时间戳, 并把"今日"推进到非零日(便于每日领取判定)。
+    fun init_timestamp() {
+        let f = &std::account::create_account_for_test(@aptos_framework);
+        aptos_framework::timestamp::set_time_has_started_for_testing(f);
+        aptos_framework::timestamp::update_global_time_for_test_secs(1760000000);
     }
 }

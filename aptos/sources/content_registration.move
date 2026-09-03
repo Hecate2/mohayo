@@ -529,12 +529,32 @@ module mohayo::content_registration {
 
         // ===================== ITEMS (道具层: 数据驱动, decimals=18) =====================
         // 上线后新增道具: GM 调 item::register_item 一笔交易即可, 无需发布新代码。
+        // register_item(account, item_type, name, group, combat_usable, effect_kind, effect_value, decimals, bound)
         item::register_item(account, item::ITEM_LEAD_BULLET, b"lead_bullet",
-            item::GROUP_AMMO, false, item::EFFECT_NONE, 0, 18);      // 铅弹: 战斗不可用, 左轮技能自动消耗
+            item::GROUP_AMMO, false, item::EFFECT_NONE, 0, 18, false);      // 铅弹: 战斗不可用, 左轮技能自动消耗
         item::register_item(account, item::ITEM_DRAGON_BULLET, b"dragon_bullet",
-            item::GROUP_AMMO, false, item::EFFECT_NONE, 0, 18);      // 龙击弹: 同上, 龙击弹技能自动消耗
+            item::GROUP_AMMO, false, item::EFFECT_NONE, 0, 18, false);      // 龙击弹: 同上, 龙击弹技能自动消耗
         item::register_item(account, item::ITEM_MANA_FIREWORK, b"mana_firework",
-            item::GROUP_COMBAT_CONSUMABLE, true, item::EFFECT_MANA_BOOST, 200, 18); // 魔素礼花: 战斗使用, 房间魔素+200
+            item::GROUP_COMBAT_CONSUMABLE, true, item::EFFECT_MANA_BOOST, 200, 18, false); // 魔素礼花: 房间魔素+200
+        // ---- 战斗消耗品 (content-design §7) ----
+        item::register_item(account, item::ITEM_HEALING_POTION, b"healing_potion",
+            item::GROUP_COMBAT_CONSUMABLE, true, item::EFFECT_HEAL, 400, 18, false);  // 疗伤药水: 小额治疗(占行动位)
+        item::register_item(account, item::ITEM_SPRING_OF_LIFE, b"spring_of_life",
+            item::GROUP_COMBAT_CONSUMABLE, true, item::EFFECT_HEAL, 3000, 18, false); // 生命之泉: 大额治疗(仅掉落)
+        item::register_item(account, item::ITEM_SMOKE_BOMB, b"smoke_bomb",
+            item::GROUP_COMBAT_CONSUMABLE, true, item::EFFECT_SMOKE_ALL, 300, 18, false); // 烟幕弹: 全体降命中(双向大于尘幕150)
+        item::register_item(account, item::ITEM_PHOENIX_FEATHER, b"phoenix_feather",
+            item::GROUP_COMBAT_CONSUMABLE, true, item::EFFECT_REVIVE, 2000, 18, false); // 不死鸟之羽: 复活一名被击败的队友(仅掉落)
+        // ---- 角色类(重生/重掷, 仅掉落, 关卡外) ----
+        item::register_item(account, item::ITEM_REBIRTH_SCROLL, b"rebirth_scroll",
+            item::GROUP_CHARACTER_META, false, item::EFFECT_NONE, 0, 18, false); // 重生卷轴: 整体重建角色
+        item::register_item(account, item::ITEM_DICE_OF_FATE, b"dice_of_fate",
+            item::GROUP_CHARACTER_META, false, item::EFFECT_NONE, 0, 18, false); // 命运骰子: 种族+词条全重掷(保留职业/等级/自选技)
+        // ---- 入场类 ----
+        item::register_item(account, item::ITEM_DAILY_TICKET, b"daily_challenge_ticket",
+            item::GROUP_ENTRY, false, item::EFFECT_NONE, 0, 18, true);       // 每日挑战券: 每日免费领取, 绑定不可交易
+        item::register_item(account, item::ITEM_CHALLENGE_TICKET, b"challenge_ticket",
+            item::GROUP_ENTRY, false, item::EFFECT_NONE, 0, 18, false);      // 挑战券: 可交易, 无视当日入场次数限制
     }
 
     // ===================== private helpers =====================

@@ -94,6 +94,10 @@ module mohayo::engine {
     struct BattleCleared has drop, store { room_id: u64, battle_index: u64, total_battles: u64 }
     #[event]
     struct BattleAdvanced has drop, store { room_id: u64, new_battle_index: u64 }
+    #[event]
+    struct SmokeApplied has drop, store { room_id: u64, magnitude: u64, duration: u8 }
+    #[event]
+    struct UnitRevived has drop, store { room_id: u64, index: u64, hp: u64 }
 
     // ============================ init ============================
 
@@ -606,6 +610,12 @@ module mohayo::engine {
             if (!ok) return; // 非战斗道具/无库存 → 空过
             if (kind == item::EFFECT_MANA_BOOST) {
                 room.mana_pool = room.mana_pool + value;
+            } else if (kind == item::EFFECT_HEAL) {
+                item_heal_most_wounded(room, room_id, value);
+            } else if (kind == item::EFFECT_SMOKE_ALL) {
+                item_smoke_all(room, room_id, value);
+            } else if (kind == item::EFFECT_REVIVE) {
+                item_revive(room, room_id, value);
             };
             event::emit(ItemUsed { room_id, player: owner, item_type, effect_kind: kind, value });
             return;
@@ -970,6 +980,66 @@ module mohayo::engine {
             };
             let healed = types::member_hp(m) - before;
             event::emit(HealedEvt { room_id, is_enemy: false, index: t_idx, amount: healed });
+        };
+    }
+
+    // ============================ internal: item effects ============================
+
+    /// 治疗我方血量亏空绝对值最高的存活真人(非召唤)。无存活者则无效果(道具仍已消耗)。
+    fun item_heal_most_wounded(room: &mut Room, room_id: u64, amount: u64) {
+        let best: i64 = -1;
+        let best_idx: u64 = 0;
+        let n = vector::length(&room.members);
+        let i = 0;
+        while (i < n) {
+            let m = vector::borrow(&room.members, i);
+            if (types::member_alive(m) && !types::member_is_summon(m)) {
+                let deficit = (types::member_max_hp(m) - types::member_hp(m)) as i64;
+                if (deficit > best) { best = deficit; best_idx = i; };
+            };
+            i = i + 1;
+        };
+        if (best > 0) { heal_target(room, room_id, false, best_idx, amount); };
+    }
+
+    /// 烟幕弹: 为场上全体(敌我双方所有存活单位)施加 ACC_DOWN(op 6), 幅度 = value 千分比, 持续 3 回合。
+    fun item_smoke_all(room: &mut Room, room_id: u64, mag: u64) {
+        let smk = types::make_active_effect(6, 3, (mag as u16), item::ITEM_SKILL_BASE);
+        let n = vector::length(&room.members);
+        let i = 0;
+        while (i < n) {
+            if (types::member_alive(vector::borrow(&room.members, i))) {
+                types::member_add_effect(vector::borrow_mut(&mut room.members, i), smk);
+            };
+            i = i + 1;
+        };
+        let ne = vector::length(&room.enemies);
+        let j = 0;
+        while (j < ne) {
+            if (types::enemy_alive(vector::borrow(&room.enemies, j))) {
+                types::enemy_add_effect(vector::borrow_mut(&mut room.enemies, j), smk);
+            };
+            j = j + 1;
+        };
+        event::emit(SmokeApplied { room_id, magnitude: mag, duration: 3 });
+    }
+
+    /// 不死鸟之羽: 复活本场第一名被击败的真人队友(非召唤), 回到 max(value, max_hp 封顶)。
+    /// 无被击败者则道具已消耗但无效果。
+    fun item_revive(room: &mut Room, room_id: u64, hp: u64) {
+        let n = vector::length(&room.members);
+        let i = 0;
+        while (i < n) {
+            let m = vector::borrow_mut(&mut room.members, i);
+            if (!types::member_alive(m) && !types::member_is_summon(m)) {
+                let cap = types::member_max_hp(m);
+                types::member_set_alive(m, true);
+                types::member_set_hp(m, if (hp < cap) { hp } else { cap });
+                types::member_clear_effects(m);
+                event::emit(UnitRevived { room_id, index: i, hp: types::member_hp(m) });
+                return;
+            };
+            i = i + 1;
         };
     }
 
