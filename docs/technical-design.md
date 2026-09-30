@@ -496,6 +496,23 @@ struct RoomMember {
   改回**自施**小额固定盾；魔力护盾 880 由"全体固定 850"改回**自施**且吃魔攻。
 - 新增视图 `enemy_template(room_id, index)`（测试/展示用：该槽位由哪个模板实例化）。
 
+### 2.6.7 Move 升级 / 角色转移 / 履历注记（2026-09-30 实现）
+
+对齐 `gameplay-design.md` §2.4 与 §7.4（此前只有 GM 设级，无升级/转移/履历）。
+
+- **升级**（`character::upgrade_level(account, char_id, levels)`）：**只消耗游戏币、无其他门槛**（§2.4）。
+  费用 = `Σ(100 × 新等级)`（初值，数值层可调）；等级封顶 `MAX_LEVEL=300`；升级后按公式重算属性。
+  走 `economy::charge_entry`（**严格扣款**）→ **负债者无法升级**（§6.3）。词条与已选自选技不受影响。
+- **角色转移**（`character::transfer_character(account, char_id, to)`，§7.4）：与价格无关的规则在转移函数内
+  100% 强制 —— ① **等级重置为 1**（属性同步重算）；② **关卡内（`room_id != 0`）禁止转移**
+  （`E_IN_ROOM`）；③ 种族/词条/职业/自选技/**履历**随角色完整转移；`owner_chars` 索引同步迁移
+  （买家 `owner_latest_char` 指向该角色）。不可强制的只有按成交价抽税（本设计不依赖）。
+- **角色锁**：`engine::join_room_as_char` → `character::lock_room(char_id, room_id)`；大厅退房 / 个人逃离 /
+  关卡结算（通关·败北·超时·全员逃离）都会解锁并记履历。
+- **履历**（§2.4，纯荣誉、无数值）：`runs`（参与关卡数）/ `clears`（通关次数）/ `best_difficulty`
+  （最高通关难度），`#view get_history`。**逐项统计（击杀/治疗量/被救援次数）需要引擎按伤害归属回写**，
+  当前先记「参与/通关/最高难度」三项，其余列为后续。
+
 ### 2.7.1 Move 道具层注记（数据驱动, 2026-09-02 实现）
 
 - **每种道具 = item_type + ItemDef**（name/group/combat_usable/effect_kind/effect_value/decimals），**无 per-type struct**。

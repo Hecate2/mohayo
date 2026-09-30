@@ -228,6 +228,7 @@ module mohayo::engine {
             true, false, signer::address_of(account), char_id,
         );
         vector::push_back(&mut room.members, member);
+        character::lock_room(char_id, room_id); // §7.4: 关卡内禁止角色转移
         event::emit(MemberJoined { room_id, player: signer::address_of(account) });
     }
 
@@ -243,7 +244,9 @@ module mohayo::engine {
         while (i < n) {
             let m = vector::borrow(&room.members, i);
             if (types::member_owner(m) == addr && !types::member_is_summon(m)) {
+                let cid = types::member_char_id(m);
                 vector::remove(&mut room.members, i);
+                if (cid != 0) { character::lock_room(cid, 0); }; // 大厅退房: 解绑, 不记履历
                 found = true;
                 break;
             };
@@ -290,6 +293,7 @@ module mohayo::engine {
         assert!(room.phase == 3, E_NOT_INTERMISSION);
         assert!(room.leader == addr, E_NOT_LEADER);
         settle_rewards(room, room_id);
+        release_all(room, true); // 全员逃离 = 提前结束关卡, 存活者按通关记履历
         room.phase = 2;
         room.result = 1;
         event::emit(RunRetreated { room_id });
@@ -1311,6 +1315,7 @@ module mohayo::engine {
     /// 离场状态置位：无收益、不再参战、不占活人名额、不吃救援费（§6.2/§6.3）。
     fun do_escape(room: &mut Room, room_id: u64, idx: u64) {
         let owner = types::member_owner(vector::borrow(&room.members, idx));
+        let cid = types::member_char_id(vector::borrow(&room.members, idx));
         {
             let m = vector::borrow_mut(&mut room.members, idx);
             types::member_set_escaped(m, true);
@@ -1319,8 +1324,30 @@ module mohayo::engine {
             types::member_set_plan(m, vector::empty());
             types::member_clear_effects(m);
         };
+        // 离场即释放角色锁并记一次未通关履历（§2.4/§7.4）—— 结算时不再重复计入
+        if (cid != 0) {
+            character::lock_room(cid, 0);
+            character::record_run(cid, false, room.difficulty);
+        };
         event::emit(MemberEscaped { room_id, player: owner });
         ensure_leader(room, room_id);
+    }
+
+    /// 关卡结束时释放所有玩家角色的房间锁并记履历（已逃离者不重复结算）。
+    fun release_all(room: &Room, cleared: bool) {
+        let n = vector::length(&room.members);
+        let i = 0;
+        while (i < n) {
+            let m = vector::borrow(&room.members, i);
+            if (!types::member_is_summon(m) && !types::member_escaped(m)) {
+                let cid = types::member_char_id(m);
+                if (cid != 0) {
+                    character::lock_room(cid, 0);
+                    character::record_run(cid, cleared, room.difficulty);
+                };
+            };
+            i = i + 1;
+        };
     }
 
     /// 队长去位（阵亡 / 逃离 / 退房）后的自动继任：
@@ -1449,6 +1476,7 @@ module mohayo::engine {
         };
         if (!any_player_alive && player_count > 0) {
             charge_rescue_fees(room, room_id); // 全队被击败 → 全员倒扣救援费(可负)
+            release_all(room, false);          // 释放角色锁 + 履历(未通关)
             room.phase = 2;
             room.result = 2;
             event::emit(DefeatEvt { room_id });
@@ -1472,6 +1500,7 @@ module mohayo::engine {
                 room.phase = 2;
                 room.result = 1;
                 settle_rewards(room, room_id); // 存活者按随机权重分配奖池(§6.1)
+                release_all(room, true);       // 释放角色锁 + 履历(通关)
                 event::emit(VictoryEvt { room_id });
             };
             return;
@@ -1483,6 +1512,7 @@ module mohayo::engine {
         let turn_budget = types::dungeon_turn_interval(&dungeon);
         if (turn_budget > 0 && room.battle_turns > turn_budget) {
             charge_rescue_fees(room, room_id); // 超时按全队被击败处理(§6.3)
+            release_all(room, false);
             room.phase = 2;
             room.result = 2;
             event::emit(DefeatEvt { room_id });

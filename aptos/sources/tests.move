@@ -1878,4 +1878,107 @@ module mohayo::tests {
         };
         assert!(boss_hits >= 6, 1); // 权重 10:1 → 十个种子里高威胁目标至少被抽中 6 次
     }
+
+    // ===================== Q1: 升级 / 角色转移 / 履历（§2.4 / §7.4） =====================
+
+    #[test]
+    fun test_upgrade_level_charges_char() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let addr = std::signer::address_of(a);
+        character::gm_mint(a, addr, 1, 0, vector[0, 0, 0, 0], vector[850]);
+        let cid = character::owner_latest_char(addr);
+        assert!(character::get_level(cid) == 1, 1);
+        let before = economy::balance_of(addr);
+        // 1 → 10 级: 费用 = Σ(100 × 新等级) = 100×(2+10)×9/2 = 5400
+        character::upgrade_level(a, cid, 9);
+        assert!(character::get_level(cid) == 10, 2);
+        assert!(economy::balance_of(addr) == before - 5400, 3);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 4)]
+    fun test_upgrade_level_rejected_when_broke() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let p = &std::account::create_account_for_test(@0xDD01);   // 身无分文
+        let paddr = std::signer::address_of(p);
+        character::gm_mint(a, paddr, 1, 0, vector[0, 0, 0, 0], vector[850]);
+        let cid = character::owner_latest_char(paddr);
+        character::upgrade_level(p, cid, 1);                       // E_INSUFFICIENT_BALANCE(4)
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 11)]
+    fun test_upgrade_level_capped() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let addr = std::signer::address_of(a);
+        character::gm_mint(a, addr, 1, 0, vector[0, 0, 0, 0], vector[850]);
+        let cid = character::owner_latest_char(addr);
+        character::upgrade_level(a, cid, 300);                     // 超过 MAX_LEVEL → E_MAX_LEVEL(11)
+    }
+
+    #[test]
+    fun test_transfer_resets_level_keeps_identity() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let addr = std::signer::address_of(a);
+        let buyer = &std::account::create_account_for_test(@0xDD02);
+        let baddr = std::signer::address_of(buyer);
+        character::gm_mint_at_level(a, addr, 2, 4, vector[0, 0, 0, 0], vector[850, 860], 300);
+        let cid = character::owner_latest_char(addr);
+        assert!(character::get_level(cid) == 300, 1);
+        let (_c0, race_before, _l0, _h0, _mh0, _at0, _mg0, _sp0, _sk0, _r0) = character::get_character(cid);
+        character::transfer_character(a, cid, baddr);
+        // ① 等级重置为 1; ② 所有权变更; ③ 种族/词条/自选技随角色走
+        assert!(character::get_level(cid) == 1, 2);
+        assert!(character::char_owner(cid) == baddr, 3);
+        let (_c2, race_after, _l2, _h2, _mh2, _at2, _mg2, _sp2, skills2, _r2) = character::get_character(cid);
+        assert!(race_after == race_before, 4);
+        assert!(vector::length(&skills2) == vector::length(&character::get_skill_ids(cid)), 5);
+        // 买家成为该角色的 owner_latest_char
+        assert!(character::owner_latest_char(baddr) == cid, 6);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 13)]
+    fun test_transfer_blocked_while_in_room() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let addr = std::signer::address_of(a);
+        character::gm_mint(a, addr, 1, 0, vector[0, 0, 0, 0], vector[850]);
+        let cid = character::owner_latest_char(addr);
+        engine::create_room(a, 1);
+        engine::join_room_as_char(a, 1, cid);          // 关卡内 → 锁
+        character::transfer_character(a, cid, @0xDD03); // E_IN_ROOM(13)
+    }
+
+    #[test]
+    fun test_history_recorded_on_clear_and_survives_transfer() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let addr = std::signer::address_of(a);
+        // 人类(race 0) = 自选槽 +2, 容得下 [毒刃, 急救] 两个自选技
+        character::gm_mint_at_level(a, addr, 2, 0, vector[0, 0, 0, 0], vector[820, 850], 300);
+        let cid = character::owner_latest_char(addr);
+        engine::create_room(a, 1);
+        engine::join_room_as_char(a, 1, cid);
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[820]);
+        run_room(a, 1);
+        assert!(engine::room_result(1) == 1, 1);
+        let (runs, clears, best) = character::get_history(cid);
+        assert!(runs == 1 && clears == 1 && best == 1, 2);
+        // 关卡结束后角色解锁, 可以转移; 履历随角色保留
+        character::transfer_character(a, cid, @0xDD04);
+        let (runs2, clears2, best2) = character::get_history(cid);
+        assert!(runs2 == 1 && clears2 == 1 && best2 == 1, 3);
+    }
 }

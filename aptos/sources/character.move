@@ -9,6 +9,9 @@ module mohayo::character {
     use mohayo::skill_registry;
     use mohayo::content;
     use mohayo::rng;
+    use mohayo::economy;
+
+    friend mohayo::engine;
 
     const E_NOT_OWNER: u64 = 1;
     const E_UNKNOWN_CLASS: u64 = 2;
@@ -25,6 +28,8 @@ module mohayo::character {
     const E_IN_ROOM: u64 = 13;
     const E_RACE_WEIGHTS_BAD: u64 = 14;
     const E_AFFIX_TEMPLATE_CAP: u64 = 15;
+    const E_SELF_TRANSFER: u64 = 16;
+    const E_BAD_LEVELS: u64 = 17;
     const E_CLASS_CAP: u64 = 16;
     const E_RACE_CAP: u64 = 17;
     const E_GOLD_REQUIRED: u64 = 18;
@@ -76,6 +81,10 @@ module mohayo::character {
         ap_bonus: u16,
         mana_gain_bonus: i64,
         room_id: u64,  // 0 = not in room
+        // ---- 履历(§2.4): 不提供任何数值, 纯荣誉载体; 随角色转移保留 ----
+        runs: u32,          // 参与的关卡次数
+        clears: u32,        // 通关次数
+        best_difficulty: u8, // 最高通关难度
     }
 
     struct CharacterStore has key {
@@ -88,6 +97,10 @@ module mohayo::character {
 
     #[event]
     struct CharacterCreated has drop, store { id: u64, owner: address, class_id: u8, race: u8, level: u16 }
+    #[event]
+    struct LevelUpgraded has drop, store { id: u64, level: u16, cost: u64 }
+    #[event]
+    struct CharacterTransferred has drop, store { id: u64, from: address, to: address, level_reset_to: u16 }
 
     #[event]
     struct ClassRegistered has drop, store { id: u8 }
@@ -199,6 +212,7 @@ module mohayo::character {
             ap_bonus: ap_bon,
             mana_gain_bonus: mana_gain,
             room_id: 0,
+            runs: 0, clears: 0, best_difficulty: 0,
         };
         table::add(&mut store.characters, id, c);
         store.count = id;
@@ -240,6 +254,7 @@ module mohayo::character {
             ap_bonus: ap_bon,
             mana_gain_bonus: mana_gain,
             room_id: 0,
+            runs: 0, clears: 0, best_difficulty: 0,
         };
         table::add(&mut store.characters, id, c);
         store.count = id;
@@ -377,6 +392,111 @@ module mohayo::character {
         c.room_id = room_id;
     }
 
+    // ---- 升级 / 转移 / 履历（§2.4 / §7.4） ----
+
+    /// 升级（§2.4）：**只消耗游戏币、无其他门槛**；不改变已锁定的自选技与词条。
+    /// 费用 = Σ(100 × 新等级)（初值，数值层可调）。**余额不足（含负债者）直接拒绝**（§6.3）。
+    public entry fun upgrade_level(account: &signer, char_id: u64, levels: u16)
+    acquires CharacterStore, ClassStore, RaceStore {
+        let owner = signer::address_of(account);
+        assert!(levels > 0, E_BAD_LEVELS);
+        let (class_id, race, cur_level, ability_bonuses) = {
+            let store = borrow_global<CharacterStore>(@mohayo);
+            assert!(table::contains(&store.characters, char_id), E_NOT_FOUND);
+            let c = table::borrow(&store.characters, char_id);
+            assert!(c.owner == owner, E_NOT_OWNER);
+            (c.class_id, c.race, (c.level as u64), c.ability_bonuses)
+        };
+        let target = cur_level + (levels as u64);
+        assert!(target <= types::MAX_LEVEL(), E_MAX_LEVEL);
+        let cost = 100 * (cur_level + 1 + target) * (levels as u64) / 2;
+        economy::charge_entry(owner, cost); // 严格扣款: 负债者不得升级
+        let class = get_class(class_id);
+        let race_def = get_race(race);
+        let (hp, atk, mag, spd) = compute_stats(class_id, &class, race, &race_def, &ability_bonuses, (target as u16));
+        let store = borrow_global_mut<CharacterStore>(@mohayo);
+        let c = table::borrow_mut(&mut store.characters, char_id);
+        c.level = (target as u16);
+        c.hp = hp;
+        c.max_hp = hp;
+        c.attack = atk;
+        c.magic = mag;
+        c.speed = spd;
+        event::emit(LevelUpgraded { id: char_id, level: (target as u16), cost });
+    }
+
+    /// 角色转移（§7.4，与价格无关的规则在转移函数内 100% 强制）：
+    /// ① **等级重置为 1**（属性同步重算）；② **关卡内（未结算离场）禁止转移**；
+    /// ③ 词条/种族/职业/自选技/履历随角色完整转移。不可强制的只有按成交价抽税（本设计不依赖）。
+    public entry fun transfer_character(account: &signer, char_id: u64, to: address)
+    acquires CharacterStore, ClassStore, RaceStore {
+        let owner = signer::address_of(account);
+        assert!(to != owner, E_SELF_TRANSFER);
+        let (class_id, race, ability_bonuses) = {
+            let store = borrow_global<CharacterStore>(@mohayo);
+            assert!(table::contains(&store.characters, char_id), E_NOT_FOUND);
+            let c = table::borrow(&store.characters, char_id);
+            assert!(c.owner == owner, E_NOT_OWNER);
+            assert!(c.room_id == 0, E_IN_ROOM);
+            (c.class_id, c.race, c.ability_bonuses)
+        };
+        let class = get_class(class_id);
+        let race_def = get_race(race);
+        let (hp, atk, mag, spd) = compute_stats(class_id, &class, race, &race_def, &ability_bonuses, 1);
+        let store = borrow_global_mut<CharacterStore>(@mohayo);
+        remove_from_owner_list(store, owner, char_id);
+        {
+            let c = table::borrow_mut(&mut store.characters, char_id);
+            c.owner = to;
+            c.level = 1;
+            c.hp = hp;
+            c.max_hp = hp;
+            c.attack = atk;
+            c.magic = mag;
+            c.speed = spd;
+        };
+        if (!table::contains(&store.owner_chars, to)) {
+            table::add(&mut store.owner_chars, to, vector::empty());
+        };
+        let list = table::borrow_mut(&mut store.owner_chars, to);
+        vector::push_back(list, char_id);
+        event::emit(CharacterTransferred { id: char_id, from: owner, to, level_reset_to: 1 });
+    }
+
+    fun remove_from_owner_list(store: &mut CharacterStore, owner: address, char_id: u64) {
+        if (!table::contains(&store.owner_chars, owner)) { return; };
+        let list = table::borrow_mut(&mut store.owner_chars, owner);
+        let n = vector::length(list);
+        let i = 0;
+        while (i < n) {
+            if (*vector::borrow(list, i) == char_id) {
+                vector::remove(list, i);
+                return;
+            };
+            i = i + 1;
+        };
+    }
+
+    /// 引擎回调：标记角色当前所在房间（0 = 不在任何房间）。§7.4「战斗中禁止转移」的依据。
+    public(friend) fun lock_room(char_id: u64, room_id: u64) acquires CharacterStore {
+        let store = borrow_global_mut<CharacterStore>(@mohayo);
+        if (!table::contains(&store.characters, char_id)) { return; };
+        let c = table::borrow_mut(&mut store.characters, char_id);
+        c.room_id = room_id;
+    }
+
+    /// 引擎回调：结算时记一次履历（§2.4 纯荣誉、无数值）。
+    public(friend) fun record_run(char_id: u64, cleared: bool, difficulty: u8) acquires CharacterStore {
+        let store = borrow_global_mut<CharacterStore>(@mohayo);
+        if (!table::contains(&store.characters, char_id)) { return; };
+        let c = table::borrow_mut(&mut store.characters, char_id);
+        c.runs = c.runs + 1;
+        if (cleared) {
+            c.clears = c.clears + 1;
+            if (difficulty > c.best_difficulty) { c.best_difficulty = difficulty; };
+        };
+    }
+
     // ---- view functions ----
 
     #[view]
@@ -456,6 +576,22 @@ module mohayo::character {
         assert!(table::contains(&store.characters, id), E_NOT_FOUND);
         let c = table::borrow(&store.characters, id);
         c.class_id
+    }
+
+    #[view]
+    public fun get_level(id: u64): u16 acquires CharacterStore {
+        let store = borrow_global<CharacterStore>(@mohayo);
+        assert!(table::contains(&store.characters, id), E_NOT_FOUND);
+        table::borrow(&store.characters, id).level
+    }
+
+    /// 履历（§2.4）：(参与次数, 通关次数, 最高通关难度)
+    #[view]
+    public fun get_history(id: u64): (u32, u32, u8) acquires CharacterStore {
+        let store = borrow_global<CharacterStore>(@mohayo);
+        assert!(table::contains(&store.characters, id), E_NOT_FOUND);
+        let c = table::borrow(&store.characters, id);
+        (c.runs, c.clears, c.best_difficulty)
     }
 
     #[view]
