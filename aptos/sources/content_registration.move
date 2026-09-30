@@ -98,7 +98,7 @@ module mohayo::content_registration {
             types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
             vector[eff(types::OP_ACC_DOWN(), 150, 3, 3, 1000)]));                     // 810 烟雾(尘幕)
         // 610 鹰眼(火枪手 class) —— GUAR_NEXT
-        skill_registry::register_class_skill(account, sk(610,types::KIND_SUPPORT(), 1, 0, 0, 0,
+        skill_registry::register_class_skill(account, sk(content::SKILL_EAGLE_EYE,types::KIND_SUPPORT(), 1, 0, 0, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
             vector[eff(types::OP_GUAR_NEXT(), 1, 2, 0, 1000)]), 5);
                 skill_registry::register_skill(account, sk(820,types::KIND_PHYSICAL(), 1, 1, 3, 0,
@@ -135,7 +135,7 @@ module mohayo::content_registration {
             vector[eff(types::OP_ACC_DOWN(), 200, 3, 3, 1000)]));                     // 790 深渊低语(恶魔)
 
         // --- 占位/备用 (不授予) ---
-        skill_registry::register_skill(account, sk(180,types::KIND_SUPPORT(), 1, 0, 0, 0,
+        skill_registry::register_skill(account, sk(content::SKILL_SUMMON,types::KIND_SUPPORT(), 1, 0, 0, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
             vector[eff(types::OP_SHIELD(), 200, 2, 0, 1000)]));                       // 180 召唤(占位)
         skill_registry::register_skill(account, sk(190,types::KIND_SUPPORT(), 0, 0, 0, 0,
@@ -151,57 +151,57 @@ module mohayo::content_registration {
             vector::empty()));                                                          // 840 暴风剑
 
         // --- 剑士 ---
-        skill_registry::register_class_skill(account, sk(330,types::KIND_MAGIC(), 1, 2, 5, 0,
+        skill_registry::register_class_skill(account, sk(content::SKILL_MAGIC_SWORD,types::KIND_MAGIC(), 1, 2, 5, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 280, 0, 950, 0,
             vector::empty()), 2);                                                       // 330 魔法剑
         // --- 火枪手 ---
         // 620/630 火枪子弹走双修公式 power × (ATK + MAG)/1000 → power 取原物理值之半, 保持同量级
-        skill_registry::register_class_skill(account, ska(620, types::KIND_HYBRID(), 1, 3, 4, 0,
+        skill_registry::register_class_skill(account, ska(content::SKILL_REVOLVER_RAIN, types::KIND_HYBRID(), 1, 3, 4, 0,
             types::TGT_RAND_STRIKE_ENEMY(), types::WT_THREAT_ENEMY(), 3, 75, 0, 820, 0,
             vector::empty(), (item::ITEM_LEAD_BULLET as u16), 3), 5);                   // 620 左轮弹雨(耗铅弹×3)
-        skill_registry::register_class_skill(account, ska(630, types::KIND_HYBRID(), 2, 1, 0, 0,
+        skill_registry::register_class_skill(account, ska(content::SKILL_DRAGON_BULLET, types::KIND_HYBRID(), 2, 1, 0, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 210, 0, 950, 0,
             vector[eff(types::OP_MANA_DELTA(), 40, 1, 0, 1000)], (item::ITEM_DRAGON_BULLET as u16), 1), 5); // 630 龙击弹(耗龙击弹×1, 命中产魔)
         // --- 黑魔法师 ---
         // §4.9 固有绝对命中: flags = GUARANTEED_HIT(bit0) | FLAG_MANA_ALL(bit1)。
         // 此前只写了 FLAG_MANA_ALL, 靠 base_acc=1000 只是「基本必中」, 会被烟幕/致盲/回避削减(§2.6.11)。
-        skill_registry::register_class_skill(account, sk(430,types::KIND_MAGIC(), 0, 1, 0, 0,
+        skill_registry::register_class_skill(account, sk(content::SKILL_BURST_MAGIC,types::KIND_MAGIC(), 0, 1, 0, 0,
             types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 3000, 0, 1000, types::FLAG_GUARANTEED_HIT() | types::FLAG_MANA_ALL(),
             vector[eff(types::OP_STUN(), 1, 3, 0, 1000)]), 3);                         // 430 爆裂魔法(全魔素+绝对命中+自晕)
-        skill_registry::register_class_skill(account, sk(310,types::KIND_PHYSICAL(), 0, 2, 3, 0,
+        skill_registry::register_class_skill(account, sk(content::SKILL_RAPID_STRIKE,types::KIND_PHYSICAL(), 0, 2, 3, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 220, 0, 900, 0,
             vector::empty()), 2);                                                       // 310 快速剑
-        skill_registry::register_class_skill(account, sk(320,types::KIND_PHYSICAL(), 3, 1, 5, 0,
+        skill_registry::register_class_skill(account, sk(content::SKILL_IRON_CLEAVE,types::KIND_PHYSICAL(), 3, 1, 5, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 340, 0, 950, 0,
             vector::empty()), 2);                                                       // 320 斩铁剑
         // --- 守卫 ---
-        skill_registry::register_class_skill(account, sk(210,types::KIND_PHYSICAL(), 1, 1, 4, 0,
+        skill_registry::register_class_skill(account, sk(content::SKILL_SHIELD_BASH,types::KIND_PHYSICAL(), 1, 1, 4, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 260, 0, 900, 0,
             vector[eff(types::OP_STUN(), 1, 2, 1, 400), eff(types::OP_TAUNT(), 1, 2, 0, 1000)]), 1); // 210 盾击(眩晕40% + 必嘲讽2轮)
-        skill_registry::register_class_skill(account, sk(220,types::KIND_SUPPORT(), 2, 0, 6, 0,
+        skill_registry::register_class_skill(account, sk(content::SKILL_SHIELD_WALL,types::KIND_SUPPORT(), 2, 0, 6, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
             vector[eff(types::OP_SHIELD(), 1400, 4, 0, 1000)]), 1);                    // 220 盾墙
-        skill_registry::register_class_skill(account, sk(230,types::KIND_SUPPORT(), 1, 0, 0, 0,
+        skill_registry::register_class_skill(account, sk(content::SKILL_GUARD_EVADE,types::KIND_SUPPORT(), 1, 0, 0, 0,
             types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
             vector[eff(types::OP_EVADE_UP(), 350, 3, 0, 1000)]), 1);                   // 230 回避
         // --- 黑魔法师 ---
         // 28 爆裂魔法(全魔素) 见上; 34 献祭 = 烧血 4 段魔法攻击, 每段命中为房间池 +10 魔素
         // (战地血泵: 黑魔唯一常规输出 + 全队应急回蓝; 段数×产魔量初值, sim 可调)
-        skill_registry::register_class_skill(account, sk(410,types::KIND_MAGIC(), 0, 0, 0, 30,
+        skill_registry::register_class_skill(account, sk(content::SKILL_SACRIFICE,types::KIND_MAGIC(), 0, 0, 0, 30,
             types::TGT_RAND_STRIKE_ENEMY(), types::WT_THREAT_ENEMY(), 4, 110, 0, 900, 0,
             vector[eff(types::OP_MANA_DELTA(), 10, 1, 0, 1000)]), 3);                  // 410 献祭(HP→多段输出→每命中产魔素)
-        skill_registry::register_class_skill(account, sk(420,types::KIND_SUPPORT(), 1, 0, 5, 0,
+        skill_registry::register_class_skill(account, sk(content::SKILL_BLACK_VEIL,types::KIND_SUPPORT(), 1, 0, 5, 0,
             types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
             vector[eff(types::OP_ACC_DOWN(), 250, 3, 3, 1000)]), 3);                   // 420 黑幕
         // --- 白魔法师 ---
-        skill_registry::register_class_skill(account, sk(510,types::KIND_MAGIC(), 1, 2, 5, 0,
+        skill_registry::register_class_skill(account, sk(content::SKILL_LIGHT_ORB,types::KIND_MAGIC(), 1, 2, 5, 0,
             types::TGT_RAND_STRIKE_ENEMY(), types::WT_THREAT_ENEMY(), 5, 160, 0, 950, 0,
             vector::empty()), 4);                                                       // 510 光弹(固定5弹着)
-        skill_registry::register_class_skill(account, sk(520,types::KIND_SUPPORT(), 1, 1, 8, 0,
+        skill_registry::register_class_skill(account, sk(content::SKILL_HOLY_SPRING,types::KIND_SUPPORT(), 1, 1, 8, 0,
             types::TGT_ALL_ALLY(), types::WT_UNIFORM(), 1, 450, 0, 1000, 0,
             vector[eff(types::OP_HEAL(), 450, 1, 2, 1000), eff(types::OP_MANA_DELTA(), 6, 1, 0, 1000)]), 4); // 520 圣泉(群回 power×魔攻; 每治疗目标回池6魔素——奶人回蓝)
         // 38 替身人偶 —— 召唤无嘲讽、无行动的己方假目标(模板35)吸随机火力; FLAG_SUMMON_ALLY(bit2)
-        skill_registry::register_class_skill(account, types::make_skill(530, types::KIND_SUPPORT(), 1, 0, 0, 0,
+        skill_registry::register_class_skill(account, types::make_skill(content::SKILL_DECOY_DOLL, types::KIND_SUPPORT(), 1, 0, 0, 0,
             4, 0, types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000,
             types::FLAG_SUMMON_ALLY(), vector::empty(), types::make_summon_rule(35, 1, 0)), 4); // 530 替身人偶
         // --- 自选池 ---
