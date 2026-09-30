@@ -413,9 +413,10 @@ module mohayo::engine {
     public entry fun create_room(account: &signer, difficulty: u64) acquires RoomStore {
         let addr = signer::address_of(account);
         let dungeon = skill_registry::get_dungeon(difficulty);
-        // 参与次数门控(§2.6.14): 24 小时滑动窗口内限次, **所有难度都计次(免费图也不例外)**。
-        use_item::consume_entry(addr);
+        // 参与次数门控(§2.6.14 用户定案): **开房直接计为一次加入** —— 同一账号 24h 内
+        // 「开房 + 加入」的总次数受限, 创建泛滥因此也被窗口封顶。
         // 入场费(§3.1): 付费图开房即扣、直接销毁；余额不足则整笔交易回滚
+        use_item::consume_entry(addr);
         let entry_fee = types::dungeon_entry_fee(&dungeon);
         economy::charge_entry(addr, entry_fee);
         let rid = skill_registry::consume_next_room_id();
@@ -535,6 +536,9 @@ module mohayo::engine {
             assert!(types::member_char_id(vector::borrow(&room.members, mi)) != char_id, E_CHAR_IN_ROOM);
             mi = mi + 1;
         };
+        // 参与次数门控(§2.6.14 用户定案): **加入计一次窗口额度**(开房也已计一次)。
+        // 放在房间状态检查之后 —— 被拒的加入不消耗名额。
+        use_item::consume_entry(signer::address_of(account));
         let member = types::make_member(
             max_hp, max_hp, atk, mag, spd,
             0, mana_disc, ap_disc, ap_bon, mana_gain, class_id,

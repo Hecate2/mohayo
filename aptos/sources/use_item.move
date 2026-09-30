@@ -2,9 +2,9 @@
 ///
 /// - 命运骰子 / 重生卷轴: 消耗道具 → 用**协议随机数**(Aptos randomness)掷出新种族与词条,
 ///   再交给 character 模块做 重掷 / 重建(仅关卡外 room_id==0)。见 technical-design §2.6.14。
-/// - 参与次数门控(§2.6.14): `engine::create_room` 调用 `consume_entry` ——
-///   **24 小时滑动窗口**内限次，**所有难度都计次(免费图也不例外)**。
-///   取代原先「挑战券兑出的额度」那种可无限堆积的账本。
+/// - 参与次数门控(§2.6.14): `engine::create_room`(开房)与 `engine::join_room_as_char`(加入)
+///   各调用一次 `consume_entry` —— **24 小时滑动窗口**内限次，
+///   **所有难度都计次(免费图也不例外)**。取代原先「挑战券兑出的额度」那种可无限堆积的账本。
 module mohayo::use_item {
     use aptos_framework::randomness;
     use aptos_framework::timestamp;
@@ -119,7 +119,7 @@ module mohayo::use_item {
     }
 
     /// 消耗一次参与机会：先清掉滑出窗口的时间戳，未满窗口上限则记下当前时间。
-    /// 由 `engine::create_room` 调用，**所有难度都计次**（免费图也不例外）。
+    /// 由 `engine::create_room`(开房)与 `engine::join_room_as_char`(加入)调用，**所有难度都计次**（免费图也不例外）。
     public(friend) fun consume_entry(player: address) acquires EntryGate {
         let gate = borrow_global_mut<EntryGate>(@mohayo);
         let limit = gate.window_limit;

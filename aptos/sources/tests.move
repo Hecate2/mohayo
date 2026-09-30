@@ -1726,40 +1726,36 @@ module mohayo::tests {
 
     // ===================== P1b: 入场次数门控与掉落 =====================
 
-    /// §2.6.14: 参与次数是 24 小时滑动窗口 —— **所有难度都计次(免费图也不例外)**。
+    /// §2.6.14 用户定案: **开房计为一次加入, 加入也计一次** —— 同一账号 24h 内
+    /// 「开房 + 加入」的总次数受限。房间必须有人加入才能开战, 所以创建泛滥最终也被加入封顶。
+    /// 下面用 4 个角色把「开房 + 加入」跑满 3 个名额, 第 4 次加入被拒。
     #[test]
-    fun test_window_limit_counts_all_difficulties() {
+    #[expected_failure(abort_code = 3, location = mohayo::use_item)]   // E_NO_ENTRIES
+    fun test_window_limit_counts_joins_and_creates() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
         content_registration::register_all_content(a);
         use_item::set_window_limit(a, 3);
         let p = &std::account::create_account_for_test(@0xCC01);
-        let paddr = std::signer::address_of(p);
-        economy::gm_mint(a, paddr, 1000);
-        assert!(use_item::entries_left(paddr) == 3, 1);
-        engine::create_room(p, 2);                            // 付费图 D2
-        engine::create_room(p, 1);                            // 免费图 D1 也计次
-        assert!(use_item::entries_left(paddr) == 1, 2);
+        let i = 0;
+        while (i < 4) {
+            character::create_character_test(p, 1, vector::empty(), (i + 1) * 7);
+            i = i + 1;
+        };
+        // 房 1: 开房计 1, 队员加入再计 1
         engine::create_room(p, 1);
-        assert!(use_item::entries_left(paddr) == 0, 3);
+        engine::join_room_as_char(p, 1, character::owner_latest_char(std::signer::address_of(p)) - 3);
+        assert!(use_item::entries_left(std::signer::address_of(p)) == 1, 1);
+        // 房 2: 加入第 3 次 → 名额用满
+        engine::create_room(p, 1);
+        engine::join_room_as_char(p, 1, character::owner_latest_char(std::signer::address_of(p)) - 2);
+        assert!(use_item::entries_left(std::signer::address_of(p)) == 0, 2);
+        // 名额已满: 房 3 的开房(第 4 次参与)本身就会被拒
+        engine::create_room(p, 1);
+        engine::join_room_as_char(p, 1, character::owner_latest_char(std::signer::address_of(p)) - 1);
     }
 
-    /// 窗口满了就拒绝（免费图也一样）。
-    #[test]
-    #[expected_failure(abort_code = 3, location = mohayo::use_item)]                       // E_NO_ENTRIES
-    fun test_window_limit_rejects_over_limit() {
-        let a = &std::account::create_account_for_test(@mohayo);
-        setup(a);
-        content_registration::register_all_content(a);
-        use_item::set_window_limit(a, 3);
-        let p = &std::account::create_account_for_test(@0xCC02);
-        engine::create_room(p, 1);
-        engine::create_room(p, 1);
-        engine::create_room(p, 1);
-        engine::create_room(p, 1);                            // 第 4 次 → E_NO_ENTRIES
-    }
-
-    /// 窗口是**滑动**的：24 小时前的时间戳会过期，名额随之释放。
+    /// 窗口是**滑动**的: 24 小时前的记录过期, 名额随之释放。
     #[test]
     fun test_window_limit_slides() {
         let a = &std::account::create_account_for_test(@mohayo);
@@ -1768,19 +1764,30 @@ module mohayo::tests {
         use_item::set_window_limit(a, 2);
         let p = &std::account::create_account_for_test(@0xCC03);
         let paddr = std::signer::address_of(p);
+        let i = 0;
+        while (i < 3) {
+            character::create_character_test(p, 1, vector::empty(), (i + 1) * 11);
+            i = i + 1;
+        };
+        let c1 = character::owner_latest_char(paddr) - 2;
+        let c2 = character::owner_latest_char(paddr) - 1;
+        let c3 = character::owner_latest_char(paddr);
         let t0 = aptos_framework::timestamp::now_seconds();
         engine::create_room(p, 1);
-        assert!(use_item::entries_left(paddr) == 1, 1);
-        // 12 小时后：还没滑出窗口
+        engine::join_room_as_char(p, 1, c1);
+        assert!(use_item::entries_left(paddr) == 0, 1);       // 2/2 用满
         aptos_framework::timestamp::update_global_time_for_test_secs(t0 + 12 * 3600);
-        assert!(use_item::entries_left(paddr) == 1, 2);
-        engine::create_room(p, 1);
-        assert!(use_item::entries_left(paddr) == 0, 3);
-        // 再过 13 小时（距第一次 25 小时）：第一次滑出窗口，释放 1 个名额
+        assert!(use_item::entries_left(paddr) == 0, 2);       // 12h: 还没滑出
         aptos_framework::timestamp::update_global_time_for_test_secs(t0 + 25 * 3600);
-        assert!(use_item::entries_left(paddr) == 1, 4);
+        assert!(use_item::entries_left(paddr) == 2, 3);       // 25h: 两条都已滑出窗口(名额全额释放)
         engine::create_room(p, 1);
-        assert!(use_item::entries_left(paddr) == 0, 5);
+        engine::join_room_as_char(p, 1, c2);
+        assert!(use_item::entries_left(paddr) == 0, 4);
+        aptos_framework::timestamp::update_global_time_for_test_secs(t0 + 49 * 3600);
+        assert!(use_item::entries_left(paddr) == 2, 5);       // 两条都滑出
+        engine::create_room(p, 1);
+        engine::join_room_as_char(p, 1, c3);
+        assert!(use_item::entries_left(paddr) == 0, 6);       // 2/2 用满
     }
 
     /// GM 不能把窗口上限调到离谱的值（每账号要按上限存时间戳）。
