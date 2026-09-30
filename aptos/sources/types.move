@@ -579,8 +579,14 @@ module mohayo::types {
         while (i < len) {
             let e = vector::borrow_mut(effects, i);
             if (e.op == ae.op && ae.op != 4 && ae.op != 8) { // SHIELD stacks separately; DOT refreshes only
-                e.duration = ae.duration;
-                e.magnitude = e.magnitude + ae.magnitude;
+                if (ae.op == 7) {
+                    // GUAR_NEXT: 已存在则**替换** duration, 不累加(§2.5.1)
+                    e.duration = ae.duration;
+                } else {
+                    // 可叠加类: 幅度累加, duration 取 max(原剩余, 新持续)(§2.5.1)
+                    e.magnitude = e.magnitude + ae.magnitude;
+                    if (ae.duration > e.duration) { e.duration = ae.duration; };
+                };
                 return;
             };
             if (e.op == ae.op && ae.op == 8) { // DOT: 同源反复施加只刷新 duration, 不累加(防跳伤线性堆叠)
@@ -594,13 +600,54 @@ module mohayo::types {
         };
     }
 
+    #[test]
+    fun test_dispel_removes_shield_and_guar_next() {
+        let fx = vector[
+            make_active_effect(1, 2, 100, 0),   // STUN
+            make_active_effect(4, 3, 500, 0),   // SHIELD
+            make_active_effect(7, 2, 1, 0),     // GUAR_NEXT
+        ];
+        dispel_effects(&mut fx);
+        assert!(vector::length(&fx) == 0, 1);
+    }
+
+    #[test]
+    fun test_shield_absorption_is_fifo() {
+        let fx = vector[
+            make_active_effect(4, 1, 500, 0),   // 先挂(短)
+            make_active_effect(4, 3, 1000, 0),  // 后挂(长)
+        ];
+        let left = absorb_shield(&mut fx, 800);
+        assert!(left == 0, 1);
+        // FIFO: 先挂的 500 先耗尽, 余 300 落在后挂的长盾上
+        assert!(vector::borrow(&fx, 0).magnitude == 0, 2);
+        assert!(vector::borrow(&fx, 1).magnitude == 700, 3);
+    }
+
+    #[test]
+    fun test_merge_takes_max_duration() {
+        let fx = vector[make_active_effect(6, 4, 100, 0)];      // ACC_DOWN 4 回合
+        add_effect(&mut fx, make_active_effect(6, 1, 100, 0));  // 更短的新来源
+        assert!(vector::length(&fx) == 1, 1);
+        assert!(vector::borrow(&fx, 0).duration == 4, 2);        // duration 取 max
+        assert!(vector::borrow(&fx, 0).magnitude == 200, 3);     // 幅度照旧累加
+    }
+
+    #[test]
+    fun test_guar_next_replaces_duration() {
+        let fx = vector[make_active_effect(7, 1, 1, 0)];
+        add_effect(&mut fx, make_active_effect(7, 2, 1, 0));
+        assert!(vector::length(&fx) == 1, 1);
+        assert!(vector::borrow(&fx, 0).duration == 2, 2);        // 替换(不累加)
+    }
+
     fun dispel_effects(effects: &mut vector<ActiveEffect>) {
         let i = vector::length(effects);
         while (i > 0) {
             let idx = i - 1;
             let e = vector::borrow(effects, idx);
             let op = e.op;
-            if (op == 1 || op == 2 || op == 3 || op == 5 || op == 6 || op == 8 || op == 11) {
+            if (op == 1 || op == 2 || op == 3 || op == 4 || op == 5 || op == 6 || op == 7 || op == 8 || op == 11) {
                 vector::remove(effects, idx);
             };
             i = i - 1;
@@ -610,10 +657,10 @@ module mohayo::types {
     fun absorb_shield(effects: &mut vector<ActiveEffect>, mut_dmg: u64): u64 {
         let mut_remaining = mut_dmg;
         let len = vector::length(effects);
-        let i = len;
-        while (i > 0) {
-            let idx = i - 1;
-            let e = vector::borrow_mut(effects, idx);
+        // §2.5.1: 多层护盾扣减顺序 FIFO —— 先挂入的先消耗(从头遍历)
+        let i = 0;
+        while (i < len) {
+            let e = vector::borrow_mut(effects, i);
             if (e.op == 4 && e.magnitude > 0) { // OP_SHIELD
                 if ((e.magnitude as u64) <= mut_remaining) {
                     mut_remaining = mut_remaining - (e.magnitude as u64);
@@ -624,7 +671,7 @@ module mohayo::types {
                 };
                 if (mut_remaining == 0) break;
             };
-            i = i - 1;
+            i = i + 1;
         };
         mut_remaining
     }
