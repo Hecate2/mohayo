@@ -208,6 +208,8 @@ module mohayo::types {
         escaped: bool,
         /// 战斗中发起逃离后的倒计时(回合)；0 = 无待处理逃离
         escape_delay: u8,
+        /// 中途加入的「到场」倒计时(回合)；0 = 已在场(§4.5-5)
+        arrive_delay: u8,
         owner: address,
         char_id: u64,
     }
@@ -332,7 +334,7 @@ module mohayo::types {
         Member { hp, max_hp, attack, magic, speed, ap, mana_discount,
                  ap_discount, ap_bonus, mana_gain_bonus, class_id,
                  effects, plan, plan_start, alive, is_summon,
-                 escaped: false, escape_delay: 0, owner, char_id }
+                 escaped: false, escape_delay: 0, arrive_delay: 0, owner, char_id }
     }
 
     public fun make_enemy(
@@ -466,6 +468,7 @@ module mohayo::types {
     public fun member_is_summon(m: &Member): bool { m.is_summon }
     public fun member_escaped(m: &Member): bool { m.escaped }
     public fun member_escape_delay(m: &Member): u8 { m.escape_delay }
+    public fun member_arrive_delay(m: &Member): u8 { m.arrive_delay }
     public fun member_owner(m: &Member): address { m.owner }
     public fun member_char_id(m: &Member): u64 { m.char_id }
     public fun member_effects(m: &Member): &vector<ActiveEffect> { &m.effects }
@@ -485,6 +488,7 @@ module mohayo::types {
     public fun member_set_plan_start(m: &mut Member, v: u64) { m.plan_start = v; }
     public fun member_set_escaped(m: &mut Member, v: bool) { m.escaped = v; }
     public fun member_set_escape_delay(m: &mut Member, v: u8) { m.escape_delay = v; }
+    public fun member_set_arrive_delay(m: &mut Member, v: u8) { m.arrive_delay = v; }
 
     // ---- Member effect mutation (takes &mut Member) ----
     public fun member_tick_effects(m: &mut Member) { tick_effects(&mut m.effects); }
@@ -520,6 +524,7 @@ module mohayo::types {
     public fun enemy_set_hp(e: &mut Enemy, v: u64) { e.hp = v; }
     public fun enemy_set_alive(e: &mut Enemy, v: bool) { e.alive = v; }
     public fun enemy_set_turn_counter(e: &mut Enemy, v: u8) { e.turn_counter = v; }
+    public fun enemy_set_max_hp(e: &mut Enemy, v: u64) { e.max_hp = v; }
 
     // ---- Enemy effect mutation ----
     public fun enemy_tick_effects(e: &mut Enemy) { tick_effects(&mut e.effects); }

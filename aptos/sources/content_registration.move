@@ -440,9 +440,9 @@ module mohayo::content_registration {
         skill_registry::register_template(account, tmpl(10, 1, 700, 160, 0, 170, 920, 8, 13));// 13 深渊魔犬(高速)
         skill_registry::register_template(account, tmpl(11, 3, 3000, 60, 0, 20, 900, 24, 38));// 14 魔素吞噬者(虹吸)
         // ---- D5 机神前哨(单人攻关门) ----
-        skill_registry::register_template(account, tmpl(12, 1, 1100, 2950, 0, 150, 910, 6, 9)); // 15 机神哨兵
-        skill_registry::register_template(account, tmpl(12, 2, 8200, 3800, 0, 50, 900, 16, 24));// 16 机神魔像
-        skill_registry::register_template(account, tmpl(13, 3, 29400, 4000, 0, 120, 920, 40, 60));// 17 机神督军(弱化皇帝机体)
+        skill_registry::register_template(account, tmpl(12, 1, 1100, 3400, 0, 150, 910, 6, 9)); // 15 机神哨兵
+        skill_registry::register_template(account, tmpl(12, 2, 8200, 4200, 0, 50, 900, 16, 24));// 16 机神魔像
+        skill_registry::register_template(account, tmpl(13, 3, 29400, 4600, 0, 120, 920, 40, 60));// 17 机神督军(弱化皇帝机体; 召唤缺口公式封顶兵源后回调攻击)
         // ---- D6 亡者回廊深处 ----
         skill_registry::register_template(account, tmpl(5, 1, 1300, 700, 0, 60, 900, 8, 12)); // 18 白骨卫士
         skill_registry::register_template(account, tmpl(6, 1, 1000, 0, 950, 160, 900, 9, 14));// 19 缚灵(魔攻)

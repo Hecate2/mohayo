@@ -30,11 +30,30 @@ module mohayo::engine {
 
     /// 个人逃离的延迟回合数(§6.2「若干回合后」；数值层可调)
     const ESCAPE_DELAY: u64 = 3;
+    /// 中途加入的到场延迟回合数(§4.5-5；数值层可调)
+    const JOIN_DELAY: u64 = 3;
+    /// 一个自然周 = 604800 秒(§3.4 周常变异按周快照)
+    const WEEK_SECS: u64 = 604800;
+
+    // ---- 周常变异种类(§3.4「只采纳便宜实现」) ----
+    public fun MUT_NONE(): u8 { 0 }
+    public fun MUT_MANA(): u8 { 1 }   // 魔素丰潮: 每回合魔素增量 +value
+    public fun MUT_FOG(): u8 { 2 }    // 迷雾周: 敌人命中 −value‰
+    public fun MUT_STORM(): u8 { 3 }  // 疾风连击: 多段技 +value 段(封顶 8)
+    public fun MUT_HP(): u8 { 4 }     // 巨物/脆皮: 敌人生命 ±value‰(带符号)
+    public fun MUT_DROP(): u8 { 5 }   // 慷慨/吝啬: value>0 额外掉落掷骰次数; <0 不掉落
 
     // ============================ resource ============================
 
     struct RoomStore has key {
         rooms: Table<u64, Room>,
+        /// 自然周 → 当周变异(§3.4: 创建房间时快照当周, 周中变更不影响已创建房间)
+        weekly_mutators: Table<u64, Mutator>,
+    }
+
+    struct Mutator has copy, drop, store {
+        kind: u8,
+        value: i64,
     }
 
     struct Room has store {
@@ -50,7 +69,11 @@ module mohayo::engine {
         mana_per_turn: u64,
         mana_all_consumed: u64,
         reward_pool: u64,
+        mutator_kind: u8,
+        mutator_value: i64,
         leader: address,
+        /// 距上次推进的时间戳(秒) —— 推进冷却(§4.1 防重复推进)
+        last_advance_secs: u64,
         rng_seed: u64,
         members: vector<Member>,
         enemies: vector<Enemy>,
@@ -120,11 +143,54 @@ module mohayo::engine {
     struct RunRetreated has drop, store { room_id: u64 }
     #[event]
     struct ItemDropped has drop, store { room_id: u64, player: address, item_type: u64, amount: u64 }
+    #[event]
+    struct MemberArrived has drop, store { room_id: u64, index: u64 }
+    #[event]
+    struct MutatorSnapshot has drop, store { room_id: u64, kind: u8, value: i64 }
 
     // ============================ init ============================
 
     fun init_module(account: &signer) {
-        move_to(account, RoomStore { rooms: table::new() });
+        move_to(account, RoomStore { rooms: table::new(), weekly_mutators: table::new() });
+    }
+
+    // ============================ 周常变异(§3.4) ============================
+
+    /// 设定某一自然周的变异(GM 专用; 运营方每周经短时间锁切换一次)。
+    /// kind 见 MUT_*; value 语义随 kind(增量/千分比/段数/额外掷骰次数, 带符号)。
+    public entry fun set_weekly_mutator(account: &signer, week: u64, kind: u8, value: i64) acquires RoomStore {
+        assert!(signer::address_of(account) == @mohayo, E_NOT_LEADER);
+        let rs = borrow_global_mut<RoomStore>(@mohayo);
+        let m = Mutator { kind, value };
+        if (table::contains(&rs.weekly_mutators, week)) {
+            *table::borrow_mut(&mut rs.weekly_mutators, week) = m;
+        } else {
+            table::add(&mut rs.weekly_mutators, week, m);
+        };
+    }
+
+    public fun week_of(secs: u64): u64 { secs / WEEK_SECS }
+
+    fun mutator_for_week(week: u64): Mutator acquires RoomStore {
+        let rs = borrow_global<RoomStore>(@mohayo);
+        if (!table::contains(&rs.weekly_mutators, week)) {
+            return Mutator { kind: MUT_NONE(), value: 0 }
+        };
+        *table::borrow(&rs.weekly_mutators, week)
+    }
+
+    #[view]
+    public fun current_mutator(): (u8, i64) acquires RoomStore {
+        let m = mutator_for_week(week_of(aptos_framework::timestamp::now_seconds()));
+        (m.kind, m.value)
+    }
+
+    #[view]
+    public fun room_mutator(room_id: u64): (u8, i64) acquires RoomStore {
+        let rs = borrow_global<RoomStore>(@mohayo);
+        assert!(table::contains(&rs.rooms, room_id), E_ROOM_NOT_FOUND);
+        let r = table::borrow(&rs.rooms, room_id);
+        (r.mutator_kind, r.mutator_value)
     }
 
     // ============================ room lifecycle ============================
@@ -139,6 +205,7 @@ module mohayo::engine {
         // 入场费(§3.1): 开房即扣、直接销毁；余额不足则整笔交易回滚
         economy::charge_entry(addr, entry_fee);
         let rid = skill_registry::consume_next_room_id();
+        let mut = mutator_for_week(week_of(aptos_framework::timestamp::now_seconds()));
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = Room {
             id: rid,
@@ -153,7 +220,10 @@ module mohayo::engine {
             mana_per_turn: types::dungeon_mana_per_turn(&dungeon),
             mana_all_consumed: 0,
             reward_pool: 0,
+            mutator_kind: mut.kind,
+            mutator_value: mut.value,
             leader: addr,
+            last_advance_secs: aptos_framework::timestamp::now_seconds(),
             rng_seed: rid * 1000 + 1,
             members: vector::empty(),
             enemies: vector::empty(),
@@ -173,7 +243,7 @@ module mohayo::engine {
     ) acquires RoomStore {
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
-        assert!(room.phase == 0 || room.phase == 3, E_NOT_JOINABLE);
+        assert!(room.phase == 0 || room.phase == 1 || room.phase == 3, E_NOT_JOINABLE);
         assert!(vector::length(&room.members) < 10, E_ROOM_FULL);
         let member = types::make_member(
             max_hp, max_hp, attack, magic, speed,
@@ -182,6 +252,10 @@ module mohayo::engine {
             true, false, signer::address_of(account), 0,
         );
         vector::push_back(&mut room.members, member);
+        if (room.phase == 1) {
+            let idx = vector::length(&room.members) - 1;
+            types::member_set_arrive_delay(vector::borrow_mut(&mut room.members, idx), JOIN_DELAY as u8);
+        };
         event::emit(MemberJoined { room_id, player: signer::address_of(account) });
     }
 
@@ -197,7 +271,7 @@ module mohayo::engine {
     ) acquires RoomStore {
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
-        assert!(room.phase == 0 || room.phase == 3, E_NOT_JOINABLE);
+        assert!(room.phase == 0 || room.phase == 1 || room.phase == 3, E_NOT_JOINABLE);
         assert!(vector::length(&room.members) < 10, E_ROOM_FULL);
         let member = types::make_member(
             max_hp, max_hp, attack, magic, speed,
@@ -206,6 +280,10 @@ module mohayo::engine {
             signer::address_of(account), 0,
         );
         vector::push_back(&mut room.members, member);
+        if (room.phase == 1) {
+            let idx = vector::length(&room.members) - 1;
+            types::member_set_arrive_delay(vector::borrow_mut(&mut room.members, idx), JOIN_DELAY as u8);
+        };
         event::emit(MemberJoined { room_id, player: signer::address_of(account) });
     }
 
@@ -219,7 +297,7 @@ module mohayo::engine {
         let (_hp, max_hp, atk, mag, spd) = character::get_stats(char_id);
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
-        assert!(room.phase == 0 || room.phase == 3, E_NOT_JOINABLE);
+        assert!(room.phase == 0 || room.phase == 1 || room.phase == 3, E_NOT_JOINABLE);
         assert!(vector::length(&room.members) < 10, E_ROOM_FULL);
         let member = types::make_member(
             max_hp, max_hp, atk, mag, spd,
@@ -228,6 +306,11 @@ module mohayo::engine {
             true, false, signer::address_of(account), char_id,
         );
         vector::push_back(&mut room.members, member);
+        // §4.5-5 中途加入: 战斗进行中入队 → 延迟到场; 间歇期/大厅 → 立即
+        if (room.phase == 1) {
+            let idx = vector::length(&room.members) - 1;
+            types::member_set_arrive_delay(vector::borrow_mut(&mut room.members, idx), JOIN_DELAY as u8);
+        };
         character::lock_room(char_id, room_id); // §7.4: 关卡内禁止角色转移
         event::emit(MemberJoined { room_id, player: signer::address_of(account) });
     }
@@ -311,7 +394,7 @@ module mohayo::engine {
         room.phase = 1;
         room.turn_id = 1;
         room.rng_seed = room_id * 1000 + 1;
-        room.mana_pool = room.mana_per_turn;
+        room.mana_pool = room.mana_per_turn + mutator_mana_bonus(room);
         spawn_battle(room, room_id);
         event::emit(CombatStarted { room_id, turn_id: room.turn_id });
     }
@@ -375,10 +458,11 @@ module mohayo::engine {
     fun advance_turn_inner(room: &mut Room, room_id: u64) {
         room.turn_id = room.turn_id + 1;
         room.battle_turns = room.battle_turns + 1;
-        tick_escapes(room, room_id); // 先结算个人逃离(离场者本回合起不参战)
+        tick_escapes(room, room_id);   // 先结算个人逃离(离场者本回合起不参战)
+        tick_arrivals(room, room_id);  // 中途加入者的到场倒计时(§4.5-5)
         tick_all_effects(room, room_id);
         act_all(room, room_id);
-        let mut_delta = room.mana_per_turn;
+        let mut_delta = room.mana_per_turn + mutator_mana_bonus(room);
         let mlen = vector::length(&room.members);
         let mi = 0;
         while (mi < mlen) {
@@ -483,6 +567,16 @@ module mohayo::engine {
         let r = table::borrow(&rs.rooms, room_id);
         assert!(member_index < vector::length(&r.members), E_BAD_INDEX);
         types::member_escaped(vector::borrow(&r.members, member_index))
+    }
+
+    /// 中途加入者的到场倒计时(0 = 已在场)(§4.5-5)
+    #[view]
+    public fun member_arrive_delay(room_id: u64, member_index: u64): u64 acquires RoomStore {
+        let rs = borrow_global<RoomStore>(@mohayo);
+        assert!(table::contains(&rs.rooms, room_id), E_ROOM_NOT_FOUND);
+        let r = table::borrow(&rs.rooms, room_id);
+        assert!(member_index < vector::length(&r.members), E_BAD_INDEX);
+        (types::member_arrive_delay(vector::borrow(&r.members, member_index)) as u64)
     }
 
     /// 待处理逃离的剩余回合数(0 = 无)
@@ -634,6 +728,9 @@ module mohayo::engine {
                     let enemy = spawn_enemy_with(tid);
                     let idx = vector::length(&room.enemies);
                     vector::push_back(&mut room.enemies, enemy);
+                    if (room.mutator_kind == MUT_HP() && room.mutator_value != 0) {
+                        scale_enemy_hp(vector::borrow_mut(&mut room.enemies, idx), room.mutator_value);
+                    };
                     event::emit(EnemySpawned { room_id, index: idx, template_id: tid });
                     break;
                 };
@@ -643,6 +740,24 @@ module mohayo::engine {
             spawned = spawned + 1;
         };
         room.rng_seed = room.rng_seed + 1000;
+    }
+
+    /// 周常变异「魔素丰潮周」: 每回合魔素增量加成(§3.4)
+    fun mutator_mana_bonus(room: &Room): u64 {
+        if (room.mutator_kind == MUT_MANA() && room.mutator_value > 0) { (room.mutator_value as u64) } else { 0 }
+    }
+
+    /// 周常变异「巨物/脆皮周」(§3.4)：生成时对敌人生命做一次千分比修正(value 带符号)。
+    fun scale_enemy_hp(e: &mut Enemy, v: i64) {
+        let base = types::enemy_max_hp(e);
+        let scaled = if (v > 0) {
+            base * (1000 + (v as u64)) / 1000
+        } else {
+            let dec = base * (((0 - v) as u64)) / 1000;
+            if (dec >= base) { 1 } else { base - dec }
+        };
+        types::enemy_set_max_hp(e, scaled);
+        types::enemy_set_hp(e, scaled);
     }
 
     fun spawn_enemy_with(template_id: u64): Enemy {
@@ -702,7 +817,8 @@ module mohayo::engine {
         let i = 0;
         while (i < mlen) {
             let m = vector::borrow(&room.members, i);
-            if (types::member_alive(m) && !types::member_escaped(m) && !types::member_is_summon(m)) {
+            if (types::member_alive(m) && !types::member_escaped(m) && !types::member_is_summon(m)
+                && types::member_arrive_delay(m) == 0) {
                 vector::push_back(&mut keys, types::member_speed(m) * 64 + (40 - i));
             };
             i = i + 1;
@@ -881,7 +997,14 @@ module mohayo::engine {
 
         // 多段连击(targeting 3)：**每段独立抽取随机目标**（§4.2）——可能重复命中同一目标，
         // 也可能分摊给不同目标；每段独立命中掷骰。非多段技 strikes=1，等价于只抽一次。
-        let strikes = if (targeting == 3) { types::skill_target_count(s) as u64 } else { 1 };
+        let storm: u64 = if (room.mutator_kind == MUT_STORM() && room.mutator_value > 0) {
+            (room.mutator_value as u64)
+        } else { 0 };
+        let strikes = if (targeting == 3) {
+            let base_strikes = (types::skill_target_count(s) as u64) + storm;
+            let cap = types::MAX_STRIKES();
+            if (base_strikes > cap) { cap } else { base_strikes }
+        } else { 1 };
         let mut_strike = 0;
         while (mut_strike < strikes) {
             let ts = select_targets(room, targeting, types::skill_target_count(s), actor_is_enemy, actor_idx,
@@ -924,7 +1047,9 @@ module mohayo::engine {
         if (!guaranteed) {
             // Accuracy pipeline: hit = baseAcc − Σ(attacker ACC_DOWN) − Σ(defender EVADE_UP),
             // clamped to MIN_HIT_RATE. Pure additive; values are per-mille.
-            let base_acc = (types::skill_base_acc(s) as i64);
+            // 周常变异「迷雾周」: 敌人命中 −value‰(§3.4)
+            let fog: i64 = if (room.mutator_kind == MUT_FOG() && actor_is_enemy) { room.mutator_value } else { 0 };
+            let base_acc = (types::skill_base_acc(s) as i64) - fog;
             let acc_down = if (actor_is_enemy) {
                 types::enemy_sum_effect_mag(vector::borrow(&room.enemies, actor_idx), 6)
             } else {
@@ -1083,12 +1208,37 @@ module mohayo::engine {
                 event::emit(EnemySpawned { room_id, index: idx, template_id: stid });
             };
         } else {
-            let count = types::summon_rule_max_count(sr) as u64;
+            // §4.5-1 缺口公式: 先读场上存活数 —— 存活敌人数 < 存活角色数 + 2 时,
+            // 召唤 min(缺口, 技能上限); 否则本次召唤落空(防敌人无限膨胀)。
+            let alive_enemies: u64 = 0;
+            let ei = 0;
+            while (ei < vector::length(&room.enemies)) {
+                if (types::enemy_alive(vector::borrow(&room.enemies, ei))) { alive_enemies = alive_enemies + 1; };
+                ei = ei + 1;
+            };
+            let alive_players: u64 = 0;
+            let mi = 0;
+            while (mi < vector::length(&room.members)) {
+                let m = vector::borrow(&room.members, mi);
+                if (types::member_alive(m) && !types::member_is_summon(m) && !types::member_escaped(m)
+                    && types::member_arrive_delay(m) == 0) {
+                    alive_players = alive_players + 1;
+                };
+                mi = mi + 1;
+            };
+            let target_total = alive_players + 2;
+            if (alive_enemies >= target_total) { return; };
+            let gap = target_total - alive_enemies;
+            let rule_count = types::summon_rule_max_count(sr) as u64;
+            let count = if (gap < rule_count) { gap } else { rule_count };
             let j = 0;
             while (j < count && vector::length(&room.enemies) < 10) {
                 let idx = vector::length(&room.enemies);
                 let e = spawn_enemy_with(stid);
                 vector::push_back(&mut room.enemies, e);
+                if (room.mutator_kind == MUT_HP() && room.mutator_value != 0) {
+                    scale_enemy_hp(vector::borrow_mut(&mut room.enemies, idx), room.mutator_value);
+                };
                 event::emit(EnemySpawned { room_id, index: idx, template_id: stid });
                 j = j + 1;
             };
@@ -1272,6 +1422,9 @@ module mohayo::engine {
                     let new_e = spawn_enemy_with(ods_tid);
                     let new_idx = vector::length(&room.enemies);
                     vector::push_back(&mut room.enemies, new_e);
+                    if (room.mutator_kind == MUT_HP() && room.mutator_value != 0) {
+                        scale_enemy_hp(vector::borrow_mut(&mut room.enemies, new_idx), room.mutator_value);
+                    };
                     event::emit(EnemySpawned { room_id, index: new_idx, template_id: ods_tid });
                     j = j + 1;
                 };
@@ -1295,6 +1448,7 @@ module mohayo::engine {
     fun is_active_player(room: &Room, i: u64): bool {
         let m = vector::borrow(&room.members, i);
         types::member_alive(m) && !types::member_escaped(m) && !types::member_is_summon(m)
+            && types::member_arrive_delay(m) == 0
     }
 
     /// 回合初推进逃离倒计时；归零者当场离场（§6.2 战斗中的延迟逃离）。
@@ -1307,6 +1461,21 @@ module mohayo::engine {
                 let nd = d - 1;
                 types::member_set_escape_delay(vector::borrow_mut(&mut room.members, i), nd);
                 if (nd == 0) { do_escape(room, room_id, i); };
+            };
+            i = i + 1;
+        };
+    }
+
+    /// 中途加入者的到场倒计时（§4.5-5）：归零即入队参战。
+    fun tick_arrivals(room: &mut Room, room_id: u64) {
+        let n = vector::length(&room.members);
+        let i = 0;
+        while (i < n) {
+            let d = types::member_arrive_delay(vector::borrow(&room.members, i));
+            if (d > 0) {
+                let nd = d - 1;
+                types::member_set_arrive_delay(vector::borrow_mut(&mut room.members, i), nd);
+                if (nd == 0) { event::emit(MemberArrived { room_id, index: i }); };
             };
             i = i + 1;
         };
@@ -1422,13 +1591,26 @@ module mohayo::engine {
             let owner = types::member_owner(vector::borrow(&room.members, idx));
             economy::credit(owner, share);
             event::emit(RewardPaid { room_id, player: owner, amount: share });
-            // 掉落(§7.2): 每个存活者独立掷一次本难度的掉落表(GM 可动态调整; item_type 0 = 空手)
-            let dseed = room.rng_seed;
-            room.rng_seed = room.rng_seed + 1;
-            let (drop_item, drop_amt) = item::pick_drop(room.difficulty as u64, dseed);
-            if (drop_item > 0 && drop_amt > 0) {
-                item::credit_raw(drop_item, owner, (drop_amt as u128) * item::one());
-                event::emit(ItemDropped { room_id, player: owner, item_type: drop_item, amount: drop_amt });
+            // 掉落(§7.2): 每个存活者独立掷一次本难度的掉落表(GM 可动态调整; item_type 0 = 空手)。
+            // 周常变异「慷慨/吝啬周」(§3.4): 额外掷骰次数(取第一个非空) / 完全不掉落。
+            let skip_drop = room.mutator_kind == MUT_DROP() && room.mutator_value < 0;
+            if (!skip_drop) {
+                let extra = if (room.mutator_kind == MUT_DROP() && room.mutator_value > 0) {
+                    (room.mutator_value as u64)
+                } else { 0 };
+                let rolls = extra + 1;
+                let ri = 0;
+                while (ri < rolls) {
+                    let dseed = room.rng_seed;
+                    room.rng_seed = room.rng_seed + 1;
+                    let (drop_item, drop_amt) = item::pick_drop(room.difficulty as u64, dseed);
+                    if (drop_item > 0 && drop_amt > 0) {
+                        item::credit_raw(drop_item, owner, (drop_amt as u128) * item::one());
+                        event::emit(ItemDropped { room_id, player: owner, item_type: drop_item, amount: drop_amt });
+                        break;
+                    };
+                    ri = ri + 1;
+                };
             };
             k = k + 1;
         };
@@ -1671,7 +1853,7 @@ module mohayo::engine {
                     };
                 } else {
                     let m = vector::borrow(&room.members, i);
-                    if (types::member_alive(m)) {
+                    if (types::member_alive(m) && types::member_arrive_delay(m) == 0) {
                         let w = if (weight_mode == 1) {
                             types::member_max_hp(m) - types::member_hp(m) + 1
                         } else { 1 };
@@ -1725,7 +1907,7 @@ module mohayo::engine {
     #[test_only]
     public fun init_for_test(account: &signer) {
         if (!exists<RoomStore>(signer::address_of(account))) {
-            move_to(account, RoomStore { rooms: table::new() });
+            move_to(account, RoomStore { rooms: table::new(), weekly_mutators: table::new() });
         };
     }
 }

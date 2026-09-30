@@ -1981,4 +1981,158 @@ module mohayo::tests {
         let (runs2, clears2, best2) = character::get_history(cid);
         assert!(runs2 == 1 && clears2 == 1 && best2 == 1, 3);
     }
+
+    // ===================== Q2: 周常变异 / 中途加入 / 召唤缺口 =====================
+
+    fun set_mutator_now(a: &signer, kind: u8, value: i64) {
+        let week = engine::week_of(aptos_framework::timestamp::now_seconds());
+        engine::set_weekly_mutator(a, week, kind, value);
+    }
+
+    #[test]
+    fun test_mutator_mana_flood_snapshot() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        set_mutator_now(a, engine::MUT_MANA(), 5);
+        engine::create_room(a, 1);                                 // 创建时快照当周变异
+        let (k, v) = engine::room_mutator(1);
+        assert!(k == engine::MUT_MANA() && v == 5, 1);
+        engine::join_room(a, 1, 1000, 10, 10, 100);
+        engine::start_combat(a, 1);
+        // D1 基础魔素 2/回合 + 变异 5 = 7
+        assert!(engine::room_mana(1) == 7, 2);
+        engine::advance_turn(a, 1);
+        assert!(engine::room_mana(1) == 14, 3);
+        // 周中改变异不影响已创建房间(快照)
+        set_mutator_now(a, engine::MUT_NONE(), 0);
+        let (k2, _v2) = engine::room_mutator(1);
+        assert!(k2 == engine::MUT_MANA(), 4);
+    }
+
+    #[test]
+    fun test_mutator_hp_and_stingy_drop() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        // 巨物周: D1 碎晶岩 35 → 70
+        set_mutator_now(a, engine::MUT_HP(), 1000);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 1000, 10, 10, 100);
+        engine::start_combat(a, 1);
+        let (_hp, max_hp, _, _, _, _) = engine::enemy_state(1, 0);
+        assert!(max_hp == 70, 1); // 35 × (1000+1000)/1000
+        // 吝啬周: 必掉表也不掉
+        set_mutator_now(a, engine::MUT_DROP(), -1);
+        item::register_drop_table(a, 1, vector[item::ITEM_MANA_FIREWORK], vector[1000], vector[1]);
+        let addr = std::signer::address_of(a);
+        engine::create_room(a, 1);                                  // 第二个房间 → id 2
+        engine::join_room(a, 2, 4000, 100000, 100, 100);
+        engine::start_combat(a, 2);
+        engine::set_plan(a, 2, 0, vector[820]);
+        run_room(a, 2);
+        assert!(engine::room_result(2) == 1, 2);
+        assert!(item::balance_whole(item::ITEM_MANA_FIREWORK, addr) == 0, 3);
+    }
+
+    #[test]
+    fun test_mutator_storm_adds_strike() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        // 覆写 D2 战斗 1 为单只 60000hp 炉(不还手), 便于比较段数
+        skill_registry::set_dungeon(a, 2, types::make_dungeon_config(29, 1, 20, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon_battles(a, 2, vector[types::make_battle_config(29, 1)]);
+        // 基准: 无变异, 暴风剑 4 段
+        set_mutator_now(a, engine::MUT_NONE(), 0);
+        engine::create_room(a, 2);
+        engine::join_room_affixed(a, 1, 100000, 100, 100, 100, 5, 3, 0, 0);
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[840]);
+        engine::advance_turn(a, 1);
+        let (h1, max1, _, _, _, _) = engine::enemy_state(1, 0);
+        let dmg_plain = max1 - h1;
+        // 疾风连击周: +4 段 → 8 段(封顶)
+        set_mutator_now(a, engine::MUT_STORM(), 4);
+        engine::create_room(a, 2);
+        engine::join_room_affixed(a, 2, 100000, 100, 100, 100, 5, 3, 0, 0);
+        engine::start_combat(a, 2);
+        engine::set_plan(a, 2, 0, vector[840]);
+        engine::advance_turn(a, 2);
+        let (h2, max2, _, _, _, _) = engine::enemy_state(2, 0);
+        let dmg_storm = max2 - h2;
+        std::debug::print(&vector[dmg_plain, dmg_storm]);
+        assert!(dmg_storm > dmg_plain, 1);
+        assert!(dmg_storm <= dmg_plain * 3, 2);   // 8 段 vs 4 段, 不会离谱
+    }
+
+    #[test]
+    fun test_join_during_combat_arrives_late() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let addr = std::signer::address_of(a);
+        character::gm_mint_at_level(a, addr, 2, 0, vector[0, 0, 0, 0], vector[820], 300);
+        let cid = character::owner_latest_char(addr);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 4000, 100000, 100, 100);        // 成员 0(大厅)
+        engine::start_combat(a, 1);
+        assert!(engine::member_arrive_delay(1, 0) == 0, 1);      // 开局成员立即在场
+        engine::join_room_as_char(a, 1, cid);                    // 战斗中入队 → 延迟
+        assert!(engine::member_count(1) == 2, 2);
+        assert!(engine::member_arrive_delay(1, 1) == 3, 3);
+        engine::advance_turn(a, 1);
+        assert!(engine::member_arrive_delay(1, 1) == 2, 4);
+        engine::advance_turn(a, 1);
+        engine::advance_turn(a, 1);
+        assert!(engine::member_arrive_delay(1, 1) == 0, 5);      // 到场
+    }
+
+    #[test]
+    fun test_mutator_fog_reduces_enemy_hits() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        // 覆写 D2 战斗 1 为单只机仆(不排计划, 只挨打), 魔素充足
+        skill_registry::set_dungeon(a, 2, types::make_dungeon_config(5, 1, 20, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon_battles(a, 2, vector[types::make_battle_config(5, 1)]);
+        set_mutator_now(a, engine::MUT_NONE(), 0);
+        engine::create_room(a, 2);
+        engine::join_room(a, 1, 1000000, 10, 10, 1);
+        engine::start_combat(a, 1);
+        let g = 0;
+        while (g < 30 && engine::room_phase(1) == 1) { engine::advance_turn(a, 1); g = g + 1; };
+        let (hp0, _, _, _, _, _) = engine::member_state(1, 0);
+        // 迷雾周: 敌人命中 −900‰ → 基本打不中
+        set_mutator_now(a, engine::MUT_FOG(), 900);
+        engine::create_room(a, 2);
+        engine::join_room(a, 2, 1000000, 10, 10, 1);
+        engine::start_combat(a, 2);
+        let g2 = 0;
+        while (g2 < 30 && engine::room_phase(2) == 1) { engine::advance_turn(a, 2); g2 = g2 + 1; };
+        let (hp1, _, _, _, _, _) = engine::member_state(2, 0);
+        let taken_plain = 1000000 - hp0;
+        let taken_fog = 1000000 - hp1;
+        std::debug::print(&vector[taken_plain, taken_fog]);
+        assert!(taken_fog < taken_plain, 1);
+    }
+
+    #[test]
+    fun test_summon_gap_caps_enemy_count() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        // 自建表: 单只机神祭司(召唤师, 召唤机仆×2)
+        skill_registry::register_table(a, vector[types::make_table_entry(10, 1000)]); // 表 32
+        skill_registry::set_dungeon(a, 3, types::make_dungeon_config(32, 1, 30, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon_battles(a, 3, vector[types::make_battle_config(32, 1)]);
+        engine::create_room(a, 3);
+        engine::join_room(a, 1, 1000000, 10, 10, 1);   // 1 名玩家 → 上限 = 1+2 = 3
+        engine::start_combat(a, 1);
+        let g = 0;
+        while (g < 20 && engine::room_phase(1) == 1) { engine::advance_turn(a, 1); g = g + 1; };
+        let ec = engine::enemy_count(1);
+        std::debug::print(&vector[ec]);
+        assert!(ec <= 3, 1);   // §4.5-1: 存活敌人数不超过「存活角色数 + 2」
+    }
 }

@@ -513,6 +513,23 @@ struct RoomMember {
   （最高通关难度），`#view get_history`。**逐项统计（击杀/治疗量/被救援次数）需要引擎按伤害归属回写**，
   当前先记「参与/通关/最高难度」三项，其余列为后续。
 
+### 2.6.8 Move 周常变异 / 中途加入 / 召唤缺口注记（2026-09-30 实现）
+
+- **周常变异（§3.4）**：`engine` 维护 `week → Mutator{kind,value}`（`week = timestamp / 604800`），
+  GM 用 `set_weekly_mutator(account, week, kind, value)` 按周配置；**创建房间时快照当周变异**
+  （周中变更不影响已建房间），`#view room_mutator` / `current_mutator` 可查。落点全部是既有管线的**一个参数位**
+  （§3.4「只采纳便宜实现」）：`MUT_MANA`(每回合魔素增量 +value) / `MUT_FOG`(敌人命中 −value‰) /
+  `MUT_STORM`(多段技 +value 段, 封顶 `MAX_STRIKES=8`) / `MUT_HP`(敌人生命 ±value‰, 带符号) /
+  `MUT_DROP`(value>0 额外掉落掷骰次数、<0 完全不掉落)。**每周一条、互不叠加**。
+- **中途加入延迟到场（§4.5-5）**：`join_room*` 现在也接受 `phase == 1`（战斗进行中）；
+  此时新成员带 `arrive_delay = JOIN_DELAY(3)`，**倒计时归零前不行动、不可被选为目标、不算「在场玩家」**
+  （败北判定/队长继承/收益/召唤计数的口径一致）。间歇期或大厅加入 → 立即到场。
+  新视图 `member_arrive_delay`，事件 `MemberArrived`。
+- **召唤缺口公式（§4.5-1）**：敌方召唤技能**先读场上存活数**——存活敌人数 < 存活角色数 + 2 时，
+  召唤 `min(缺口, 技能召唤上限)`；否则本次落空。这从机制上封顶敌人数量（此前召唤无上限、可无限膨胀）。
+- **连带标定**：缺口公式封顶了 D5「督军增援」的兵源（原本可无限补哨兵），D5 near-max solo 由 86.7% 升到 95%；
+  已回调 D5 敌值（机神哨兵 atk 2950→3400、机神魔像 3800→4200、机神督军 4000→4600），回到 **51/60 ≈ 85%**。
+
 ### 2.7.1 Move 道具层注记（数据驱动, 2026-09-02 实现）
 
 - **每种道具 = item_type + ItemDef**（name/group/combat_usable/effect_kind/effect_value/decimals），**无 per-type struct**。
