@@ -2252,8 +2252,73 @@ module mohayo::tests {
         setup(a);
         content_registration::register_all_content(a);
         engine::create_room(a, 1);
-        engine::join_room(b, 1, 4000, 100, 100, 100);
+        // §2.6.14 起队长必须是在场队员, 所以让 a 自己入房当队长, 再让非队长的 b 试图解散
+        engine::join_room(a, 1, 4000, 100, 100, 100);
         engine::disband_room(b, 1);     // 非队长 → E_NOT_LEADER(6)
+    }
+
+    /// §2.6.14: 队长必须是在场队员 —— 建房者不入房就不再是队长, 队长落到唯一队员身上。
+    /// 也因此不会出现「打赢第一场后被非队员队长卡在间歇期」。
+    #[test]
+    fun test_leader_falls_to_a_member_and_can_advance_battle() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        let b = &std::account::create_account_for_test(@0xEE10);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::create_room(a, 1);
+        assert!(engine::room_leader(1) == std::signer::address_of(a), 1);
+        engine::join_room(b, 1, 30000, 26000, 13000, 600);   // b 是唯一队员
+        assert!(engine::room_leader(1) == std::signer::address_of(b), 2);  // 队长转给队员
+        engine::start_combat_test(b, 1);
+        engine::set_plan(b, 1, 0, vector[820]);
+        // 队长是队员, 所以能自己推完整座 D1(含 3 次间歇期推进)
+        run_room(b, 1);
+        assert!(engine::room_phase(1) == 2, 3);
+    }
+
+    /// 建房者不入房时不再是队长, 也就开不了战。
+    #[test]
+    #[expected_failure(abort_code = 6, location = mohayo::engine)]   // E_NOT_LEADER
+    fun test_non_member_creator_cannot_start() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        let b = &std::account::create_account_for_test(@0xEE11);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::create_room(a, 1);
+        engine::join_room(b, 1, 4000, 100, 100, 100);
+        engine::start_combat_test(a, 1);
+    }
+
+    /// §2.6.14: 只有队长能推进回合（此前任何人都能把别人的房间刷到回合上限）。
+    #[test]
+    #[expected_failure(abort_code = 6, location = mohayo::engine)]   // E_NOT_LEADER
+    fun test_only_leader_can_advance_turn() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        let c = &std::account::create_account_for_test(@0xEE12);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 5000, 100, 100, 99);
+        engine::start_combat_test(a, 1);
+        let t = aptos_framework::timestamp::now_seconds();
+        aptos_framework::timestamp::update_global_time_for_test_secs(t + 2);
+        engine::advance_turn_test(c, 1, engine::room_turn(1));      // 外人 → 拒绝
+    }
+
+    /// 兜底推进仍对任何人开放（队长掉线时房间不能死），门槛是 30 秒。
+    #[test]
+    fun test_emergency_advance_open_to_anyone() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        let c = &std::account::create_account_for_test(@0xEE13);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 5000, 100, 100, 99);
+        engine::start_combat_test(a, 1);
+        let t0 = aptos_framework::timestamp::now_seconds();
+        aptos_framework::timestamp::update_global_time_for_test_secs(t0 + 31);
+        engine::emergency_advance_test(c, 1);                       // 外人也能解卡
+        assert!(engine::room_turn(1) == 2, 1);
     }
 
     #[test]

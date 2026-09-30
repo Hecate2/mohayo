@@ -226,7 +226,8 @@ module mohayo::engine {
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
         assert!(room.phase == 0, E_NOT_LOBBY);
-        assert!(room.leader == addr, E_NOT_LEADER);
+        ensure_leader(room, room_id);
+        assert!(can_advance(room, addr), E_NOT_LEADER);
         room.closed = true;
         room.end_secs = aptos_framework::timestamp::now_seconds();
         unlock_members(room);
@@ -418,6 +419,7 @@ module mohayo::engine {
             let idx = vector::length(&room.members) - 1;
             types::member_set_arrive_delay(vector::borrow_mut(&mut room.members, idx), JOIN_DELAY as u8);
         };
+        ensure_leader(room, room_id);   // 队长必须是在场队员(§2.6.14)
         event::emit(MemberJoined { room_id, player: signer::address_of(account) });
     }
 
@@ -447,6 +449,7 @@ module mohayo::engine {
             let idx = vector::length(&room.members) - 1;
             types::member_set_arrive_delay(vector::borrow_mut(&mut room.members, idx), JOIN_DELAY as u8);
         };
+        ensure_leader(room, room_id);   // 队长必须是在场队员(§2.6.14)
         event::emit(MemberJoined { room_id, player: signer::address_of(account) });
     }
 
@@ -482,6 +485,7 @@ module mohayo::engine {
             types::member_set_arrive_delay(vector::borrow_mut(&mut room.members, idx), JOIN_DELAY as u8);
         };
         character::lock_room(char_id, room_id); // §7.4: 关卡内禁止角色转移
+        ensure_leader(room, room_id);   // 队长必须是在场队员(§2.6.14)
         event::emit(MemberJoined { room_id, player: signer::address_of(account) });
     }
 
@@ -544,7 +548,8 @@ module mohayo::engine {
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
         assert!(room.phase == 3, E_NOT_INTERMISSION);
-        assert!(room.leader == addr, E_NOT_LEADER);
+        ensure_leader(room, room_id);
+        assert!(can_advance(room, addr), E_NOT_LEADER);
         settle_rewards(room, room_id);
         release_all(room, true); // 全员逃离 = 提前结束关卡, 存活者按通关记履历
         mark_settled(room, 1);
@@ -573,7 +578,8 @@ module mohayo::engine {
         assert!(room.phase == 0, E_NOT_LOBBY);
         assert!(!room.closed, E_ROOM_CLOSED);
         assert!(vector::length(&room.members) > 0, E_NO_MEMBERS);
-        assert!(room.leader == addr, E_NOT_LEADER);
+        ensure_leader(room, room_id);                  // 队长必须是在场队员(§2.6.14)
+        assert!(can_advance(room, addr), E_NOT_LEADER);
         room.phase = 1;
         room.turn_id = 1;
         room.last_advance_secs = aptos_framework::timestamp::now_seconds();
@@ -650,10 +656,11 @@ module mohayo::engine {
     fun do_advance_turn(
         account: &signer, room_id: u64, expected_turn_id: u64, seed: Option<u64>,
     ) acquires RoomStore {
-        let _ = account;
+        let caller = signer::address_of(account);
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
         assert!(room.phase == 1, E_NOT_COMBAT);
+        assert!(can_advance(room, caller), E_NOT_LEADER);       // 只有队长能推进(§2.6.14)
         assert!(room.turn_id == expected_turn_id, E_TURN_MISMATCH);
         let now = aptos_framework::timestamp::now_seconds();
         assert!(now >= room.last_advance_secs + TURN_COOLDOWN_SECS, E_ADVANCE_COOLDOWN);
@@ -675,10 +682,11 @@ module mohayo::engine {
     }
 
     fun do_emergency_advance(account: &signer, room_id: u64, seed: Option<u64>) acquires RoomStore {
-        let _ = account;
+        let caller = signer::address_of(account);
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
         assert!(room.phase == 1, E_NOT_COMBAT);
+        assert!(can_emergency_advance(room, caller), E_NOT_LEADER);
         let now = aptos_framework::timestamp::now_seconds();
         assert!(now >= room.last_advance_secs + EMERGENCY_SECS, E_NOT_EMERGENCY);
         room.last_advance_secs = now;
@@ -745,7 +753,8 @@ module mohayo::engine {
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
         assert!(room.phase == 3, E_NOT_INTERMISSION);
-        assert!(room.leader == addr, E_NOT_LEADER);
+        ensure_leader(room, room_id);                  // 队长不在场时先继任, 免得整队卡在间歇期
+        assert!(can_advance(room, addr), E_NOT_LEADER);
         assert!(room.battle_index < room.total_battles, E_LAST_BATTLE);
         apply_seed(room, &seed);
         room.phase = 1;
@@ -1805,25 +1814,65 @@ module mohayo::engine {
     /// 队长去位（阵亡 / 逃离 / 退房）后的自动继任：
     /// 按**加入房间的先后顺序**（members 向量序 = push_back 序）取第一个仍在场者（§3.2/§6.2）。
     /// 召唤物（替身人偶）永远跳过 —— 继承链只走玩家角色。
+    /// 队长**必须是在场队员**（§2.6.14）：`ensure_leader` 现在在多处入口被主动调用，
+    /// 因此「队长是不在队伍里的地址」不会再出现，也就不会再有「打赢第一场后被卡在间歇期」。
+    /// 现任队长只要还是可带队成员就不换人，否则按加入序取第一个可带队成员。
     fun ensure_leader(room: &mut Room, room_id: u64) {
         let n = vector::length(&room.members);
+        // 现队长仍是可带队成员 → 不变
         let i = 0;
         while (i < n) {
-            if (types::member_owner(vector::borrow(&room.members, i)) == room.leader && is_active_player(room, i)) {
-                return; // 现队长仍在场
+            if (types::member_owner(vector::borrow(&room.members, i)) == room.leader
+                && can_lead(room, i, true)) {
+                return;
             };
             i = i + 1;
         };
-        let j = 0;
-        while (j < n) {
-            if (is_active_player(room, j)) {
-                let owner = types::member_owner(vector::borrow(&room.members, j));
-                room.leader = owner;
-                event::emit(LeaderChanged { room_id, new_leader: owner });
-                return;
-            };
-            j = j + 1;
+        // 换人：先找已到场者，再放宽到还没到场的成员
+        let pick = find_leader(room, false);
+        if (pick == n) { pick = find_leader(room, true); };
+        if (pick < n) {
+            let owner = types::member_owner(vector::borrow(&room.members, pick));
+            room.leader = owner;
+            event::emit(LeaderChanged { room_id, new_leader: owner });
         };
+    }
+
+    /// 该槽位能否带队。`include_pending = false` 只认**已到场**的在场玩家，
+    /// `true` 放宽到「存活且未逃离」（含还在到场倒计时里的成员），用于没有已到场者时兜底。
+    fun can_lead(room: &Room, i: u64, include_pending: bool): bool {
+        let m = vector::borrow(&room.members, i);
+        if (!types::member_alive(m) || types::member_escaped(m) || types::member_is_summon(m)) {
+            return false
+        };
+        include_pending || types::member_arrive_delay(m) == 0
+    }
+
+    /// 返回第一个可带队的成员下标；没有则返回 `vector::length(members)`。
+    fun find_leader(room: &Room, include_pending: bool): u64 {
+        let n = vector::length(&room.members);
+        let i = 0;
+        while (i < n) {
+            if (can_lead(room, i, include_pending)) { return i; };
+            i = i + 1;
+        };
+        n
+    }
+
+    // ---- 推进权限（策略集中在这两个函数里，以后要改多签 / 白名单 / 成员投票只动这里）----
+
+    /// 常规推进权限：**只有队长**。此前 `advance_turn` 不校验调用者，任何人都能把别人的房间
+    /// 按最快节奏推到回合上限并触发超时扣款（§2.6.14）。
+    fun can_advance(room: &Room, who: address): bool {
+        room.leader == who
+    }
+
+    /// 兜底推进权限：队长长时间不在时**任何人**可解卡。另受 `EMERGENCY_SECS` 门槛约束，
+    /// 因此不构成刷房间节奏的通道。
+    fun can_emergency_advance(room: &Room, who: address): bool {
+        let _ = room;
+        let _ = who;
+        true
     }
 
     /// 有资格分享收益的成员槽位：存活、未逃离、非召唤物（§6.1）。
