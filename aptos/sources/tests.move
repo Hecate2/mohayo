@@ -2511,6 +2511,39 @@ module mohayo::tests {
         engine::reclaim_room(a, 1);                  // 窗口没到
     }
 
+    /// §2.6.14: 房间可被枚举 —— 活跃列表 + 分页视图；回收后从列表里 swap-remove。
+    #[test]
+    fun test_rooms_are_enumerable() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::set_reclaim_delay(a, 0);
+        assert!(engine::active_room_count() == 0, 1);
+        engine::create_room(a, 1);
+        engine::create_room(a, 1);
+        engine::create_room(a, 1);
+        assert!(engine::active_room_count() == 3, 2);
+        assert!(engine::active_room_at(0) == 1, 3);
+        assert!(engine::active_room_at(1) == 2, 4);
+        assert!(engine::active_room_at(2) == 3, 5);
+        assert!(engine::room_exists(2), 6);
+        // 回收中间那个：swap-remove 之后另外两个仍在列表里
+        engine::disband_room(a, 2);
+        engine::reclaim_room(a, 2);
+        assert!(engine::active_room_count() == 2, 7);
+        assert!(!engine::room_exists(2), 8);
+        let seen_1 = false;
+        let seen_3 = false;
+        let i = 0;
+        while (i < engine::active_room_count()) {
+            let rid = engine::active_room_at(i);
+            if (rid == 1) { seen_1 = true; };
+            if (rid == 3) { seen_3 = true; };
+            i = i + 1;
+        };
+        assert!(seen_1 && seen_3, 9);
+    }
+
     /// 结算完成的房间在窗口过后可被回收。
     #[test]
     fun test_reclaim_settled_room() {

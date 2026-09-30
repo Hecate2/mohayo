@@ -70,6 +70,11 @@ module mohayo::engine {
 
     struct RoomStore has key {
         rooms: Table<u64, Room>,
+        /// 存活房间 id 列表（回收时 swap-remove）。链上 Table 不可遍历，
+        /// 客户端靠这个列表 + 分页视图枚举房间（§2.6.14）。
+        active: vector<u64>,
+        /// room_id → 在 `active` 里的下标（swap-remove 用）
+        active_index: Table<u64, u64>,
         /// 未开始房间的闲置过期时长(秒, §3.1 默认 2 小时, GM 可调)
         room_ttl: u64,
         /// 终态房间的保留窗口(秒, §2.6.12 默认 1 小时, GM 可调) —— 过后任何人可回收
@@ -191,6 +196,8 @@ module mohayo::engine {
     fun init_module(account: &signer) {
         move_to(account, RoomStore {
             rooms: table::new(),
+            active: vector::empty(),
+            active_index: table::new(),
             room_ttl: 7200,
             reclaim_delay: DEFAULT_RECLAIM_DELAY,
             weekly_mutators: table::new(),
@@ -275,10 +282,13 @@ module mohayo::engine {
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         assert!(table::contains(&rs.rooms, room_id), E_ROOM_NOT_FOUND);
         let delay = rs.reclaim_delay;
-        let room = table::borrow_mut(&mut rs.rooms, room_id);
-        assert!(is_reclaimable(room, delay), E_NOT_RECLAIMABLE);
-        unlock_members(room); // 兜底：终态房间理论上已解锁，重复置 0 无害
+        {
+            let room = table::borrow_mut(&mut rs.rooms, room_id);
+            assert!(is_reclaimable(room, delay), E_NOT_RECLAIMABLE);
+            unlock_members(room); // 兜底：终态房间理论上已解锁，重复置 0 无害
+        };
         table::remove(&mut rs.rooms, room_id);
+        room_list_remove(rs, room_id);
         event::emit(RoomReclaimed { room_id });
     }
 
@@ -304,6 +314,46 @@ module mohayo::engine {
     #[view]
     public fun room_ttl(): u64 acquires RoomStore {
         borrow_global<RoomStore>(@mohayo).room_ttl
+    }
+
+    /// 把房间登记进活跃列表
+    fun room_list_add(rs: &mut RoomStore, room_id: u64) {
+        let i = vector::length(&rs.active);
+        vector::push_back(&mut rs.active, room_id);
+        table::add(&mut rs.active_index, room_id, i);
+    }
+
+    /// 从活跃列表摘除（swap-remove，O(1)）。房间号不重用，所以列表只减不增地淘汰旧的。
+    fun room_list_remove(rs: &mut RoomStore, room_id: u64) {
+        let i = *table::borrow(&rs.active_index, room_id);
+        let last = vector::length(&rs.active) - 1;
+        if (i != last) {
+            let moved = *vector::borrow(&rs.active, last);
+            *vector::borrow_mut(&mut rs.active, i) = moved;
+            *table::borrow_mut(&mut rs.active_index, moved) = i;
+        };
+        vector::pop_back(&mut rs.active);
+        table::remove(&mut rs.active_index, room_id);
+    }
+
+    /// 存活房间数（含已结算但还没被回收的）
+    #[view]
+    public fun active_room_count(): u64 acquires RoomStore {
+        vector::length(&borrow_global<RoomStore>(@mohayo).active)
+    }
+
+    /// 分页枚举存活房间 id：先读 `active_room_count()`，再逐下标取(§2.6.14)
+    #[view]
+    public fun active_room_at(i: u64): u64 acquires RoomStore {
+        let rs = borrow_global<RoomStore>(@mohayo);
+        assert!(i < vector::length(&rs.active), E_BAD_INDEX);
+        *vector::borrow(&rs.active, i)
+    }
+
+    /// 该房间号是否还在链上（回收后为 false）
+    #[view]
+    public fun room_exists(room_id: u64): bool acquires RoomStore {
+        table::contains(&borrow_global<RoomStore>(@mohayo).rooms, room_id)
     }
 
     /// 该房间是否已过终态保留窗口、可被 `reclaim_room` 回收(§2.6.12)
@@ -396,6 +446,7 @@ module mohayo::engine {
             enemies: vector::empty(),
         };
         table::add(&mut rs.rooms, rid, room);
+        room_list_add(rs, rid);
         event::emit(RoomCreated { room_id: rid, leader: addr });
     }
 
@@ -2271,6 +2322,8 @@ module mohayo::engine {
         if (!exists<RoomStore>(signer::address_of(account))) {
             move_to(account, RoomStore {
                 rooms: table::new(),
+                active: vector::empty(),
+                active_index: table::new(),
                 room_ttl: 7200,
                 reclaim_delay: DEFAULT_RECLAIM_DELAY,
                 weekly_mutators: table::new(),
