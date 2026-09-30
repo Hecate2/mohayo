@@ -49,6 +49,8 @@ module mohayo::engine {
     const TURN_COOLDOWN_SECS: u64 = 2;
     /// 兜底推进门槛(秒)：§3.1「距上次推进 ≥ 30 区块」后任何人都可解卡
     const EMERGENCY_SECS: u64 = 30;
+    /// 慷慨周(MUT_DROP)单次结算最多额外掷骰次数(防 GM 误配置把结算循环拉爆)
+    const MAX_DROP_ROLLS: u64 = 100;
     /// 房间进入终态后的**保留窗口**(秒)：窗口内仍可读结算结果，过后任何人可回收(§2.6.12)
     const DEFAULT_RECLAIM_DELAY: u64 = 3600;
 
@@ -241,6 +243,8 @@ module mohayo::engine {
         assert!(room.phase == 0, E_NOT_LOBBY);
         ensure_leader(room, room_id);
         assert!(can_advance(room, addr), E_NOT_LEADER);
+        // 幂等(§2.6.15): 重复解散不刷新 end_secs, 避免回收窗口被无限推迟
+        if (room.closed) { return; };
         room.closed = true;
         room.end_secs = aptos_framework::timestamp::now_seconds();
         unlock_members(room);
@@ -260,10 +264,13 @@ module mohayo::engine {
         let room = table::borrow_mut(&mut rs.rooms, room_id);
         if (room.phase == 0) {
             assert!(now >= room.created_secs + ttl, E_NOT_EXPIRED);
-            room.closed = true;
-            room.end_secs = now;
-            unlock_members(room);
-            event::emit(RoomClosed { room_id, reason: 2 }); // 2 = 大厅闲置过期
+            // 幂等(§2.6.15): 已关闭的房间不再刷新 end_secs
+            if (!room.closed) {
+                room.closed = true;
+                room.end_secs = now;
+                unlock_members(room);
+                event::emit(RoomClosed { room_id, reason: 2 }); // 2 = 大厅闲置过期
+            };
         } else if (room.phase == 1) {
             assert!(now >= room.last_advance_secs + ttl, E_NOT_EXPIRED);
             settle_timeout(room, room_id);                  // 与回合上限清退同一条路径
@@ -1974,7 +1981,7 @@ module mohayo::engine {
     fun settle_rewards(room: &mut Room, room_id: u64) {
         let pool = room.reward_pool;
         room.reward_pool = 0;
-        if (pool == 0) return;
+        // 注意: 奖池为 0 时不提前返回 —— 掉落掷骰与奖池无关(§7.2「每个存活者独立掷一次」)
         let idxs = eligible_survivors(room);
         let n = vector::length(&idxs);
         if (n == 0) {
@@ -2008,7 +2015,9 @@ module mohayo::engine {
             let skip_drop = room.mutator_kind == MUT_DROP() && room.mutator_value < 0;
             if (!skip_drop) {
                 let extra = if (room.mutator_kind == MUT_DROP() && room.mutator_value > 0) {
-                    (room.mutator_value as u64)
+                    // 钳制上限: GM 误配置超大 value 时, 结算循环不至于无法完成(§2.6.15)
+                    let v = (room.mutator_value as u64);
+                    if (v > MAX_DROP_ROLLS) { MAX_DROP_ROLLS } else { v }
                 } else { 0 };
                 let rolls = extra + 1;
                 let ri = 0;

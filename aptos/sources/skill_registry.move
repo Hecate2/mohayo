@@ -2,6 +2,8 @@
 /// Owns the `Registry` resource at @mohayo.
 module mohayo::skill_registry {
     use aptos_std::table::{Self, Table};
+
+    friend mohayo::engine;
     use std::signer;
     use std::vector;
     use mohayo::types::{Self, Skill, MonsterAI, EnemyTemplate, TableEntry, BattleConfig,
@@ -344,7 +346,8 @@ module mohayo::skill_registry {
         r.next_room_id
     }
 
-    public fun consume_next_room_id(): u64 acquires Registry {
+    /// 推进房号计数器。`public(friend)`: 只有引擎能分配房号(§2.6.15), 防外部模块刷号段。
+    public(friend) fun consume_next_room_id(): u64 acquires Registry {
         let r = borrow_global_mut<Registry>(@mohayo);
         let id = r.next_room_id;
         r.next_room_id = id + 1;
