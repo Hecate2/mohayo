@@ -562,7 +562,7 @@ module mohayo::sim {
     // ================================================================
     // b) 敌技进计划被拒: 生产 join 后 set_plan 排敌技(45) → E_SKILL_NOT_OWNED(20)
     #[test]
-    #[expected_failure(abort_code = 20)]
+    #[expected_failure(abort_code = 20, location = mohayo::engine)]
     fun sim_skill_ownership_enemy_plan_rejected() {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
@@ -578,7 +578,7 @@ module mohayo::sim {
 
     // c) 他人不可代排: 非 owner 的地址 set_plan → E_NOT_PLAN_OWNER(19)
     #[test]
-    #[expected_failure(abort_code = 19)]
+    #[expected_failure(abort_code = 19, location = mohayo::engine)]
     fun sim_skill_ownership_foreign_plan_rejected() {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
@@ -595,7 +595,7 @@ module mohayo::sim {
 
     // d) 自选敌技在创建端被拒: gm_mint 自选列表含敌技(45) → E_SKILL_NOT_POOL(4)
     #[test]
-    #[expected_failure(abort_code = 4)]
+    #[expected_failure(abort_code = 4, location = mohayo::character)]
     fun sim_skill_ownership_enemy_self_select_rejected() {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
@@ -604,7 +604,7 @@ module mohayo::sim {
 
     // d2) 自选他人职业技被拒(31=守卫专属盾击) → E_SKILL_NOT_POOL(4)
     #[test]
-    #[expected_failure(abort_code = 4)]
+    #[expected_failure(abort_code = 4, location = mohayo::character)]
     fun sim_skill_ownership_class_skill_rejected() {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
@@ -613,7 +613,7 @@ module mohayo::sim {
 
     // d3) 自选种族技被拒(12=兽人专属狂暴) → E_SKILL_NOT_POOL(4)
     #[test]
-    #[expected_failure(abort_code = 4)]
+    #[expected_failure(abort_code = 4, location = mohayo::character)]
     fun sim_skill_ownership_race_skill_rejected() {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
@@ -684,7 +684,7 @@ module mohayo::sim {
         character::gm_mint_at_level(a, own, 3, 0, vector[0, 0, 0, 0], vector[890], 40); // 人类黑魔(脆皮)
         let squishy = character::owner_latest_char(own);
         // 覆写 D3: 单场 1 敌, 表10(祭司850/怨灵150), 两者技能均为 targeting1 单体
-        skill_registry::set_dungeon(a, 3, mohayo::types::make_dungeon_config(10, 1, 15, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon(a, 3, mohayo::types::make_dungeon_config(10, 1, 15, 0, 0, 120, 1));
         skill_registry::set_dungeon_battles(a, 3, vector[mohayo::types::make_battle_config(10, 1)]);
         engine::create_room(a, 3);
         let room_id = skill_registry::next_room_id() - 1;
@@ -801,7 +801,7 @@ module mohayo::sim {
         let own = std::signer::address_of(a);
         character::gm_mint_at_level(a, own, 3, 0, vector[0, 0, 0, 0], vector[890], 40); // 人类黑魔 Lv40
         let cid = character::owner_latest_char(own);
-        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(4, 1, 2, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(4, 1, 2, 0, 0, 120, 1));
         skill_registry::set_dungeon_battles(a, 1, vector[mohayo::types::make_battle_config(4, 1)]);
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
@@ -828,7 +828,7 @@ module mohayo::sim {
         let own = std::signer::address_of(a);
         character::gm_mint_at_level(a, own, 4, 0, vector[0, 0, 0, 0], vector[890], 40); // 人类白魔 Lv40
         let cid = character::owner_latest_char(own);
-        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(1, 1, 8, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(1, 1, 8, 0, 0, 120, 1));
         skill_registry::set_dungeon_battles(a, 1, vector[mohayo::types::make_battle_config(1, 2)]);
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
@@ -929,7 +929,7 @@ module mohayo::sim {
         character::gm_mint_at_level(a, own, 5, 0, vector[0, 0, 0, 0], vector[850], 40); // 火枪手
         let cid = character::owner_latest_char(own);
         item::gm_mint(a, item::ITEM_LEAD_BULLET, own, 5); // 5 发铅弹
-        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(4, 1, 10, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(4, 1, 10, 0, 0, 120, 1));
         skill_registry::set_dungeon_battles(a, 1, vector[mohayo::types::make_battle_config(4, 1)]);
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
@@ -969,7 +969,7 @@ module mohayo::sim {
     }
 
     #[test]
-    #[expected_failure(abort_code = 20)]
+    #[expected_failure(abort_code = 20, location = mohayo::engine)]
     fun sim_item_noncombat_rejected() {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
@@ -1013,7 +1013,7 @@ module mohayo::sim {
         character::gm_mint_at_level(a, own, 5, 0, vector[0, 0, 0, 0], vector[850], 300); // 火枪手 Lv300
         let cid = character::owner_latest_char(own);
         item::gm_mint(a, item::ITEM_LEAD_BULLET, own, 60);
-        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(4, 1, 30, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(4, 1, 30, 0, 0, 120, 1));
         skill_registry::set_dungeon_battles(a, 1, vector[mohayo::types::make_battle_config(4, 1)]);
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
@@ -1048,7 +1048,7 @@ module mohayo::sim {
         character::gm_mint_at_level(a, own, 5, 0, vector[0, 0, 0, 0], vector[], 40);
         let cid = character::owner_latest_char(own);
         item::gm_mint(a, item::ITEM_HEALING_POTION, own, 5);
-        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(5, 1, 10, 0, 0, 0, 120, 1)); // 机仆(会还手)
+        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(5, 1, 10, 0, 0, 120, 1)); // 机仆(会还手)
         skill_registry::set_dungeon_battles(a, 1, vector[mohayo::types::make_battle_config(5, 1)]);
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
@@ -1076,7 +1076,7 @@ module mohayo::sim {
         character::gm_mint_at_level(a, own, 5, 0, vector[0, 0, 0, 0], vector[], 40);
         let cid = character::owner_latest_char(own);
         item::gm_mint(a, item::ITEM_SMOKE_BOMB, own, 2);
-        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(4, 1, 10, 0, 0, 0, 120, 1)); // 魔素岩(不还手, 安全)
+        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(4, 1, 10, 0, 0, 120, 1)); // 魔素岩(不还手, 安全)
         skill_registry::set_dungeon_battles(a, 1, vector[mohayo::types::make_battle_config(4, 1)]);
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
@@ -1107,7 +1107,7 @@ module mohayo::sim {
         let ca = character::owner_latest_char(aaddr);
         let cb = character::owner_latest_char(baddr);
         item::gm_mint(a, item::ITEM_PHOENIX_FEATHER, aaddr, 5);
-        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(22, 1, 10, 0, 0, 0, 120, 1)); // 渊炎龙(全体龙息)
+        skill_registry::set_dungeon(a, 1, mohayo::types::make_dungeon_config(22, 1, 10, 0, 0, 120, 1)); // 渊炎龙(全体龙息)
         skill_registry::set_dungeon_battles(a, 1, vector[mohayo::types::make_battle_config(22, 1)]);
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
@@ -1181,7 +1181,7 @@ module mohayo::sim {
     }
 
     #[test]
-    #[expected_failure(abort_code = 6)]
+    #[expected_failure(abort_code = 6, location = mohayo::item)]
     fun sim_item_bound_transfer_rejected() {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);

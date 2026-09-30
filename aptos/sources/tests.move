@@ -168,7 +168,7 @@ module mohayo::tests {
     fun test_dungeon_config_constructor() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
-        let d = types::make_dungeon_config(1, 3, 5, 100, 25, 50, 5, 4);
+        let d = types::make_dungeon_config(1, 3, 5, 25, 50, 5, 4);
         assert!(types::dungeon_table_id(&d) == 1, 1);
         assert!(types::dungeon_enemy_count(&d) == 3, 2);
         assert!(types::dungeon_mana_per_turn(&d) == 5, 3);
@@ -274,7 +274,7 @@ module mohayo::tests {
     fun test_dungeon_config() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
-        let dungeon = types::make_dungeon_config(1, 3, 5, 100, 25, 50, 5, 1);
+        let dungeon = types::make_dungeon_config(1, 3, 5, 25, 50, 5, 1);
         skill_registry::set_dungeon(a, 1, dungeon);
         let d = skill_registry::get_dungeon(1);
         assert!(types::dungeon_mana_per_turn(&d) == 5, 1);
@@ -285,7 +285,7 @@ module mohayo::tests {
     fun test_battle_config() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
-        let dungeon = types::make_dungeon_config(1, 3, 5, 100, 25, 50, 5, 2);
+        let dungeon = types::make_dungeon_config(1, 3, 5, 25, 50, 5, 2);
         skill_registry::set_dungeon(a, 1, dungeon);
         let configs = vector[
             types::make_battle_config(1, 2),
@@ -330,7 +330,7 @@ module mohayo::tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = 12)]
+    #[expected_failure(abort_code = 12, location = mohayo::skill_registry)]
     fun test_register_bad_targeting() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
@@ -343,7 +343,7 @@ module mohayo::tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = 11)]
+    #[expected_failure(abort_code = 11, location = mohayo::skill_registry)]
     fun test_register_bad_acc() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
@@ -555,7 +555,7 @@ module mohayo::tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = 2)]
+    #[expected_failure(abort_code = 2, location = mohayo::economy)]
     fun test_economy_unauthorized_mint() {
         let a = &std::account::create_account_for_test(@mohayo);
         let attacker = &std::account::create_account_for_test(@0x999);
@@ -565,7 +565,7 @@ module mohayo::tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = 3)]
+    #[expected_failure(abort_code = 3, location = mohayo::economy)]
     fun test_economy_unauthorized_spend() {
         let a = &std::account::create_account_for_test(@mohayo);
         let attacker = &std::account::create_account_for_test(@0x999);
@@ -575,7 +575,7 @@ module mohayo::tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = 4)]
+    #[expected_failure(abort_code = 4, location = mohayo::economy)]
     fun test_economy_insufficient_balance() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
@@ -623,7 +623,7 @@ module mohayo::tests {
         let entries = vector[types::make_table_entry(1, 1000)];
         skill_registry::register_table(a, entries);
         // Set dungeon (difficulty 1, table=1, enemies=3, mana=5)
-        let dungeon = types::make_dungeon_config(1, 3, 5, 100, 0, 0, 0, 1);
+        let dungeon = types::make_dungeon_config(1, 3, 5, 0, 0, 0, 1);
         skill_registry::set_dungeon(a, 1, dungeon);
     }
 
@@ -693,7 +693,7 @@ module mohayo::tests {
         skill_registry::register_template(a, tmpl);
         let entries = vector[types::make_table_entry(1, 1000)];
         skill_registry::register_table(a, entries);
-        let dungeon = types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1);
+        let dungeon = types::make_dungeon_config(1, 1, 10, 0, 0, 0, 1);
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 500, 200, 50, 30);
@@ -722,7 +722,7 @@ module mohayo::tests {
         skill_registry::register_ai(a, simple_ai(2));             // ai1 = 待机
         skill_registry::register_template(a, simple_template(1)); // 敌人 hp1000
         skill_registry::register_table(a, vector[types::make_table_entry(1, 1000)]);
-        skill_registry::set_dungeon(a, 1, types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1));
+        skill_registry::set_dungeon(a, 1, types::make_dungeon_config(1, 1, 10, 0, 0, 0, 1));
         engine::create_room(a, 1);
         engine::join_room(a, 1, 2000, 200, 100, 30);
         engine::start_combat_test(a, 1);
@@ -761,7 +761,7 @@ module mohayo::tests {
         skill_registry::register_ai(a, simple_ai(2));             // ai1 = 敌人低命中普攻(干扰项)
         skill_registry::register_template(a, simple_template(1)); // 敌人 hp1000
         skill_registry::register_table(a, vector[types::make_table_entry(1, 1000)]);
-        skill_registry::set_dungeon(a, 1, types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1));
+        skill_registry::set_dungeon(a, 1, types::make_dungeon_config(1, 1, 10, 0, 0, 0, 1));
         engine::create_room(a, 1);
         engine::join_room(a, 1, 2000, 200, 100, 30);
         engine::start_combat_test(a, 1);
@@ -787,7 +787,7 @@ module mohayo::tests {
         skill_registry::register_ai(a, simple_ai(1));             // ai1 = 敌人单体攻击
         skill_registry::register_template(a, simple_template(1)); // 敌人 hp1000 atk500 → 50/击
         skill_registry::register_table(a, vector[types::make_table_entry(1, 1000)]);
-        skill_registry::set_dungeon(a, 1, types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1));
+        skill_registry::set_dungeon(a, 1, types::make_dungeon_config(1, 1, 10, 0, 0, 0, 1));
         engine::create_room(a, 1);
         engine::join_room(a, 1, 2000, 10, 10, 30); // 成员0(非嘲讽者)
         engine::join_room(a, 1, 2000, 10, 10, 30); // 成员1(嘲讽者)
@@ -816,7 +816,7 @@ module mohayo::tests {
         skill_registry::register_template(a, tmpl);
         let entries = vector[types::make_table_entry(1, 1000)];
         skill_registry::register_table(a, entries);
-        let dungeon = types::make_dungeon_config(1, 1, 5, 100, 0, 0, 0, 1);
+        let dungeon = types::make_dungeon_config(1, 1, 5, 0, 0, 0, 1);
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 500, 200, 50, 30);
@@ -850,7 +850,7 @@ module mohayo::tests {
         skill_registry::register_template(a, tmpl);
         let entries = vector[types::make_table_entry(1, 1000)];
         skill_registry::register_table(a, entries);
-        let dungeon = types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1);
+        let dungeon = types::make_dungeon_config(1, 1, 10, 0, 0, 0, 1);
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         // Very high attack so uncapped would be > 100
@@ -879,7 +879,7 @@ module mohayo::tests {
         skill_registry::register_template(a, tmpl);
         let entries = vector[types::make_table_entry(1, 1000)];
         skill_registry::register_table(a, entries);
-        let dungeon = types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1);
+        let dungeon = types::make_dungeon_config(1, 1, 10, 0, 0, 0, 1);
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 10000, 100, 50, 30);
@@ -910,7 +910,7 @@ module mohayo::tests {
         skill_registry::register_template(a, tmpl);
         let entries = vector[types::make_table_entry(1, 1000)];
         skill_registry::register_table(a, entries);
-        let dungeon = types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1);
+        let dungeon = types::make_dungeon_config(1, 1, 10, 0, 0, 0, 1);
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 10000, 100, 50, 30);
@@ -940,7 +940,7 @@ module mohayo::tests {
         skill_registry::register_template(a, tmpl);
         let entries = vector[types::make_table_entry(1, 1000)];
         skill_registry::register_table(a, entries);
-        let dungeon = types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1);
+        let dungeon = types::make_dungeon_config(1, 1, 10, 0, 0, 0, 1);
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 500, 100, 50, 30);
@@ -988,7 +988,7 @@ module mohayo::tests {
         skill_registry::register_template(a, weak_tmpl);
         let entries = vector[types::make_table_entry(1, 1000)];
         skill_registry::register_table(a, entries);
-        let dungeon = types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1);
+        let dungeon = types::make_dungeon_config(1, 1, 10, 0, 0, 0, 1);
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 1000, 100, 50, 30);
@@ -1018,7 +1018,7 @@ module mohayo::tests {
         skill_registry::register_template(a, tmpl);
         let entries = vector[types::make_table_entry(1, 1000)];
         skill_registry::register_table(a, entries);
-        let dungeon = types::make_dungeon_config(1, 1, 5, 100, 0, 0, 0, 1);
+        let dungeon = types::make_dungeon_config(1, 1, 5, 0, 0, 0, 1);
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 500, 100, 50, 30);
@@ -1041,7 +1041,7 @@ module mohayo::tests {
         skill_registry::register_template(a, tmpl);
         let entries = vector[types::make_table_entry(1, 1000)];
         skill_registry::register_table(a, entries);
-        let dungeon = types::make_dungeon_config(1, 1, 5, 100, 0, 0, 0, 1);
+        let dungeon = types::make_dungeon_config(1, 1, 5, 0, 0, 0, 1);
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 10, 10, 10, 10);
@@ -1073,7 +1073,7 @@ module mohayo::tests {
         let entries = vector[types::make_table_entry(1, 1000)];
         skill_registry::register_table(a, entries);
         // 2-battle dungeon
-        let dungeon = types::make_dungeon_config(1, 1, 5, 100, 0, 0, 0, 2);
+        let dungeon = types::make_dungeon_config(1, 1, 5, 0, 0, 0, 2);
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 500, 100, 50, 30);
@@ -1108,7 +1108,7 @@ module mohayo::tests {
         skill_registry::register_template(a, tmpl);
         let entries = vector[types::make_table_entry(1, 1000)];
         skill_registry::register_table(a, entries);
-        let dungeon = types::make_dungeon_config(1, 1, 5, 100, 0, 0, 0, 1);
+        let dungeon = types::make_dungeon_config(1, 1, 5, 0, 0, 0, 1);
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 500, 100, 50, 30);
@@ -1137,7 +1137,7 @@ module mohayo::tests {
         skill_registry::register_template(a, tmpl);
         let entries = vector[types::make_table_entry(1, 1000)];
         skill_registry::register_table(a, entries);
-        let dungeon = types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1);
+        let dungeon = types::make_dungeon_config(1, 1, 10, 0, 0, 0, 1);
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 10000, 100, 50, 30);
@@ -1199,7 +1199,7 @@ module mohayo::tests {
         skill_registry::register_template(a, tmpl);
         let entries = vector[types::make_table_entry(1, 1000)];
         skill_registry::register_table(a, entries);
-        let dungeon = types::make_dungeon_config(1, 1, 5, 100, 0, 0, 0, 1);
+        let dungeon = types::make_dungeon_config(1, 1, 5, 0, 0, 0, 1);
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 500, 100, 50, 30);
@@ -1234,7 +1234,7 @@ module mohayo::tests {
         let entries = vector[types::make_table_entry(1, 1000)];
         skill_registry::register_table(a, entries);
         // Dungeon
-        let dungeon = types::make_dungeon_config(1, 1, 5, 100, 0, 0, 0, 1);
+        let dungeon = types::make_dungeon_config(1, 1, 5, 0, 0, 0, 1);
         skill_registry::set_dungeon(a, 1, dungeon);
 
         // Create room, join, fight
@@ -1269,7 +1269,7 @@ module mohayo::tests {
         skill_registry::register_template(a, tmpl);
         let entries = vector[types::make_table_entry(1, 1000)];
         skill_registry::register_table(a, entries);
-        let dungeon = types::make_dungeon_config(1, 1, 5, 100, 0, 0, 0, 1);
+        let dungeon = types::make_dungeon_config(1, 1, 5, 0, 0, 0, 1);
         skill_registry::set_dungeon(a, 1, dungeon);
 
         engine::create_room(a, 1);
@@ -1422,7 +1422,7 @@ module mohayo::tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = 4)]
+    #[expected_failure(abort_code = 4, location = mohayo::economy)]
     fun test_entry_fee_insufficient_rejected() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
@@ -1470,7 +1470,7 @@ module mohayo::tests {
     // ===================== P0: 逃离与队长继承（§6.2 / §3.2） =====================
 
     #[test]
-    #[expected_failure(abort_code = 21)]
+    #[expected_failure(abort_code = 21, location = mohayo::engine)]
     fun test_escape_rejected_in_lobby() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
@@ -1626,7 +1626,7 @@ module mohayo::tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = 6)]
+    #[expected_failure(abort_code = 6, location = mohayo::engine)]
     fun test_retreat_rejected_for_non_leader() {
         let a = &std::account::create_account_for_test(@mohayo);
         let b = &std::account::create_account_for_test(@0xBB14);
@@ -1682,7 +1682,7 @@ module mohayo::tests {
         setup(a);
         content_registration::register_all_content(a);
         // 覆写 D2 战斗 1 为单只残破机仆(110hp, spd 90)
-        skill_registry::set_dungeon(a, 2, types::make_dungeon_config(5, 1, 10, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon(a, 2, types::make_dungeon_config(5, 1, 10, 0, 0, 120, 1));
         skill_registry::set_dungeon_battles(a, 2, vector[types::make_battle_config(5, 1)]);
         // ① 高速(spd 1000)先手秒杀 → 全程零受击
         engine::create_room(a, 2);
@@ -1758,7 +1758,7 @@ module mohayo::tests {
 
     /// 窗口满了就拒绝（免费图也一样）。
     #[test]
-    #[expected_failure(abort_code = 3)]                       // E_NO_ENTRIES
+    #[expected_failure(abort_code = 3, location = mohayo::use_item)]                       // E_NO_ENTRIES
     fun test_window_limit_rejects_over_limit() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
@@ -1797,7 +1797,7 @@ module mohayo::tests {
 
     /// GM 不能把窗口上限调到离谱的值（每账号要按上限存时间戳）。
     #[test]
-    #[expected_failure(abort_code = 4)]                       // E_LIMIT_TOO_BIG
+    #[expected_failure(abort_code = 4, location = mohayo::use_item)]                       // E_LIMIT_TOO_BIG
     fun test_window_limit_capped() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
@@ -1905,7 +1905,7 @@ module mohayo::tests {
             types::make_on_death_spawn(0, 0, 0)));
         skill_registry::register_table(a, vector[
             types::make_table_entry(36, 1000), types::make_table_entry(37, 1000)]); // 表 32
-        skill_registry::set_dungeon(a, 2, types::make_dungeon_config(32, 2, 20, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon(a, 2, types::make_dungeon_config(32, 2, 20, 0, 0, 120, 1));
         skill_registry::set_dungeon_battles(a, 2, vector[types::make_battle_config(32, 2)]);
         let boss_hits = 0;
         let s = 0;
@@ -1949,7 +1949,7 @@ module mohayo::tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = 4)]
+    #[expected_failure(abort_code = 4, location = mohayo::economy)]
     fun test_upgrade_level_rejected_when_broke() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
@@ -1962,7 +1962,7 @@ module mohayo::tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = 11)]
+    #[expected_failure(abort_code = 11, location = mohayo::character)]
     fun test_upgrade_level_capped() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
@@ -1997,7 +1997,7 @@ module mohayo::tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = 13)]
+    #[expected_failure(abort_code = 13, location = mohayo::character)]
     fun test_transfer_blocked_while_in_room() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
@@ -2110,7 +2110,7 @@ module mohayo::tests {
         setup(a);
         content_registration::register_all_content(a);
         // 覆写 D2 战斗 1 为单只 60000hp 炉(不还手), 便于比较段数
-        skill_registry::set_dungeon(a, 2, types::make_dungeon_config(29, 1, 20, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon(a, 2, types::make_dungeon_config(29, 1, 20, 0, 0, 120, 1));
         skill_registry::set_dungeon_battles(a, 2, vector[types::make_battle_config(29, 1)]);
         // 基准: 无变异, 暴风剑 4 段
         set_mutator_now(a, engine::MUT_NONE(), 0);
@@ -2163,7 +2163,7 @@ module mohayo::tests {
         setup(a);
         content_registration::register_all_content(a);
         // 覆写 D2 战斗 1 为单只机仆(不排计划, 只挨打), 魔素充足
-        skill_registry::set_dungeon(a, 2, types::make_dungeon_config(5, 1, 20, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon(a, 2, types::make_dungeon_config(5, 1, 20, 0, 0, 120, 1));
         skill_registry::set_dungeon_battles(a, 2, vector[types::make_battle_config(5, 1)]);
         set_mutator_now(a, engine::MUT_NONE(), 0);
         engine::create_room(a, 2);
@@ -2193,7 +2193,7 @@ module mohayo::tests {
         content_registration::register_all_content(a);
         // 自建表: 单只机神祭司(召唤师, 召唤机仆×2)
         skill_registry::register_table(a, vector[types::make_table_entry(10, 1000)]); // 表 32
-        skill_registry::set_dungeon(a, 3, types::make_dungeon_config(32, 1, 30, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon(a, 3, types::make_dungeon_config(32, 1, 30, 0, 0, 120, 1));
         skill_registry::set_dungeon_battles(a, 3, vector[types::make_battle_config(32, 1)]);
         engine::create_room(a, 3);
         engine::join_room(a, 1, 1000000, 10, 10, 1);   // 1 名玩家 → 上限 = 1+2 = 3
@@ -2208,7 +2208,7 @@ module mohayo::tests {
     // ===================== Q3: 回合驱动防护（§3.1 竞态与滥用） =====================
 
     #[test]
-    #[expected_failure(abort_code = 24)]
+    #[expected_failure(abort_code = 24, location = mohayo::engine)]
     fun test_advance_turn_rejects_stale_turn_id() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
@@ -2221,7 +2221,7 @@ module mohayo::tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = 25)]
+    #[expected_failure(abort_code = 25, location = mohayo::engine)]
     fun test_advance_turn_enforces_cooldown() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
@@ -2234,7 +2234,7 @@ module mohayo::tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = 26)]
+    #[expected_failure(abort_code = 26, location = mohayo::engine)]
     fun test_emergency_advance_requires_gap() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
@@ -2279,7 +2279,7 @@ module mohayo::tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = 6)]
+    #[expected_failure(abort_code = 6, location = mohayo::engine)]
     fun test_disband_room_leader_only() {
         let a = &std::account::create_account_for_test(@mohayo);
         let b = &std::account::create_account_for_test(@0xEE02);
@@ -2356,7 +2356,7 @@ module mohayo::tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = 27)]
+    #[expected_failure(abort_code = 27, location = mohayo::engine)]
     fun test_disbanded_room_rejects_join() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
@@ -2368,7 +2368,7 @@ module mohayo::tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = 28)]
+    #[expected_failure(abort_code = 28, location = mohayo::engine)]
     fun test_room_expire_requires_ttl() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
@@ -2465,7 +2465,7 @@ module mohayo::tests {
         skill_registry::register_template(a, types::make_enemy_template(1, 0, 5000, 100, 0, 99, 1000, 0, 0,
             types::make_on_death_spawn(0, 0, 0)));
         skill_registry::register_table(a, vector[types::make_table_entry(1, 1000)]);
-        skill_registry::set_dungeon(a, 1, types::make_dungeon_config(1, 1, 5, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon(a, 1, types::make_dungeon_config(1, 1, 5, 0, 0, 120, 1));
         skill_registry::set_dungeon_battles(a, 1, vector[types::make_battle_config(1, 1)]);
 
         engine::create_room(a, 1);
