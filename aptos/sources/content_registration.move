@@ -517,7 +517,11 @@ module mohayo::content_registration {
         skill_registry::set_dungeon_battles(account, 4, vector[bt(11, 3), bt(12, 2), bt(13, 2)]);
         skill_registry::set_dungeon(account, 5, dng(14, 3, 4, 0, 20, 40, BATTLE_TURN_CAP, 3)); // D5 机神前哨(单人攻关门)
         skill_registry::set_dungeon_battles(account, 5, vector[bt(14, 3), bt(15, 3), bt(16, 1)]);
-        skill_registry::add_battle_variant(account, 5, 3, 17, 200);   // b3 混沌变体 20%
+        // D5 b3 变体掷骰: 基准「督军单挑」80% / 混沌变体「督军+魔像+哨兵」20% (§8.2)。
+        // §2.6.11 复审: 此前只登记了 weight=200 的变体、没有基准条目, 而 spawn_battle 把非空
+        // variants 当作完整候选集 → 混沌变体实际 100%, 与文档「20% 权重切换」不符。
+        skill_registry::add_battle_variant(account, 5, 3, 16, 800);   // 基准(督军单挑) 80%
+        skill_registry::add_battle_variant(account, 5, 3, 17, 200);   // 混沌变体 20%
         skill_registry::set_dungeon(account, 6, dng(18, 3, 5, 0, 25, 50, BATTLE_TURN_CAP, 3)); // D6 亡者回廊深处
         skill_registry::set_dungeon_battles(account, 6, vector[bt(18, 3), bt(19, 3), bt(20, 1)]);
         skill_registry::set_dungeon(account, 7, dng(21, 3, 6, 0, 30, 60, BATTLE_TURN_CAP, 3)); // D7 熔渊龙巢

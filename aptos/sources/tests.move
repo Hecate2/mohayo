@@ -1337,7 +1337,7 @@ module mohayo::tests {
         assert!(skill_registry::skill_registered(810), 1);   // 尘幕(自选池 key 810; 基础技已删除)
         assert!(skill_registry::skill_registered(190), 2);  // 待机(基础区 key 190)
         assert!(skill_registry::skill_registered(1655), 3); // 皇帝召唤(D9 区 key 1655)
-        // --- dungeon 9 has 4 battles, battle-4 has the 85/15 variant ---
+        // --- dungeon 9 has 4 battles, battle-4 has the 70/30 variant ---
         let bi_count = skill_registry::get_battle_count(9);
         assert!(bi_count == 4, 4);
         let variants = skill_registry::get_variants(9, 4);
@@ -1347,10 +1347,11 @@ module mohayo::tests {
         let ods = types::template_on_death_spawn(&furnace);
         assert!(types::on_death_spawn_template_id(ods) == 34, 6);
         assert!(types::on_death_spawn_prob(ods) == 600, 7);
-        // --- D5 overseer(17) exists and battle-3 has a chaos variant ---
+        // --- D5 overseer(17) exists and battle-3 carries the 80/20 variant set ---
         let overseer = skill_registry::get_template(17);
         assert!(types::template_ai_id(&overseer) == 13, 8);
-        assert!(vector::length(&skill_registry::get_variants(5, 3)) == 1, 9);
+        // §2.6.11: 必须是 2 条(基准表 16 + 混沌表 17) —— 只登记 1 条会让混沌变体变成 100%
+        assert!(vector::length(&skill_registry::get_variants(5, 3)) == 2, 9);
     }
 
     #[test]
@@ -2304,6 +2305,29 @@ module mohayo::tests {
         aptos_framework::timestamp::update_global_time_for_test_secs(t0 + 61);
         engine::expire_room(a, 1);                          // 任何人可触发
         assert!(engine::room_closed(1), 1);
+    }
+
+    /// §2.6.11/§8.2: 变体表是**完整候选集**(权重和 = 概率分母) —— 漏登记基准条目会让「变体」
+    /// 变成 100%(D5 b3 曾如此)。实测对照: 缺基准时 35 个到达 b3 的房间出现 8 魔像 + 3 哨兵,
+    /// 补齐基准后 35/35 为督军。
+    #[test]
+    fun test_variant_tables_are_complete_candidate_sets() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        // D5 b3: 基准(督军表 16) 80% + 混沌变体(表 17) 20%
+        let v5 = skill_registry::get_variants(5, 3);
+        assert!(vector::length(&v5) == 2, 1);
+        assert!(types::variant_table_id(vector::borrow(&v5, 0)) == 16, 2);
+        assert!((types::variant_weight(vector::borrow(&v5, 0)) as u64) == 800, 3);
+        assert!(types::variant_table_id(vector::borrow(&v5, 1)) == 17, 4);
+        assert!((types::variant_weight(vector::borrow(&v5, 1)) as u64) == 200, 5);
+        // D9 b4: 宝箱表 30 @700 + 皇帝备用机体表 31 @300
+        let v9 = skill_registry::get_variants(9, 4);
+        assert!(vector::length(&v9) == 2, 6);
+        assert!(
+            (types::variant_weight(vector::borrow(&v9, 0)) as u64)
+            + (types::variant_weight(vector::borrow(&v9, 1)) as u64) == 1000, 7);
     }
 
     // ===================== §2.6.11 复审修正 =====================
