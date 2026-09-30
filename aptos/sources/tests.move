@@ -71,29 +71,12 @@ module mohayo::tests {
         )
     }
 
-    fun skill_mana_gain(): types::Skill {
-        types::make_skill(
-            0, 3, 0, 0, 0, 0, 0, 0,
-            9, 0, 1, 0, 0, 1000, 0,
-            vector[types::make_effect_spec(13, 1, 5, 0, 1000)],
-            types::make_summon_rule(0, 0, 0),
-        )
-    }
-
     fun skill_shield(): types::Skill {
         types::make_skill(
             0, 3, 0, 1, 0, 0, 0, 0,
             9, 0, 1, 0, 0, 1000, 0,
             vector[types::make_effect_spec(4, 3, 1200, 3, 1000)],
             types::make_summon_rule(0, 0, 0),
-        )
-    }
-
-    fun skill_mana_bolt(): types::Skill {
-        types::make_skill(
-            0, 2, 0, 1, 0, 0, 0, 0,
-            1, 0, 1, 1200, 0, 900, 0,
-            vector::empty(), types::make_summon_rule(0, 0, 0),
         )
     }
 

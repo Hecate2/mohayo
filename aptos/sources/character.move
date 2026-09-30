@@ -18,12 +18,6 @@ module mohayo::character {
     const E_UNKNOWN_CLASS: u64 = 2;
     const E_UNKNOWN_RACE: u64 = 3;
     const E_SKILL_NOT_POOL: u64 = 4;
-    const E_TOO_MANY_SKILLS: u64 = 5;
-    const E_CLASS_SKILL_REJECTED: u64 = 6;
-    const E_RACE_SKILL_REJECTED: u64 = 7;
-    const E_INVALID_RACE: u64 = 8;
-    const E_INVALID_AFFIX: u64 = 9;
-    const E_LEVEL_ZERO: u64 = 10;
     const E_MAX_LEVEL: u64 = 11;
     const E_NOT_FOUND: u64 = 12;
     const E_IN_ROOM: u64 = 13;
@@ -31,10 +25,9 @@ module mohayo::character {
     const E_AFFIX_TEMPLATE_CAP: u64 = 15;
     const E_SELF_TRANSFER: u64 = 16;
     const E_BAD_LEVELS: u64 = 17;
-    const E_CLASS_CAP: u64 = 16;
-    const E_RACE_CAP: u64 = 17;
-    const E_GOLD_REQUIRED: u64 = 18;
-    const E_LEVEL_REQUIRED: u64 = 19;
+    // 20/21: 原先误用 16/17 与上面两个撞码(§2.6.11 复审修正)
+    const E_CLASS_CAP: u64 = 20;
+    const E_RACE_CAP: u64 = 21;
 
     const MAX_CLASSES: u64 = 32;
     const MAX_RACES: u64 = 16;
@@ -748,10 +741,10 @@ module mohayo::character {
         let atk_mod = types::class_def_attack_pct(class) + *vector::borrow(types::race_def_stat_mods(race_def), 0) + (*vector::borrow(ability_bonuses, 1) as i64);
         let mag_mod = types::class_def_magic_pct(class) + *vector::borrow(types::race_def_stat_mods(race_def), 1) + (*vector::borrow(ability_bonuses, 2) as i64);
         let spd_mod = types::class_def_speed_pct(class) + *vector::borrow(types::race_def_stat_mods(race_def), 2) + (*vector::borrow(ability_bonuses, 3) as i64);
-        let hp = calc_stat(100, hp_mod, level);
-        let atk = calc_stat(10, atk_mod, level);
-        let mag = calc_stat(10, mag_mod, level);
-        let spd = calc_stat(10, spd_mod, level);
+        let hp = calc_stat(types::BASE_HP(), hp_mod, level);
+        let atk = calc_stat(types::BASE_ATTACK(), atk_mod, level);
+        let mag = calc_stat(types::BASE_MAGIC(), mag_mod, level);
+        let spd = calc_stat(types::BASE_SPEED(), spd_mod, level);
         (hp, atk, mag, spd)
     }
 

@@ -10,11 +10,9 @@ module mohayo::skill_registry {
     const E_NOT_OWNER: u64 = 1;
     const E_SKILL_EXISTS: u64 = 2;
     const E_SKILL_NOT_FOUND: u64 = 3;
-    const E_AI_EXISTS: u64 = 4;
     const E_TEMPLATE_EXISTS: u64 = 5;
     const E_TABLE_EXISTS: u64 = 6;
     const E_DUNGEON_EXISTS: u64 = 7;
-    const E_BAD_SKILL: u64 = 8;
     const E_EFFECT_COUNT: u64 = 9;
     const E_TARGET_COUNT: u64 = 10;
     const E_BASE_ACC: u64 = 11;
@@ -29,9 +27,7 @@ module mohayo::skill_registry {
     const E_TABLE_CAP: u64 = 20;
     const E_VARIANT_CAP: u64 = 21;
     const E_BATTLE_CAP: u64 = 22;
-    const E_CLASS_SKILL_BOUND: u64 = 23;
     const E_UNKNOWN_AI: u64 = 24;
-    const E_NOT_POOL_SKILL: u64 = 25;
 
     const MAX_SKILLS: u64 = 4096;
     const MAX_AI: u64 = 256;
@@ -87,7 +83,7 @@ module mohayo::skill_registry {
 
     fun validate_skill(s: &Skill, allow_guar_next: bool) {
         let ef = types::skill_effects(s);
-        assert!(vector::length(ef) <= 4, E_EFFECT_COUNT);
+        assert!(vector::length(ef) <= types::MAX_SKILL_EFFECTS(), E_EFFECT_COUNT);
         assert!(types::skill_target_count(s) <= 8, E_TARGET_COUNT);
         assert!(types::skill_base_acc(s) <= 1000, E_BASE_ACC);
         assert!(types::skill_targeting(s) >= 1 && types::skill_targeting(s) <= 10, E_BAD_TARGETING);
@@ -225,7 +221,7 @@ module mohayo::skill_registry {
         let addr = signer::address_of(account);
         assert!(addr == @mohayo, E_NOT_OWNER);
         let r = borrow_global_mut<Registry>(@mohayo);
-        assert!(difficulty <= 16, E_DUNGEON_EXISTS);
+        assert!(difficulty <= MAX_DUNGEONS, E_DUNGEON_EXISTS);
         if (table::contains(&r.dungeons, difficulty)) {
             *table::borrow_mut(&mut r.dungeons, difficulty) = cfg;
         } else {
@@ -341,12 +337,6 @@ module mohayo::skill_registry {
     public fun next_room_id(): u64 acquires Registry {
         let r = borrow_global<Registry>(@mohayo);
         r.next_room_id
-    }
-
-    public fun bump_room_id(r: &mut Registry): u64 {
-        let id = r.next_room_id;
-        r.next_room_id = id + 1;
-        id
     }
 
     public fun consume_next_room_id(): u64 acquires Registry {

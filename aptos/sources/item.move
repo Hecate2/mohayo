@@ -59,7 +59,6 @@ module mohayo::item {
     public const ONE: u128 = 1000000000000000000;
 
     const E_NOT_OWNER: u64 = 1;
-    const E_ALREADY: u64 = 2;
     const E_NOT_FOUND: u64 = 3;
     const E_NO_ITEM: u64 = 4;
     const E_ZERO: u64 = 5;
@@ -141,11 +140,6 @@ module mohayo::item {
         } else {
             table::add(&mut ds.tables, difficulty, entries);
         };
-    }
-
-    /// 构造掉落条目（外部注册用）
-    public fun drop_entry(item_type: u64, weight: u16, amount: u64): DropEntry {
-        DropEntry { item_type, weight, amount }
     }
 
     /// 按难度掉落表掷一次（确定性：seed 由调用方提供）。

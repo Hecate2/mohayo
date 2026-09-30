@@ -309,7 +309,7 @@ module mohayo::engine {
         let room = table::borrow_mut(&mut rs.rooms, room_id);
         assert!(!room.closed, E_ROOM_CLOSED);
         assert!(room.phase == 0 || room.phase == 1 || room.phase == 3, E_NOT_JOINABLE);
-        assert!(vector::length(&room.members) < 10, E_ROOM_FULL);
+        assert!(vector::length(&room.members) < types::MAX_MEMBERS(), E_ROOM_FULL);
         let member = types::make_member(
             max_hp, max_hp, attack, magic, speed,
             0, 0, 0, 0, 0, 0,
@@ -338,7 +338,7 @@ module mohayo::engine {
         let room = table::borrow_mut(&mut rs.rooms, room_id);
         assert!(!room.closed, E_ROOM_CLOSED);
         assert!(room.phase == 0 || room.phase == 1 || room.phase == 3, E_NOT_JOINABLE);
-        assert!(vector::length(&room.members) < 10, E_ROOM_FULL);
+        assert!(vector::length(&room.members) < types::MAX_MEMBERS(), E_ROOM_FULL);
         let member = types::make_member(
             max_hp, max_hp, attack, magic, speed,
             0, mana_discount, ap_discount, ap_bonus, mana_gain_bonus,
@@ -371,7 +371,7 @@ module mohayo::engine {
         let room = table::borrow_mut(&mut rs.rooms, room_id);
         assert!(!room.closed, E_ROOM_CLOSED);
         assert!(room.phase == 0 || room.phase == 1 || room.phase == 3, E_NOT_JOINABLE);
-        assert!(vector::length(&room.members) < 10, E_ROOM_FULL);
+        assert!(vector::length(&room.members) < types::MAX_MEMBERS(), E_ROOM_FULL);
         let member = types::make_member(
             max_hp, max_hp, atk, mag, spd,
             0, mana_disc, ap_disc, ap_bon, mana_gain, class_id,
@@ -834,7 +834,7 @@ module mohayo::engine {
 
         let mut_rng2 = mohayo::rng::new(room.rng_seed + bi * 10);
         let spawned: u64 = 0;
-        while (spawned < enemy_count && vector::length(&room.enemies) < 10) {
+        while (spawned < enemy_count && vector::length(&room.enemies) < types::MAX_ENEMIES()) {
             let roll = mohayo::rng::below(&mut mut_rng2, total_weight);
             let acc: u64 = 0;
             ei = 0;
@@ -997,7 +997,7 @@ module mohayo::engine {
         let cur_ap = (types::member_ap(m) as u64);
         let bonus_ap = (types::member_ap_bonus(m) as u64);
         let new_ap = cur_ap + 1 + bonus_ap;
-        types::member_set_ap(m, if (new_ap > 22) { 22 } else { new_ap as u16 });
+        types::member_set_ap(m, if (new_ap > types::AP_CAP_BASE()) { (types::AP_CAP_BASE() as u16) } else { new_ap as u16 });
         let cur_plan_start = types::member_plan_start(m);
         let plan_idx = cur_plan_start % (plan_len as u64);
         let plan_ref = types::member_plan(m);
@@ -1146,8 +1146,9 @@ module mohayo::engine {
         if (ap_gain > 0 && !actor_is_enemy) {
             let m = vector::borrow_mut(&mut room.members, actor_idx);
             let new_ap = types::member_ap(m) + ap_gain;
-            if (new_ap > 22) {
-                types::member_set_ap(m, 22);
+            let ap_cap = (types::AP_CAP_BASE() as u16);
+            if (new_ap > ap_cap) {
+                types::member_set_ap(m, ap_cap);
             } else {
                 types::member_set_ap(m, new_ap);
             };
@@ -1313,7 +1314,7 @@ module mohayo::engine {
         let stid = types::summon_rule_template_id(sr);
         if (stid == 0) return;
         if ((types::skill_flags(s) & 4) != 0) {
-            if (vector::length(&room.members) < 10) {
+            if (vector::length(&room.members) < types::MAX_MEMBERS()) {
                 let t = skill_registry::get_template(stid);
                 let idx = vector::length(&room.members);
                 let minion = types::make_member(
@@ -1350,7 +1351,7 @@ module mohayo::engine {
             let rule_count = types::summon_rule_max_count(sr) as u64;
             let count = if (gap < rule_count) { gap } else { rule_count };
             let j = 0;
-            while (j < count && vector::length(&room.enemies) < 10) {
+            while (j < count && vector::length(&room.enemies) < types::MAX_ENEMIES()) {
                 let idx = vector::length(&room.enemies);
                 let e = spawn_enemy_with(stid);
                 vector::push_back(&mut room.enemies, e);
@@ -1536,7 +1537,7 @@ module mohayo::engine {
             room.rng_seed = room.rng_seed + 1;
             if (roll < (ods_prob as u64)) {
                 let j = 0;
-                while (j < (ods_count as u64) && vector::length(&room.enemies) < 10) {
+                while (j < (ods_count as u64) && vector::length(&room.enemies) < types::MAX_ENEMIES()) {
                     let new_e = spawn_enemy_with(ods_tid);
                     let new_idx = vector::length(&room.enemies);
                     vector::push_back(&mut room.enemies, new_e);

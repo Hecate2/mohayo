@@ -62,18 +62,14 @@ module mohayo::types {
     public fun PHASE_INTERMISSION(): u8 { 3 }
 
     // ---- capacities ----
+    // 只保留引擎真的会读的上限；未落地的容量声明已删除(§2.6.11 复审)，避免「文档说有限、代码没有」。
     public fun MAX_MEMBERS(): u64 { 10 }
     public fun MAX_ENEMIES(): u64 { 10 }
     public fun MAX_EFFECTS(): u64 { 6 }
-    public fun MAX_PLAN(): u64 { 16 }
     public fun MAX_SKILL_EFFECTS(): u64 { 4 }
     public fun MAX_STRIKES(): u64 { 8 }
-    public fun MAX_DIFFICULTY(): u64 { 10 }
-    public fun MAX_ROOMS(): u64 { 1000 }
-    public fun MAX_PLAN_SKILLS(): u64 { 8 }
     public fun AP_CAP_BASE(): u64 { 22 }
     public fun MIN_HIT_RATE(): u64 { 50 }
-    public fun TIMEOUT_HP_PCT(): u64 { 10 }
 
     // ---- character ----
     public fun MAX_LEVEL(): u64 { 300 }
@@ -81,8 +77,6 @@ module mohayo::types {
     public fun BASE_ATTACK(): u64 { 10 }
     public fun BASE_MAGIC(): u64 { 10 }
     public fun BASE_SPEED(): u64 { 10 }
-    public fun MAX_AFFIX_MOD(): u64 { 2000 }
-    public fun MAX_SKILL_PER_CHAR(): u64 { 8 }
 
     // ---- race IDs ----
     public fun RACE_HUMAN(): u8 { 0 }
@@ -454,8 +448,7 @@ module mohayo::types {
     public fun affix_tier_values(a: &AffixTemplate): &vector<u16> { &a.tier_values }
 
     // ---- ActiveEffect mutators ----
-    public fun ae_set_duration(e: &mut ActiveEffect, v: u8) { e.duration = v; }
-    public fun ae_set_magnitude(e: &mut ActiveEffect, v: u16) { e.magnitude = v; }
+    // (ae_set_* 已删除: 外部拿不到 &mut ActiveEffect, 无人可调用)
 
     // ---- Member accessors ----
     public fun member_hp(m: &Member): u64 { m.hp }
@@ -542,12 +535,6 @@ module mohayo::types {
     public fun enemy_absorb_shield(e: &mut Enemy, dmg: u64): u64 { absorb_shield(&mut e.effects, dmg) }
     public fun enemy_clear_effects(e: &mut Enemy) { e.effects = vector::empty(); }
 
-    // ---- ActiveEffect direct accessors (short names) ----
-    public fun ae_op(e: &ActiveEffect): u8 { e.op }
-    public fun ae_duration(e: &ActiveEffect): u8 { e.duration }
-    public fun ae_magnitude(e: &ActiveEffect): u16 { e.magnitude }
-    public fun ae_source_id(e: &ActiveEffect): u64 { e.source_id }
-
     // ---- internal effect helpers ----
 
     fun tick_effects(effects: &mut vector<ActiveEffect>) {
@@ -604,7 +591,7 @@ module mohayo::types {
             };
             i = i + 1;
         };
-        if (vector::length(effects) < 6) { // MAX_EFFECTS
+        if (vector::length(effects) < MAX_EFFECTS()) {
             vector::push_back(effects, ae);
         };
     }

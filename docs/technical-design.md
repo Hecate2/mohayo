@@ -604,10 +604,24 @@ struct RoomMember {
 - **迟到成员仍会被 AoE 命中**：`select_targets` 的加权随机池过滤了 `arrive_delay`，但
   `ALL_ENEMY(4)` / `ALL_ALLY(7)` / `ROOM_ALL(8)` 三个分支只查 `alive`，与 §2.6.8「倒计时归零前
   不可被选为目标」冲突。修复：三个分支统一补 `arrive_delay == 0` 过滤。
-- **冗余清理**：engine 内的容量魔数（AP 上限 22 / 成员上限 10 / 效果上限 6 等）改用 `types` 常量
-  （此前 `types` 里 13 个容量常量零引用）；修 `character` 的 `E_CLASS_CAP=16`/`E_SELF_TRANSFER=16`、
-  `E_RACE_CAP=17`/`E_BAD_LEVELS=17` 错误码撞码；删死代码（`skill_registry::bump_room_id`、
-  `item::drop_entry`、`types::ae_set_*`、未引用的 `E_*`）；`aptos/README.md` 重写为 Move 现状。
+- **冗余清理**（§2.6.11 复审）：
+  - **魔数改常量**：`AP_CAP_BASE(22)` / `MAX_MEMBERS(10)` / `MAX_ENEMIES(10)` / `MAX_EFFECTS(6)` /
+    `MAX_SKILL_EFFECTS(4)` / `BASE_HP|ATTACK|MAGIC|SPEED` / `MAX_DUNGEONS(16)` 此前在 engine /
+    character / skill_registry 里各有一份硬编码字面量，现全部改读 `types` 常量。
+  - **删未落地的容量声明**：`MAX_ROOMS` / `MAX_PLAN` / `MAX_PLAN_SKILLS` / `MAX_SKILL_PER_CHAR` /
+    `MAX_DIFFICULTY` / `TIMEOUT_HP_PCT` / `MAX_AFFIX_MOD` 定义了但零引用，且代码里没有对应上限
+    （房间号其实无上限、行动计划长度无上限、超时用的是回合数不是生命百分比）。删掉以免「文档说有限、
+    代码没有」。`MAX_ROOMS` 想真正生效需要先解决房间回收，列为未落地项。
+  - **删死代码**：`skill_registry::bump_room_id`、`item::drop_entry`、`types::ae_op|ae_duration|
+    ae_magnitude|ae_source_id`（与 `active_effect_*` 重复的另一套）、`types::ae_set_duration|
+    ae_set_magnitude`（外部拿不到 `&mut ActiveEffect`）、`tests::skill_mana_bolt|skill_mana_gain`、
+    以及 13 个零引用的 `E_*`。
+  - **修撞码**：`character` 的 `E_CLASS_CAP`/`E_RACE_CAP` 原为 16/17，与 `E_SELF_TRANSFER`/
+    `E_BAD_LEVELS` 撞码，现改 20/21。其余 `E_*` 编号保持原值不动（有测试按数字断言）。
+    遗留：多处 `#[expected_failure(abort_code = N)]` 未带 `location=`，跨模块同码会误判，
+    建议后续统一补 `location`。
+  - `aptos/README.md` 原为 EVM 时代内容（56 技能 / `#[randomness]` / 13 测试 / ERC 术语），已重写为
+    Move 现状，并写明「`move compile` 与 `move test` 两条路径都要过」。
 
 ### 2.7.1 Move 道具层注记（数据驱动, 2026-09-02 实现）
 
