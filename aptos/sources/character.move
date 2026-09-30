@@ -229,26 +229,28 @@ module mohayo::character {
     }
 
     /// 玩家建号入口（§2.2 / §2.5.1 / §2.6）。
-    /// 玩家**只能自主决定职业**（`class_id = 0` 即「无职业」路线），种族与词条由链上随机掷出。
-    /// 首次建号额外发放**启动资金**与 3 次免费重掷（`created_before` 判定，按账号只发一次）。
+    /// 玩家**只能自主决定两件事**：职业（`class_id = 0` 即「无职业」路线）与**自选池技能**
+    /// （§2.6 创建流程：职业 1 个 / 无职业 3 个，人类各 +2；槽位外的会被截断）。
+    /// 种族与词条由链上随机掷出。首次建号额外发放**启动资金**与 3 次免费重掷
+    /// （`created_before` 判定，按账号只发一次）。
     /// 私有 `entry` + `#[randomness]`：掷骰用协议随机数，玩家无法预先挑选结果(§2.6.14)。
     #[randomness]
     entry fun create_character(
-        account: &signer, class_id: u8,
+        account: &signer, class_id: u8, skill_ids: vector<u64>,
     ) acquires ClassStore, RaceStore, AffixStore, CharacterStore {
-        do_create_character(account, class_id, randomness::u64_integer());
+        do_create_character(account, class_id, skill_ids, randomness::u64_integer());
     }
 
     /// 建号（测试/仿真入口）：注入种子，便于复现固定的种族/词条组合。
     #[test_only]
     public entry fun create_character_test(
-        account: &signer, class_id: u8, seed: u64,
+        account: &signer, class_id: u8, skill_ids: vector<u64>, seed: u64,
     ) acquires ClassStore, RaceStore, AffixStore, CharacterStore {
-        do_create_character(account, class_id, seed);
+        do_create_character(account, class_id, skill_ids, seed);
     }
 
     fun do_create_character(
-        account: &signer, class_id: u8, seed: u64,
+        account: &signer, class_id: u8, skill_ids: vector<u64>, seed: u64,
     ) acquires ClassStore, RaceStore, AffixStore, CharacterStore {
         let owner = signer::address_of(account);
         assert!(!economy::is_debtor(owner), E_DEBTOR);                        // §6.3 负债者不得创建角色
@@ -256,7 +258,7 @@ module mohayo::character {
         let r = rng::new(seed);
         let race = roll_random_race(&mut r);
         let tiers = roll_random_affix_tiers(&mut r);
-        let _id = mint_character(owner, class_id, race, &tiers, &vector::empty<u64>(), 1);
+        let _id = mint_character(owner, class_id, race, &tiers, &skill_ids, 1);
         // 首号福利：启动资金（免费重掷在下面同一个判定里发）
         if (grant_first_char_bonus(owner)) {
             economy::credit(owner, economy::STARTING_GRANT());

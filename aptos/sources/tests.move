@@ -2721,7 +2721,7 @@ module mohayo::tests {
         let paddr = std::signer::address_of(p);
         let bal0 = economy::balance_of(paddr);
         assert!(bal0 == 0, 1);
-        character::create_character_test(p, 2, 7);          // 剑士
+        character::create_character_test(p, 2, vector::empty(), 7);   // 剑士, 不选自选技
         let c1 = character::owner_latest_char(paddr);
         assert!(c1 != 0, 2);
         assert!(character::get_class_id(c1) == 2, 3);
@@ -2729,10 +2729,37 @@ module mohayo::tests {
         assert!(economy::balance_of(paddr) == bal0 + (economy::STARTING_GRANT() as i128), 5);
         assert!(character::free_rerolls(paddr) == 3, 6);    // 首号福利
         // 第二个角色：不再发启动资金，也不再有免费重掷
-        character::create_character_test(p, 3, 11);
+        character::create_character_test(p, 3, vector::empty(), 11);
         assert!(economy::balance_of(paddr) == bal0 + (economy::STARTING_GRANT() as i128), 7);
         assert!(character::free_rerolls(paddr) == 3, 8);
         assert!(character::owner_latest_char(paddr) != c1, 9);
+    }
+
+    /// §2.6: 建号时可以挑自选池技能 —— 进入 skill_ids, 且原样记进 self_select（重掷时要复用）。
+    #[test]
+    fun test_create_character_with_self_select() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let p = &std::account::create_account_for_test(@0xC005);
+        let paddr = std::signer::address_of(p);
+        character::create_character_test(p, 2, vector[830, 850], 7);   // 剑士 + 一闪/急救
+        let cid = character::owner_latest_char(paddr);
+        let ss = character::get_self_select(cid);
+        assert!(vector::length(&ss) == 2, 1);                          // 原样记下(重掷复用)
+        let skills = character::get_skill_ids(cid);
+        assert!(vector::contains(&skills, &830), 2);                    // 第一个自选技必然进槽
+    }
+
+    /// 自选槽只认白名单: 职业技不能当自选技(红线, §5)。
+    #[test]
+    #[expected_failure(abort_code = 4, location = mohayo::character)]   // E_SKILL_NOT_POOL
+    fun test_create_character_rejects_non_pool_skill() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let p = &std::account::create_account_for_test(@0xC006);
+        character::create_character_test(p, 2, vector[310], 7);        // 310 是剑士职业技
     }
 
     /// 无职业路线（class 0）能用：中性模板 + 3 个自选槽，且没有任何职业技。
@@ -2745,7 +2772,7 @@ module mohayo::tests {
         let p = &std::account::create_account_for_test(@0xC002);
         let paddr = std::signer::address_of(p);
         assert!(vector::length(&skill_registry::get_class_skill_ids(0)) == 0, 1);  // 无职业无职业技
-        character::create_character_test(p, 0, 3);
+        character::create_character_test(p, 0, vector::empty(), 3);
         let cid = character::owner_latest_char(paddr);
         assert!(character::get_class_id(cid) == 0, 2);
         let (_cls, _race, lvl, hp, _mhp, _atk, _mag, _spd, _skills, _rid) = character::get_character(cid);
@@ -2761,7 +2788,7 @@ module mohayo::tests {
         content_registration::register_all_content(a);
         let p = &std::account::create_account_for_test(@0xC003);
         economy::gm_charge_rescue(a, std::signer::address_of(p), 5);   // 先变负债
-        character::create_character_test(p, 1, 5);
+        character::create_character_test(p, 1, vector::empty(), 5);
     }
 
     /// 每账号角色数上限。
@@ -2774,7 +2801,7 @@ module mohayo::tests {
         let p = &std::account::create_account_for_test(@0xC004);
         let i = 0;
         while (i < 11) {
-            character::create_character_test(p, 1, (i + 1) * 13);
+            character::create_character_test(p, 1, vector::empty(), (i + 1) * 13);
             i = i + 1;
         };
     }
