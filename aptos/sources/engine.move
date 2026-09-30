@@ -525,6 +525,16 @@ module mohayo::engine {
          if (types::enemy_alive(e)) { 1 } else { 0 })
     }
 
+    /// 该敌人槽位由哪个模板实例化而来（测试/客户端展示用）
+    #[view]
+    public fun enemy_template(room_id: u64, enemy_index: u64): u64 acquires RoomStore {
+        let rs = borrow_global<RoomStore>(@mohayo);
+        assert!(table::contains(&rs.rooms, room_id), E_ROOM_NOT_FOUND);
+        let r = table::borrow(&rs.rooms, room_id);
+        assert!(enemy_index < vector::length(&r.enemies), E_BAD_INDEX);
+        types::enemy_template_id(vector::borrow(&r.enemies, enemy_index))
+    }
+
     #[view]
     public fun enemy_effect_count(room_id: u64, enemy_index: u64): u64 acquires RoomStore {
         let rs = borrow_global<RoomStore>(@mohayo);
@@ -870,7 +880,8 @@ module mohayo::engine {
         let strikes = if (targeting == 3) { types::skill_target_count(s) as u64 } else { 1 };
         let mut_strike = 0;
         while (mut_strike < strikes) {
-            let ts = select_targets(room, targeting, types::skill_target_count(s), actor_is_enemy, actor_idx);
+            let ts = select_targets(room, targeting, types::skill_target_count(s), actor_is_enemy, actor_idx,
+                types::skill_weight_mode(s));
             let tlen = vector::length(&ts);
             let k = 0;
             while (k < tlen) {
@@ -941,10 +952,19 @@ module mohayo::engine {
         // Support skills (heal/shield/buff) carry non-zero power too (e.g. heal
         // scales by it) but must NOT strike their own target with it.
         let s_kind = types::skill_kind(s);
-        if (power > 0 && (s_kind == 1 || s_kind == 2)) {
+        if (power > 0 && (s_kind == 1 || s_kind == 2 || s_kind == 5)) {
             let stat = if (s_kind == 2) {
                 if (actor_is_enemy) { types::enemy_magic(vector::borrow(&room.enemies, actor_idx)) }
                 else { types::member_magic(vector::borrow(&room.members, actor_idx)) }
+            } else if (s_kind == 5) {
+                // 双修(火枪子弹): power × (ATK + MAG) —— 随总属性成长, 不偏向单一属性
+                if (actor_is_enemy) {
+                    types::enemy_attack(vector::borrow(&room.enemies, actor_idx))
+                        + types::enemy_magic(vector::borrow(&room.enemies, actor_idx))
+                } else {
+                    types::member_attack(vector::borrow(&room.members, actor_idx))
+                        + types::member_magic(vector::borrow(&room.members, actor_idx))
+                }
             } else {
                 if (actor_is_enemy) { types::enemy_attack(vector::borrow(&room.enemies, actor_idx)) }
                 else { types::member_attack(vector::borrow(&room.members, actor_idx)) }
@@ -973,7 +993,7 @@ module mohayo::engine {
 
             let dur = types::effect_duration(eff_spec);
             let mag = types::effect_magnitude(eff_spec);
-            let _scope = types::effect_scope(eff_spec);
+            let scope = types::effect_scope(eff_spec);
 
             if (op == 9) { // HEAL
                 let heal_amount = if (power > 0) {
@@ -1007,13 +1027,30 @@ module mohayo::engine {
                     types::member_dispel(vector::borrow_mut(&mut room.members, t_idx));
                 };
             } else {
-                let ae = types::make_active_effect(op, dur, mag, types::skill_id(s));
-                if (t_is_enemy) {
+                // SHIELD(op4): kind=MAGIC 且 power>0 时护盾量走 power × 魔攻（魔力护盾，§5）；
+                // 否则用效果条的固定 magnitude（岩石壁垒等）。
+                let eff_mag = if (op == 4 && power > 0 && s_kind == 2) {
+                    let m_magic = if (actor_is_enemy) { types::enemy_magic(vector::borrow(&room.enemies, actor_idx)) }
+                                 else { types::member_magic(vector::borrow(&room.members, actor_idx)) };
+                    ((power * m_magic / 1000) as u16)
+                } else { mag };
+                let ae = types::make_active_effect(op, dur, eff_mag, types::skill_id(s));
+                // SCOPE_SELF(0) = 作用于施放者本人（致盲粉的「双刃」：自降命中换对敌压制）；
+                // 其余一律作用于选中的目标。
+                if (scope == 0) {
+                    if (actor_is_enemy) {
+                        types::enemy_add_effect(vector::borrow_mut(&mut room.enemies, actor_idx), ae);
+                    } else {
+                        types::member_add_effect(vector::borrow_mut(&mut room.members, actor_idx), ae);
+                    };
+                    event::emit(EffectApplied { room_id, is_enemy: actor_is_enemy, index: actor_idx, op, magnitude: eff_mag, duration: dur });
+                } else if (t_is_enemy) {
                     types::enemy_add_effect(vector::borrow_mut(&mut room.enemies, t_idx), ae);
+                    event::emit(EffectApplied { room_id, is_enemy: true, index: t_idx, op, magnitude: eff_mag, duration: dur });
                 } else {
                     types::member_add_effect(vector::borrow_mut(&mut room.members, t_idx), ae);
+                    event::emit(EffectApplied { room_id, is_enemy: false, index: t_idx, op, magnitude: eff_mag, duration: dur });
                 };
-                event::emit(EffectApplied { room_id, is_enemy: t_is_enemy, index: t_idx, op, magnitude: mag, duration: dur });
             };
             mut_e = mut_e + 1;
         };
@@ -1456,7 +1493,7 @@ module mohayo::engine {
 
     fun select_targets(
         room: &mut Room, targeting: u8, target_count: u8,
-        actor_is_enemy: bool, actor_idx: u64,
+        actor_is_enemy: bool, actor_idx: u64, weight_mode: u8,
     ): vector<Target> {
         let targets = vector::empty<Target>();
 
@@ -1587,28 +1624,57 @@ module mohayo::engine {
             } else {
                 targeting >= 1 && targeting <= 4
             };
+            // 候选池 + 权重（§4.2 权重随机，玩家仍不可指定目标）：
+            //   默认均匀(权重 1)；治疗/辅助可声明按**生命亏空**加权(weight=亏空+1，满血也可能被抽中)；
+            //   敌人可带**威胁权重**(weight=threat+1，Boss/召唤师更易被抽中但不保证)。
             let len = if (targets_enemies) { vector::length(&room.enemies) } else { vector::length(&room.members) };
+            let cand = vector::empty<u64>();
+            let wts = vector::empty<u64>();
+            let i = 0;
+            while (i < len) {
+                if (targets_enemies) {
+                    let e = vector::borrow(&room.enemies, i);
+                    if (types::enemy_alive(e)) {
+                        let w = if (weight_mode == 2) { (types::enemy_threat(e) as u64) + 1 } else { 1 };
+                        vector::push_back(&mut cand, i);
+                        vector::push_back(&mut wts, w);
+                    };
+                } else {
+                    let m = vector::borrow(&room.members, i);
+                    if (types::member_alive(m)) {
+                        let w = if (weight_mode == 1) {
+                            types::member_max_hp(m) - types::member_hp(m) + 1
+                        } else { 1 };
+                        vector::push_back(&mut cand, i);
+                        vector::push_back(&mut wts, w);
+                    };
+                };
+                i = i + 1;
+            };
+            // 多体技能抽 N 个**不重复**目标
             let count = if (targeting == 2 || targeting == 6) { target_count as u64 } else { 1 };
             let mut_c = 0;
-            while (mut_c < count && mut_c < len) {
-                let mut_tries = 0;
-                while (mut_tries < 20) {
-                    let mut_rng_t = mohayo::rng::new(room.rng_seed + mut_c + mut_tries + room.turn_id * 100);
-                    let idx = mohayo::rng::below(&mut mut_rng_t, len);
-                    room.rng_seed = room.rng_seed + 1;
-                    if (targets_enemies) {
-                        if (types::enemy_alive(vector::borrow(&room.enemies, idx))) {
-                            vector::push_back(&mut targets, types::make_target(true, idx));
-                            break;
-                        };
-                    } else {
-                        if (types::member_alive(vector::borrow(&room.members, idx))) {
-                            vector::push_back(&mut targets, types::make_target(false, idx));
-                            break;
-                        };
-                    };
-                    mut_tries = mut_tries + 1;
+            while (mut_c < count && vector::length(&cand) > 0) {
+                let total: u64 = 0;
+                let k = 0;
+                while (k < vector::length(&wts)) { total = total + *vector::borrow(&wts, k); k = k + 1; };
+                let mut_rng_t = mohayo::rng::new(room.rng_seed + mut_c * 7 + room.turn_id * 100);
+                let roll = mohayo::rng::below(&mut mut_rng_t, total);
+                room.rng_seed = room.rng_seed + 1;
+                let acc: u64 = 0;
+                let pick: u64 = 0;
+                let found = false;
+                let j = 0;
+                while (j < vector::length(&cand)) {
+                    acc = acc + *vector::borrow(&wts, j);
+                    if (roll < acc) { pick = j; found = true; break; };
+                    j = j + 1;
                 };
+                if (!found) { pick = vector::length(&cand) - 1; };
+                let idx = *vector::borrow(&cand, pick);
+                vector::push_back(&mut targets, types::make_target(targets_enemies, idx));
+                vector::remove(&mut cand, pick);
+                vector::remove(&mut wts, pick);
                 mut_c = mut_c + 1;
             };
         };
@@ -1616,6 +1682,15 @@ module mohayo::engine {
     }
 
     // ============================ test helpers ============================
+
+    /// 测试钩子: 直接设定某成员当前 HP(用于构造"残血"场景验证治疗加权目标)。
+    #[test_only]
+    public fun test_set_member_hp(account: &signer, room_id: u64, index: u64, hp: u64) acquires RoomStore {
+        let _ = account;
+        let rs = borrow_global_mut<RoomStore>(@mohayo);
+        let room = table::borrow_mut(&mut rs.rooms, room_id);
+        types::member_set_hp(vector::borrow_mut(&mut room.members, index), hp);
+    }
 
     #[test_only]
     public fun init_for_test(account: &signer) {

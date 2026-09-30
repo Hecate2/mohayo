@@ -1772,4 +1772,110 @@ module mohayo::tests {
         // 存活者(仅一人)通关时掷一次掉落 → +1
         assert!(item::balance_whole(item::ITEM_MANA_FIREWORK, addr) == before + 1, 2);
     }
+
+    // ===================== P2: 加权目标 / 池技语义 / 双修公式 =====================
+
+    /// 急救包扎(850) = 随机我方 + 按生命亏空加权(§4.2): 残血者更可能被抽中, 满血者也可能。
+    #[test]
+    fun test_heal_weighting_favors_wounded() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let split = 0;
+        let s = 0;
+        while (s < 5) {
+            let rid = s + 1;
+            engine::create_room(a, 1);                                    // D1 待机怪, 不会打断
+            engine::join_room(a, rid, 5000, 10, 1000, 100);               // 成员0(重伤)
+            engine::join_room(a, rid, 5000, 10, 1000, 100);               // 成员1(轻伤)
+            engine::start_combat(a, rid);
+            engine::test_set_member_hp(a, rid, 0, 1000);                  // 亏空 4000
+            engine::test_set_member_hp(a, rid, 1, 4999);                  // 亏空 1
+            engine::set_plan(a, rid, 0, vector[850]);
+            engine::set_plan(a, rid, 1, vector[850]);
+            engine::advance_turn(a, rid);
+            let (h0, _, _, _, _, _) = engine::member_state(rid, 0);
+            if (h0 > 1000) { split = split + 1; };                        // 第一口奶给了重伤者
+            s = s + 1;
+        };
+        assert!(split == 5, 1); // 权重 4001 : 2 → 五个房间全部先奶重伤者
+    }
+
+    /// 致盲粉(860) = 双刃: 单体随机敌人 + 自降命中(SCOPE_SELF)。
+    #[test]
+    fun test_blinding_powder_debuffs_self_and_enemy() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::create_room(a, 1);
+        engine::join_room_affixed(a, 1, 50000, 10, 10, 100, 3, 0, 0, 0); // 魔素-3 → 致盲粉 0 费
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[860]);
+        engine::advance_turn(a, 1);
+        assert!(engine::member_effect_count(1, 0) > 0, 1);              // 自己吃到 ACC_DOWN
+        let e0 = engine::enemy_effect_count(1, 0);
+        let e1 = engine::enemy_effect_count(1, 1);
+        assert!(e0 + e1 == 1, 2);                                       // 恰好一只敌人被压制
+    }
+
+    /// 岩石壁垒(870) = 自施小额固定盾; 魔力护盾(880) = 自施、盾量 power×魔攻。
+    #[test]
+    fun test_bulwark_and_magic_shield_are_self_only() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::create_room(a, 1);
+        engine::join_room_affixed(a, 1, 50000, 10, 500, 100, 5, 2, 0, 0); // 5 费 → 0
+        engine::join_room(a, 1, 50000, 10, 500, 100);
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[870, 880, 870, 880]);
+        engine::advance_turn(a, 1);                                    // 岩石壁垒
+        assert!(engine::member_effect_count(1, 0) == 1, 1);            // 只有自己
+        assert!(engine::member_effect_count(1, 1) == 0, 2);
+        let (op, dur, mag) = engine::member_effect(1, 0, 0);
+        assert!(op == 4 && dur == 3 && mag == 500, 3);                 // 固定小额
+        engine::advance_turn(a, 1);                                    // 魔力护盾
+        let (op2, _d2, mag2) = engine::member_effect(1, 0, 1);
+        assert!(op2 == 4, 4);
+        assert!(mag2 == ((900 * 500 / 1000) as u16), 5);               // power × 魔攻
+        assert!(engine::member_effect_count(1, 1) == 0, 6);            // 仍不波及队友
+    }
+
+    /// 敌人威胁权重(§4.2): 高威胁目标更容易被单体攻击抽中, 但小怪也可能吃刀。
+    #[test]
+    fun test_threat_weight_favors_high_threat_enemy() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        // 自建表: 高威胁(threat 9) vs 低威胁(threat 0), 都打不死
+        skill_registry::register_template(a, types::make_enemy_template(1, 9, 100000, 0, 0, 10, 0, 0, 0,
+            types::make_on_death_spawn(0, 0, 0)));
+        skill_registry::register_template(a, types::make_enemy_template(1, 0, 100000, 0, 0, 10, 0, 0, 0,
+            types::make_on_death_spawn(0, 0, 0)));
+        skill_registry::register_table(a, vector[
+            types::make_table_entry(36, 1000), types::make_table_entry(37, 1000)]); // 表 32
+        skill_registry::set_dungeon(a, 2, types::make_dungeon_config(32, 2, 20, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon_battles(a, 2, vector[types::make_battle_config(32, 2)]);
+        let boss_hits = 0;
+        let s = 0;
+        while (s < 10) {
+            let rid = s + 1;
+            engine::create_room(a, 2);
+            engine::join_room(a, rid, 50000, 10, 10, 100);
+            engine::start_combat(a, rid);
+            engine::set_plan(a, rid, 0, vector[820]);                  // 单体毒刃(WT_THREAT_ENEMY)
+            engine::advance_turn(a, rid);
+            // 按模板 id 判定谁挨打(索引顺序由实例化掷骰决定): 模板 36 = 高威胁
+            let e = 0;
+            while (e < 2) {
+                if (engine::enemy_template(rid, e) == 36) {
+                    let (hp, _, _, _, _, _) = engine::enemy_state(rid, e);
+                    if (hp < 100000) { boss_hits = boss_hits + 1; };
+                };
+                e = e + 1;
+            };
+            s = s + 1;
+        };
+        assert!(boss_hits >= 6, 1); // 权重 10:1 → 十个种子里高威胁目标至少被抽中 6 次
+    }
 }

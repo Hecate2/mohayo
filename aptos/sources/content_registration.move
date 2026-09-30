@@ -153,11 +153,12 @@ module mohayo::content_registration {
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 280, 0, 950, 0,
             vector::empty()), 2);                                                       // 330 魔法剑
         // --- 火枪手 ---
-        skill_registry::register_class_skill(account, ska(620, types::KIND_PHYSICAL(), 1, 3, 4, 0,
-            types::TGT_RAND_STRIKE_ENEMY(), types::WT_THREAT_ENEMY(), 3, 150, 0, 820, 0,
+        // 620/630 火枪子弹走双修公式 power × (ATK + MAG)/1000 → power 取原物理值之半, 保持同量级
+        skill_registry::register_class_skill(account, ska(620, types::KIND_HYBRID(), 1, 3, 4, 0,
+            types::TGT_RAND_STRIKE_ENEMY(), types::WT_THREAT_ENEMY(), 3, 75, 0, 820, 0,
             vector::empty(), (item::ITEM_LEAD_BULLET as u16), 3), 5);                   // 620 左轮弹雨(耗铅弹×3)
-        skill_registry::register_class_skill(account, ska(630, types::KIND_PHYSICAL(), 2, 1, 0, 0,
-            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 420, 0, 950, 0,
+        skill_registry::register_class_skill(account, ska(630, types::KIND_HYBRID(), 2, 1, 0, 0,
+            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 210, 0, 950, 0,
             vector[eff(types::OP_MANA_DELTA(), 40, 1, 0, 1000)], (item::ITEM_DRAGON_BULLET as u16), 1), 5); // 630 龙击弹(耗龙击弹×1, 命中产魔)
         // --- 黑魔法师 ---
         skill_registry::register_class_skill(account, sk(430,types::KIND_MAGIC(), 0, 1, 0, 0,
@@ -201,17 +202,20 @@ module mohayo::content_registration {
             types::FLAG_SUMMON_ALLY(), vector::empty(), types::make_summon_rule(35, 1, 0)), 4); // 530 替身人偶
         // --- 自选池 ---
         skill_registry::register_skill(account, sk(850,types::KIND_SUPPORT(), 0, 1, 2, 0,
-            types::TGT_MOST_WOUNDED_ALLY(), types::WT_HP_DEFICIT_ALLY(), 1, 500, 0, 1000, 0,
-            vector[eff(types::OP_HEAL(), 500, 1, 1, 1000)]));                          // 850 急救包扎
+            types::TGT_RAND_SINGLE_ALLY(), types::WT_HP_DEFICIT_ALLY(), 1, 500, 0, 1000, 0,
+            vector[eff(types::OP_HEAL(), 500, 1, 1, 1000)]));                          // 850 急救包扎(随机我方, 按血量亏空加权; 确定性最重伤者留给天使圣愈之光)
+        // 860 致盲粉(双刃): 命中单体随机敌人 + **同时自降命中**(SCOPE_SELF 条) —— 大幅(450)>黑幕(250)>尘幕(150)
         skill_registry::register_skill(account, sk(860,types::KIND_SUPPORT(), 1, 0, 3, 0,
-            types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_ACC_DOWN(), 300, 2, 3, 1000)]));                      // 860 致盲粉
+            types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 0, 0, 1000, 0,
+            vector[eff(types::OP_ACC_DOWN(), 450, 2, 0, 1000),
+                   eff(types::OP_ACC_DOWN(), 450, 2, 1, 1000)]));                      // 860 致盲粉
         skill_registry::register_skill(account, sk(870,types::KIND_SUPPORT(), 2, 0, 5, 0,
-            types::TGT_ALL_ALLY(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_SHIELD(), 500, 3, 2, 1000)]));                        // 870 岩石壁垒
-        skill_registry::register_skill(account, sk(880,types::KIND_SUPPORT(), 2, 0, 5, 0,
-            types::TGT_ALL_ALLY(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
-            vector[eff(types::OP_SHIELD(), 850, 4, 2, 1000)]));                        // 880 魔力护盾(吃魔攻)
+            types::TGT_SELF(), types::WT_UNIFORM(), 1, 0, 0, 1000, 0,
+            vector[eff(types::OP_SHIELD(), 500, 3, 0, 1000)]));                        // 870 岩石壁垒(自施小额护盾)
+        // 880 魔力护盾(自施): 护盾量 = power × 魔攻/1000 —— 法系越强盾越厚(与岩石壁垒的小额固定互补)
+        skill_registry::register_skill(account, sk(880,types::KIND_MAGIC(), 2, 0, 5, 0,
+            types::TGT_SELF(), types::WT_UNIFORM(), 1, 900, 0, 1000, 0,
+            vector[eff(types::OP_SHIELD(), 0, 4, 0, 1000)]));                          // 880 魔力护盾(吃魔攻)
         skill_registry::register_skill(account, sk(890,types::KIND_MAGIC(), 3, 1, 8, 0,
             types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 220, 0, 900, 0,
             vector::empty()));                                                          // 890 龙息

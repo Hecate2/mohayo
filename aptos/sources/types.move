@@ -7,6 +7,8 @@ module mohayo::types {
     public fun KIND_MAGIC(): u8 { 2 }
     public fun KIND_SUPPORT(): u8 { 3 }
     public fun KIND_SUMMON(): u8 { 4 }
+    /// 双修型伤害公式: 伤害按 (物攻 + 魔攻) 之和结算(火枪手子弹, content-design §4.5)
+    public fun KIND_HYBRID(): u8 { 5 }
 
     // ---- targeting ----
     public fun TGT_RAND_SINGLE_ENEMY(): u8 { 1 }

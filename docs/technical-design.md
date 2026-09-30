@@ -474,6 +474,28 @@ struct RoomMember {
 - 初始掉落表（D1–D9，初值）：D1 魔素礼花；D2–D3 铅弹/疗伤药水；D4–D5 龙击弹/烟幕弹/生命之泉；
   D6–D7 生命之泉/挑战券/不死鸟之羽；D8–D9 挑战券/不死鸟之羽/命运骰子/重生卷轴。
 
+### 2.6.6 Move 加权目标 / 效果作用域 / 双修与护盾缩放注记（2026-09-30 实现）
+
+对齐 `gameplay-design.md` §4.2 与 `content-design.md` §5；此前 `weight_mode` 与 `effect.scope` 两个字段
+**注册层写了、引擎从未读取**，导致治疗是纯随机、敌人威胁无意义、致盲粉的"双刃"无自降。
+
+- **权重随机**（`engine::select_targets`）：候选池按 `skill.weight_mode` 赋权后加权抽取，
+  **多体技能抽 N 个不重复目标**：
+  - `WT_UNIFORM(0)` → 权重 1（默认，等价均匀）；
+  - `WT_HP_DEFICIT_ALLY(1)` → 权重 = `maxHp − hp + 1`（残血更容易被奶，**满血也可能被抽中**，§4.2 原文）；
+  - `WT_THREAT_ENEMY(2)` → 权重 = `threat + 1`（Boss/召唤师更易吃刀但不保证，小怪也可能中）。
+- **效果作用域**（`effect.scope`）：`SCOPE_SELF(0)` 作用于**施放者本人**，其余作用于选中目标。
+  这让「单体 + 自减益」这类双刃技能可在一条效果表内表达——致盲粉（860）=
+  `RAND_SINGLE_ENEMY` + 两条 `ACC_DOWN 450`（一条 `SCOPE_SELF`、一条 `SCOPE_TARGET`）。
+- **护盾缩放**：`OP_SHIELD` 在 `kind == MAGIC 且 power > 0` 时，护盾量 = `power × 魔攻 / 1000`
+  （魔力护盾 880）；否则用效果条的固定 `magnitude`（岩石壁垒 870）。
+- **双修伤害公式**：新增 `KIND_HYBRID(5)` —— 伤害按 `power × (ATK + MAG) / 1000` 结算（火枪手子弹：
+  左轮弹雨 620 / 龙击弹 630，power 取原物理值之半以保持同量级）。
+- **池技语义对齐**（§5）：急救包扎 850 由"确定性最重伤者"改为 `RAND_SINGLE_ALLY` + HP 亏空加权
+  （确定性只留给天使种族技圣愈之光 760 的 `TGT_MOST_WOUNDED_ALLY`）；岩石壁垒 870 由"全体 ally"
+  改回**自施**小额固定盾；魔力护盾 880 由"全体固定 850"改回**自施**且吃魔攻。
+- 新增视图 `enemy_template(room_id, index)`（测试/展示用：该槽位由哪个模板实例化）。
+
 ### 2.7.1 Move 道具层注记（数据驱动, 2026-09-02 实现）
 
 - **每种道具 = item_type + ItemDef**（name/group/combat_usable/effect_kind/effect_value/decimals），**无 per-type struct**。
