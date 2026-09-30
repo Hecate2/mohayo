@@ -52,6 +52,12 @@ module mohayo::engine {
     /// 房间进入终态后的**保留窗口**(秒)：窗口内仍可读结算结果，过后任何人可回收(§2.6.12)
     const DEFAULT_RECLAIM_DELAY: u64 = 3600;
 
+    // ---- 房间结果(room_result) ----
+    public fun RESULT_NONE(): u8 { 0 }     // 未结算
+    public fun RESULT_VICTORY(): u8 { 1 }  // 通关整座地下城
+    public fun RESULT_DEFEAT(): u8 { 2 }   // 全队被击败 / 超时清退 / 停摆过期
+    public fun RESULT_RETREAT(): u8 { 3 }  // 队长在间歇期发起全员逃离（提前收工，不算通关）
+
     // ---- 周常变异种类(§3.4「只采纳便宜实现」) ----
     public fun MUT_NONE(): u8 { 0 }
     public fun MUT_MANA(): u8 { 1 }   // 魔素丰潮: 每回合魔素增量 +value
@@ -549,9 +555,10 @@ module mohayo::engine {
         assert!(room.phase == 3, E_NOT_INTERMISSION);
         ensure_leader(room, room_id);
         assert!(can_advance(room, addr), E_NOT_LEADER);
-        settle_rewards(room, room_id);
-        release_all(room, true); // 全员逃离 = 提前结束关卡, 存活者按通关记履历
-        mark_settled(room, 1);
+        settle_rewards(room, room_id);   // 奖励照发(§6.1)
+        // §2.6.14: 打到一半全员逃离**不算通关** —— 原先记 cleared=true 会把履历刷高
+        release_all(room, false);
+        mark_settled(room, RESULT_RETREAT());
         event::emit(RunRetreated { room_id });
     }
 
@@ -772,7 +779,7 @@ module mohayo::engine {
 
     #[view]
     public fun room_result(room_id: u64): u8 acquires RoomStore {
-        // 0 = unresolved, 1 = victory, 2 = defeat/evicted
+        // 0 = 未结算, 1 = 通关, 2 = 败北/清退, 3 = 全员逃离(提前收工, §2.6.14)
         let rs = borrow_global<RoomStore>(@mohayo);
         assert!(table::contains(&rs.rooms, room_id), E_ROOM_NOT_FOUND);
         table::borrow(&rs.rooms, room_id).result
@@ -1975,7 +1982,7 @@ module mohayo::engine {
     fun settle_timeout(room: &mut Room, room_id: u64) {
         charge_rescue_fees(room, room_id); // 超时按全队被击败处理(§6.3)
         release_all(room, false);
-        mark_settled(room, 2);
+        mark_settled(room, RESULT_DEFEAT());
         event::emit(DefeatEvt { room_id });
     }
 
@@ -1999,7 +2006,7 @@ module mohayo::engine {
         if (!any_player_alive && player_count > 0) {
             charge_rescue_fees(room, room_id); // 全队被击败 → 全员倒扣救援费(可负)
             release_all(room, false);          // 释放角色锁 + 履历(未通关)
-            mark_settled(room, 2);
+            mark_settled(room, RESULT_DEFEAT());
             event::emit(DefeatEvt { room_id });
             return;
         };
@@ -2020,7 +2027,7 @@ module mohayo::engine {
             } else {
                 settle_rewards(room, room_id); // 存活者按随机权重分配奖池(§6.1)
                 release_all(room, true);       // 释放角色锁 + 履历(通关)
-                mark_settled(room, 1);
+                mark_settled(room, RESULT_VICTORY());
                 event::emit(VictoryEvt { room_id });
             };
             return;

@@ -1592,12 +1592,37 @@ module mohayo::tests {
         let bb = economy::balance_of(baddr);
         engine::leader_retreat(a, 1);                       // 队长全员逃离(§6.1)
         assert!(engine::room_phase(1) == 2, 3);
-        assert!(engine::room_result(1) == 1, 4);
+        assert!(engine::room_result(1) == engine::RESULT_RETREAT(), 4);  // §2.6.14: 逃离 ≠ 通关
         assert!(engine::reward_pool(1) == 0, 5);
         let da = economy::balance_of(aaddr) - ba;
         let db = economy::balance_of(baddr) - bb;
         assert!(da + db == (pool as i128), 6);              // 账目守恒
         assert!(da > 0 && db > 0, 7);                       // 存活者都分到
+    }
+
+    /// §2.6.14: 打到一半全员逃离**不计通关** —— 履历只记 runs=1, clears 与 best 保持 0。
+    #[test]
+    fun test_retreat_does_not_count_as_clear() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let addr = std::signer::address_of(a);
+        character::gm_mint_at_level(a, addr, 2, 0, vector[0, 0, 0, 0], vector[820], 300);
+        let cid = character::owner_latest_char(addr);
+        engine::create_room(a, 1);
+        engine::join_room_as_char(a, 1, cid);
+        engine::start_combat_test(a, 1);
+        engine::set_plan(a, 1, 0, vector[820]);
+        let guard = 0;
+        while (guard < 200 && engine::room_phase(1) == 1) {
+            step(a, 1);
+            guard = guard + 1;
+        };
+        assert!(engine::room_phase(1) == 3, 1);                 // 第一场打完, 进间歇期
+        engine::leader_retreat(a, 1);
+        assert!(engine::room_result(1) == engine::RESULT_RETREAT(), 2);
+        let (runs, clears, best) = character::get_history(cid);
+        assert!(runs == 1 && clears == 0 && best == 0, 3);
     }
 
     #[test]
