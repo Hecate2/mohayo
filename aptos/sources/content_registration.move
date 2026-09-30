@@ -508,31 +508,31 @@ module mohayo::content_registration {
         skill_registry::register_table(account, vector[te(33, 1000)]);                        // 31 D9b4 皇帝备用机体
 
         // ===================== DUNGEONS D1..D10 =====================
-        // make_dungeon_config(table, enemy_count, mana/turn, reward_base, entry_fee, rescue_fee, turn_interval, battles)
-        skill_registry::set_dungeon(account, 1, dng(1, 2, 2, 0, 0, 10, BATTLE_TURN_CAP, 4));   // D1 灰烬矿坑(免费; mana 2 保证每回合挥镐)
+        // make_dungeon_config(table, enemy_count, mana/turn, entry_fee, rescue_fee, turn_interval, battles)
+        skill_registry::set_dungeon(account, 1, dng(1, 2, 2, 0, 10, BATTLE_TURN_CAP, 4));   // D1 灰烬矿坑(免费; mana 2 保证每回合挥镐)
         skill_registry::set_dungeon_battles(account, 1, vector[bt(1, 2), bt(2, 2), bt(3, 2), bt(4, 1)]);
-        skill_registry::set_dungeon(account, 2, dng(5, 3, 3, 0, 5, 15, BATTLE_TURN_CAP, 3));   // D2 遗弃回廊
+        skill_registry::set_dungeon(account, 2, dng(5, 3, 3, 5, 15, BATTLE_TURN_CAP, 3));   // D2 遗弃回廊
         skill_registry::set_dungeon_battles(account, 2, vector[bt(5, 2), bt(6, 2), bt(7, 1)]);
-        skill_registry::set_dungeon(account, 3, dng(8, 3, 3, 0, 10, 25, BATTLE_TURN_CAP, 3));  // D3 沉眠圣所
+        skill_registry::set_dungeon(account, 3, dng(8, 3, 3, 10, 25, BATTLE_TURN_CAP, 3));  // D3 沉眠圣所
         skill_registry::set_dungeon_battles(account, 3, vector[bt(8, 3), bt(9, 3), bt(10, 1)]);
-        skill_registry::set_dungeon(account, 4, dng(11, 3, 4, 0, 15, 30, BATTLE_TURN_CAP, 3)); // D4 熔铁深渊
+        skill_registry::set_dungeon(account, 4, dng(11, 3, 4, 15, 30, BATTLE_TURN_CAP, 3)); // D4 熔铁深渊
         skill_registry::set_dungeon_battles(account, 4, vector[bt(11, 3), bt(12, 2), bt(13, 2)]);
-        skill_registry::set_dungeon(account, 5, dng(14, 3, 4, 0, 20, 40, BATTLE_TURN_CAP, 3)); // D5 机神前哨(单人攻关门)
+        skill_registry::set_dungeon(account, 5, dng(14, 3, 4, 20, 40, BATTLE_TURN_CAP, 3)); // D5 机神前哨(单人攻关门)
         skill_registry::set_dungeon_battles(account, 5, vector[bt(14, 3), bt(15, 3), bt(16, 1)]);
         // D5 b3 变体掷骰: 基准「督军单挑」80% / 混沌变体「督军+魔像+哨兵」20% (§8.2)。
         // §2.6.11 复审: 此前只登记了 weight=200 的变体、没有基准条目, 而 spawn_battle 把非空
         // variants 当作完整候选集 → 混沌变体实际 100%, 与文档「20% 权重切换」不符。
         skill_registry::add_battle_variant(account, 5, 3, 16, 800);   // 基准(督军单挑) 80%
         skill_registry::add_battle_variant(account, 5, 3, 17, 200);   // 混沌变体 20%
-        skill_registry::set_dungeon(account, 6, dng(18, 3, 5, 0, 25, 50, BATTLE_TURN_CAP, 3)); // D6 亡者回廊深处
+        skill_registry::set_dungeon(account, 6, dng(18, 3, 5, 25, 50, BATTLE_TURN_CAP, 3)); // D6 亡者回廊深处
         skill_registry::set_dungeon_battles(account, 6, vector[bt(18, 3), bt(19, 3), bt(20, 1)]);
-        skill_registry::set_dungeon(account, 7, dng(21, 3, 6, 0, 30, 60, BATTLE_TURN_CAP, 3)); // D7 熔渊龙巢
+        skill_registry::set_dungeon(account, 7, dng(21, 3, 6, 30, 60, BATTLE_TURN_CAP, 3)); // D7 熔渊龙巢
         skill_registry::set_dungeon_battles(account, 7, vector[bt(21, 3), bt(22, 2), bt(23, 1)]);
-        skill_registry::set_dungeon(account, 8, dng(24, 3, 6, 0, 35, 70, BATTLE_TURN_CAP, 3)); // D8 虚空裂隙
+        skill_registry::set_dungeon(account, 8, dng(24, 3, 6, 35, 70, BATTLE_TURN_CAP, 3)); // D8 虚空裂隙
         skill_registry::set_dungeon_battles(account, 8, vector[bt(24, 3), bt(25, 3), bt(26, 1)]);
         // D9 机神帝座 —— 4 战; b3 炉毁 60% 召皇帝, b4 变体 70% 宝箱 / 30% 皇帝备用机体
         // (组队标定 2026-09-02: 由 85/15 上调皇帝路, 防顶配 duo/trio 100% 稳过, 贴 §3.1 60~90% 上限)
-        skill_registry::set_dungeon(account, 9, dng(27, 3, 7, 0, 40, 100, BATTLE_TURN_CAP, 4));
+        skill_registry::set_dungeon(account, 9, dng(27, 3, 7, 40, 100, BATTLE_TURN_CAP, 4));
         skill_registry::set_dungeon_battles(account, 9, vector[bt(27, 4), bt(28, 4), bt(29, 3), bt(30, 1)]);
         skill_registry::add_battle_variant(account, 9, 4, 30, 700);   // 王座宝箱
         skill_registry::add_battle_variant(account, 9, 4, 31, 300);   // 皇帝备用机体
@@ -568,7 +568,7 @@ module mohayo::content_registration {
             vector[60, 30, 12, 898], vector[1, 1, 1, 0]);
 
         // D10 超级难关 —— 占位(单场宝箱怪=待机, 砍开即胜), 后续配置
-        skill_registry::set_dungeon(account, 10, dng(30, 1, 5, 0, 50, 200, BATTLE_TURN_CAP, 1));
+        skill_registry::set_dungeon(account, 10, dng(30, 1, 5, 50, 200, BATTLE_TURN_CAP, 1));
 
         // ===================== ITEMS (道具层: 数据驱动, decimals=18) =====================
         // 上线后新增道具: GM 调 item::register_item 一笔交易即可, 无需发布新代码。
@@ -608,8 +608,8 @@ module mohayo::content_registration {
 
     fun te(id: u64, w: u16): types::TableEntry { types::make_table_entry(id, w) }
     fun bt(table_id: u64, count: u64): types::BattleConfig { types::make_battle_config(table_id, count) }
-    fun dng(table: u64, ecount: u64, mana: u64, rb: u16, entry: u64, rescue: u64,
+    fun dng(table: u64, ecount: u64, mana: u64, entry: u64, rescue: u64,
             turns: u64, battles: u8): types::DungeonConfig {
-        types::make_dungeon_config(table, ecount, mana, rb, entry, rescue, turns, battles)
+        types::make_dungeon_config(table, ecount, mana, entry, rescue, turns, battles)
     }
 }

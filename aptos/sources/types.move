@@ -167,7 +167,6 @@ module mohayo::types {
         table_id: u64,
         enemy_count: u64,
         mana_per_turn: u64,
-        reward_base: u16,
         entry_fee: u64,
         rescue_fee: u64,
         turn_interval: u64,
@@ -299,10 +298,10 @@ module mohayo::types {
     }
 
     public fun make_dungeon_config(
-        table_id: u64, enemy_count: u64, mana_per_turn: u64, reward_base: u16,
+        table_id: u64, enemy_count: u64, mana_per_turn: u64,
         entry_fee: u64, rescue_fee: u64, turn_interval: u64, battles: u8,
     ): DungeonConfig {
-        DungeonConfig { table_id, enemy_count, mana_per_turn, reward_base,
+        DungeonConfig { table_id, enemy_count, mana_per_turn,
                         entry_fee, rescue_fee, turn_interval, battles }
     }
 
@@ -356,7 +355,6 @@ module mohayo::types {
     public fun dungeon_table_id(d: &DungeonConfig): u64 { d.table_id }
     public fun dungeon_enemy_count(d: &DungeonConfig): u64 { d.enemy_count }
     public fun dungeon_mana_per_turn(d: &DungeonConfig): u64 { d.mana_per_turn }
-    public fun dungeon_reward_base(d: &DungeonConfig): u16 { d.reward_base }
     public fun dungeon_entry_fee(d: &DungeonConfig): u64 { d.entry_fee }
     public fun dungeon_rescue_fee(d: &DungeonConfig): u64 { d.rescue_fee }
     public fun dungeon_turn_interval(d: &DungeonConfig): u64 { d.turn_interval }
