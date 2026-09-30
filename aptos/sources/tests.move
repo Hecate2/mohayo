@@ -1,5 +1,6 @@
 #[test_only]
 module mohayo::tests {
+    use aptos_framework::randomness;
     use std::signer;
     use std::vector;
     use mohayo::types;
@@ -663,7 +664,7 @@ module mohayo::tests {
         setup_full_dungeon(a);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 500, 100, 50, 30);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         assert!(engine::room_phase(1) == 1, 1);
         assert!(engine::enemy_count(1) == 3, 2);
     }
@@ -675,7 +676,7 @@ module mohayo::tests {
         setup_full_dungeon(a);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 500, 100, 50, 30);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[1]);
         step(a, 1);
         assert!(engine::room_turn(1) == 2, 1);
@@ -696,7 +697,7 @@ module mohayo::tests {
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 500, 200, 50, 30);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         let (hp1, _mh, _a, _m, _s, _alive) = engine::enemy_state(1, 0);
         assert!(hp1 == 1000, 1);
         engine::set_plan(a, 1, 0, vector[1]);
@@ -724,7 +725,7 @@ module mohayo::tests {
         skill_registry::set_dungeon(a, 1, types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1));
         engine::create_room(a, 1);
         engine::join_room(a, 1, 2000, 200, 100, 30);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[1]);
         step(a, 1); // r1: 直伤 30×200/1000=6 → 994; DOT dur3 挂上
         let (h1, _, _, _, _, _) = engine::enemy_state(1, 0);
@@ -763,7 +764,7 @@ module mohayo::tests {
         skill_registry::set_dungeon(a, 1, types::make_dungeon_config(1, 1, 10, 100, 0, 0, 0, 1));
         engine::create_room(a, 1);
         engine::join_room(a, 1, 2000, 200, 100, 30);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[1, 2]); // 鹰眼 → 攻击 循环
         step(a, 1);              // r1: 鹰眼
         step(a, 1);              // r2: 攻击(acc300) 因 GUAR_NEXT 必中 → 100×200/1000=20
@@ -790,7 +791,7 @@ module mohayo::tests {
         engine::create_room(a, 1);
         engine::join_room(a, 1, 2000, 10, 10, 30); // 成员0(非嘲讽者)
         engine::join_room(a, 1, 2000, 10, 10, 30); // 成员1(嘲讽者)
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[]); // 成员0 空过
         engine::set_plan(a, 1, 1, vector[2]); // 成员1 每回合同步施放嘲讽
         let guard = 0;
@@ -819,7 +820,7 @@ module mohayo::tests {
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 500, 200, 50, 30);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[2]);
         // First turn: enemy uses stun on member
         step(a, 1);
@@ -854,7 +855,7 @@ module mohayo::tests {
         engine::create_room(a, 1);
         // Very high attack so uncapped would be > 100
         engine::join_room(a, 1, 500, 1000, 50, 30);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         let (hp1, _mh, _a, _m, _s, _alive) = engine::enemy_state(1, 0);
         engine::set_plan(a, 1, 0, vector[1]);
         step(a, 1);
@@ -882,7 +883,7 @@ module mohayo::tests {
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 10000, 100, 50, 30);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         let (hp1, _mh, _a, _m, _s, _alive) = engine::enemy_state(1, 0);
         // Plan: self-buff then attack
         engine::set_plan(a, 1, 0, vector[2, 1]);
@@ -913,7 +914,7 @@ module mohayo::tests {
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 10000, 100, 50, 30);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         let (hp1, _mh, _a, _m, _s, _alive) = engine::enemy_state(1, 0);
         // Plan: debuff enemy then attack
         engine::set_plan(a, 1, 0, vector[2, 1]);
@@ -943,7 +944,7 @@ module mohayo::tests {
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 500, 100, 50, 30);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         // Plan: shield self, then attack
         engine::set_plan(a, 1, 0, vector[1, 2]);
         step(a, 1);
@@ -991,7 +992,7 @@ module mohayo::tests {
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 1000, 100, 50, 30);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         let (hp_before, _mh, _a, _m, _s, _alive) = engine::member_state(1, 0);
         // Turn 1: sacrifice 200 HP → HP drops to 800
         engine::set_plan(a, 1, 0, vector[1]);
@@ -1021,7 +1022,7 @@ module mohayo::tests {
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 500, 100, 50, 30);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[1]);
         step(a, 1);
         // Enemy should be dead, victory
@@ -1044,7 +1045,7 @@ module mohayo::tests {
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 10, 10, 10, 10);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         // Member with 10 HP vs enemy with 99999 attack
         // Member attacks first (higher speed?), then enemy attacks and kills
         engine::set_plan(a, 1, 0, vector[1]);
@@ -1076,14 +1077,14 @@ module mohayo::tests {
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 500, 100, 50, 30);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         // Battle 1: kill weak enemy
         engine::set_plan(a, 1, 0, vector[1]);
         step(a, 1);
         // Should be in intermission (phase 3)
         assert!(engine::room_phase(1) == 3, 1);
         // Advance to battle 2
-        engine::advance_battle(a, 1);
+        engine::advance_battle_test(a, 1);
         assert!(engine::room_phase(1) == 1, 2);
         let (bi, tb) = engine::room_battle(1);
         assert!(bi == 2, 3);
@@ -1111,7 +1112,7 @@ module mohayo::tests {
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 500, 100, 50, 30);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         // Turn 1: mana = 5 (from mana_per_turn), costs 3, should work
         let mana1 = engine::room_mana(1);
         assert!(mana1 == 5, 1);
@@ -1140,7 +1141,7 @@ module mohayo::tests {
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 10000, 100, 50, 30);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         // AI picks a skill uniformly at random each turn. With a [attack, stun] cycle the
         // enemy must use stun (the only effect-producer) at least once across a 10-turn
         // window (P(never) = 1/2^10), proving selection is randomized, not fixed-order.
@@ -1164,7 +1165,7 @@ module mohayo::tests {
         setup_full_dungeon(a);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 500, 100, 50, 30);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[1, 1, 1]);
         engine::cancel_plan(a, 1, 0);
         // After cancel, member has no plan so does nothing
@@ -1202,7 +1203,7 @@ module mohayo::tests {
         skill_registry::set_dungeon(a, 1, dungeon);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 500, 100, 50, 30);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[1]);
         step(a, 1);
         // Victory: reward pool should be 0 (distributed)
@@ -1239,7 +1240,7 @@ module mohayo::tests {
         // Create room, join, fight
         engine::create_room(a, 1);
         engine::join_room(a, 1, 1000, 200, 100, 30);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
 
         // Run 10 turns of combat
         let turn = 0;
@@ -1274,7 +1275,7 @@ module mohayo::tests {
         engine::create_room(a, 1);
         engine::join_room(a, 1, 500, 100, 50, 30);
         engine::join_room(a, 1, 400, 150, 80, 25);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         assert!(engine::member_count(1) == 2, 1);
         // Both members attack
         engine::set_plan(a, 1, 0, vector[1]);
@@ -1297,7 +1298,7 @@ module mohayo::tests {
         // D1 = free mining; all stones are idle (AI 1), they must never hurt the player.
         engine::create_room(a, 1);
         engine::join_room(a, 1, 5000, 200, 100, 30);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         let (hp0, max_hp, _atk, _mag, _spd, _alive) = engine::member_state(1, 0);
         assert!(hp0 == max_hp, 1);
         // No plan: player idles too. Advance a few turns below the D1 turn budget (8).
@@ -1346,7 +1347,7 @@ module mohayo::tests {
         // Room id is auto-incremented (1 for the first room), independent of difficulty.
         engine::create_room(a, 9);
         engine::join_room(a, 1, 90000, 3000, 3000, 2000);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         assert!(engine::room_phase(1) == 1, 1);
         assert!(engine::enemy_count(1) == 4, 2);
     }
@@ -1359,7 +1360,7 @@ module mohayo::tests {
         // D5 battle 1: 3 地狱猎犬. Room id = 1 (first auto-incremented id).
         engine::create_room(a, 5);
         engine::join_room(a, 1, 50000, 1500, 1200, 1000);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         assert!(engine::room_phase(1) == 1, 1);
         assert!(engine::enemy_count(1) == 3, 2);
     }
@@ -1374,7 +1375,7 @@ module mohayo::tests {
         // guarantee is fine-tuned later by the Phase-5 sim harness.)
         engine::create_room(a, 1);
         engine::join_room(a, 1, 4000, 400, 400, 30);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         assert!(engine::enemy_count(1) == 2, 1);
         engine::set_plan(a, 1, 0, vector[820]);
         let guard = 0;
@@ -1440,7 +1441,7 @@ module mohayo::tests {
         let before = economy::balance_of(addr);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 4000, 100000, 100, 100);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[820]);
         run_room(a, 1);
         assert!(engine::room_result(1) == 1, 1);      // 通关 D1 全部四场
@@ -1458,7 +1459,7 @@ module mohayo::tests {
         let after_entry = economy::balance_of(addr);
         assert!(after_entry == 1000000000 - 5, 1);
         engine::join_room(a, 1, 1, 1, 1, 1);                // 1 HP 玻璃人
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[820]);
         run_room(a, 1);
         assert!(engine::room_result(1) == 2, 2);            // 败北 / 超时
@@ -1488,7 +1489,7 @@ module mohayo::tests {
         engine::create_room(a, 2);
         let after_entry = economy::balance_of(addr);
         engine::join_room(a, 1, 100000, 1, 1, 1);           // 肉盾: 保证活到逃离完成
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[820]);
         engine::request_escape(a, 1, 0);
         assert!(engine::member_escape_delay(1, 0) == 3, 1);
@@ -1526,7 +1527,7 @@ module mohayo::tests {
         engine::create_room(a, 1);
         engine::join_room(a, 1, 4000, 100000, 100, 100);
         engine::join_room(b, 1, 4000, 100000, 100, 100);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[820]);
         engine::set_plan(b, 1, 1, vector[820]);
         let guard = 0;
@@ -1539,7 +1540,7 @@ module mohayo::tests {
         engine::request_escape(a, 1, 0);                    // 间歇期 → 立即离场
         assert!(engine::member_escaped(1, 0), 3);
         assert!(engine::room_leader(1) == std::signer::address_of(b), 4); // 自动继任
-        engine::advance_battle(b, 1);                       // 新队长可推进下一场
+        engine::advance_battle_test(b, 1);                       // 新队长可推进下一场
         assert!(engine::room_phase(1) == 1, 5);
     }
 
@@ -1552,7 +1553,7 @@ module mohayo::tests {
         engine::create_room(a, 2);
         engine::join_room(a, 1, 1, 1, 1, 1);                // 队长: 1 HP
         engine::join_room(b, 1, 100000, 1, 1, 1);           // 肉盾(后加入)
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[820]);
         engine::set_plan(b, 1, 1, vector[820]);
         let aaddr = std::signer::address_of(a);
@@ -1576,7 +1577,7 @@ module mohayo::tests {
         engine::create_room(a, 1);
         engine::join_room(a, 1, 4000, 100000, 100, 100);
         engine::join_room(b, 1, 4000, 100000, 100, 100);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[820]);
         engine::set_plan(b, 1, 1, vector[820]);
         let guard = 0;
@@ -1609,7 +1610,7 @@ module mohayo::tests {
         engine::create_room(a, 1);
         engine::join_room(a, 1, 4000, 100000, 100, 100);
         engine::join_room(b, 1, 4000, 100000, 100, 100);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[820]);
         engine::set_plan(b, 1, 1, vector[820]);
         let guard = 0;
@@ -1626,7 +1627,7 @@ module mohayo::tests {
     fun step(who: &signer, room_id: u64) {
         let t = aptos_framework::timestamp::now_seconds();
         aptos_framework::timestamp::update_global_time_for_test_secs(t + 2);
-        engine::advance_turn(who, room_id, engine::room_turn(room_id));
+        engine::advance_turn_test(who, room_id, engine::room_turn(room_id));
     }
 
     /// 初始化 aptos_framework 时间戳(入场次数门控读 timestamp::now_seconds)
@@ -1642,7 +1643,7 @@ module mohayo::tests {
         while (guard < 400) {
             let ph = engine::room_phase(room_id);
             if (ph == 1) { step(a, room_id); }
-            else if (ph == 3) { engine::advance_battle(a, room_id); }
+            else if (ph == 3) { engine::advance_battle_test(a, room_id); }
             else { break; };
             guard = guard + 1;
         };
@@ -1661,7 +1662,7 @@ module mohayo::tests {
         // ① 高速(spd 1000)先手秒杀 → 全程零受击
         engine::create_room(a, 2);
         engine::join_room(a, 1, 100, 1000, 100, 1000);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[820]);
         step(a, 1);
         assert!(engine::room_result(1) == 1, 1);
@@ -1670,7 +1671,7 @@ module mohayo::tests {
         // ② 低速(spd 1): 机仆(spd 90)先动 → 必然吃到攻击
         engine::create_room(a, 2);
         engine::join_room(a, 2, 1000000, 10, 10, 1);
-        engine::start_combat(a, 2);
+        engine::start_combat_test(a, 2);
         // 不排计划(空过): 只观察「谁先动手」——低速者必经敌人的行动
         let guard = 0;
         while (guard < 30 && engine::room_phase(2) == 1) {
@@ -1694,7 +1695,7 @@ module mohayo::tests {
             let rid = s + 1;
             engine::create_room(a, 5);                              // D5 b1 = 机神哨兵 ×3 (1100hp)
             engine::join_room_affixed(a, rid, 1000000, 100, 100, 200, 5, 3, 0, 0);
-            engine::start_combat(a, rid);
+            engine::start_combat_test(a, rid);
             engine::set_plan(a, rid, 0, vector[840]);
             step(a, rid);
             let hits = 0;
@@ -1781,7 +1782,7 @@ module mohayo::tests {
         let before = item::balance_whole(item::ITEM_MANA_FIREWORK, addr);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 4000, 100000, 100, 100);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[820]);
         run_room(a, 1);
         assert!(engine::room_result(1) == 1, 1);
@@ -1804,7 +1805,7 @@ module mohayo::tests {
             engine::create_room(a, 1);                                    // D1 待机怪, 不会打断
             engine::join_room(a, rid, 5000, 10, 1000, 100);               // 成员0(重伤)
             engine::join_room(a, rid, 5000, 10, 1000, 100);               // 成员1(轻伤)
-            engine::start_combat(a, rid);
+            engine::start_combat_test(a, rid);
             engine::test_set_member_hp(a, rid, 0, 1000);                  // 亏空 4000
             engine::test_set_member_hp(a, rid, 1, 4999);                  // 亏空 1
             engine::set_plan(a, rid, 0, vector[850]);
@@ -1825,7 +1826,7 @@ module mohayo::tests {
         content_registration::register_all_content(a);
         engine::create_room(a, 1);
         engine::join_room_affixed(a, 1, 50000, 10, 10, 100, 3, 0, 0, 0); // 魔素-3 → 致盲粉 0 费
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[860]);
         step(a, 1);
         assert!(engine::member_effect_count(1, 0) > 0, 1);              // 自己吃到 ACC_DOWN
@@ -1843,7 +1844,7 @@ module mohayo::tests {
         engine::create_room(a, 1);
         engine::join_room_affixed(a, 1, 50000, 10, 500, 100, 5, 2, 0, 0); // 5 费 → 0
         engine::join_room(a, 1, 50000, 10, 500, 100);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[870, 880, 870, 880]);
         step(a, 1);                                    // 岩石壁垒
         assert!(engine::member_effect_count(1, 0) == 1, 1);            // 只有自己
@@ -1878,7 +1879,7 @@ module mohayo::tests {
             let rid = s + 1;
             engine::create_room(a, 2);
             engine::join_room(a, rid, 50000, 10, 10, 100);
-            engine::start_combat(a, rid);
+            engine::start_combat_test(a, rid);
             engine::set_plan(a, rid, 0, vector[820]);                  // 单体毒刃(WT_THREAT_ENEMY)
             step(a, rid);
             // 按模板 id 判定谁挨打(索引顺序由实例化掷骰决定): 模板 36 = 高威胁
@@ -2004,7 +2005,7 @@ module mohayo::tests {
         let cid = character::owner_latest_char(addr);
         engine::create_room(a, 1);
         engine::join_room_as_char(a, 1, cid);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[820]);
         run_room(a, 1);
         assert!(engine::room_result(1) == 1, 1);
@@ -2033,7 +2034,7 @@ module mohayo::tests {
         let (k, v) = engine::room_mutator(1);
         assert!(k == engine::MUT_MANA() && v == 5, 1);
         engine::join_room(a, 1, 1000, 10, 10, 100);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         // D1 基础魔素 2/回合 + 变异 5 = 7
         assert!(engine::room_mana(1) == 7, 2);
         step(a, 1);
@@ -2053,7 +2054,7 @@ module mohayo::tests {
         set_mutator_now(a, engine::MUT_HP(), 1000);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 1000, 10, 10, 100);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         let (_hp, max_hp, _, _, _, _) = engine::enemy_state(1, 0);
         assert!(max_hp == 70, 1); // 35 × (1000+1000)/1000
         // 吝啬周: 必掉表也不掉
@@ -2062,7 +2063,7 @@ module mohayo::tests {
         let addr = std::signer::address_of(a);
         engine::create_room(a, 1);                                  // 第二个房间 → id 2
         engine::join_room(a, 2, 4000, 100000, 100, 100);
-        engine::start_combat(a, 2);
+        engine::start_combat_test(a, 2);
         engine::set_plan(a, 2, 0, vector[820]);
         run_room(a, 2);
         assert!(engine::room_result(2) == 1, 2);
@@ -2081,7 +2082,7 @@ module mohayo::tests {
         set_mutator_now(a, engine::MUT_NONE(), 0);
         engine::create_room(a, 2);
         engine::join_room_affixed(a, 1, 100000, 100, 100, 100, 5, 3, 0, 0);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[840]);
         step(a, 1);
         let (h1, max1, _, _, _, _) = engine::enemy_state(1, 0);
@@ -2090,7 +2091,7 @@ module mohayo::tests {
         set_mutator_now(a, engine::MUT_STORM(), 4);
         engine::create_room(a, 2);
         engine::join_room_affixed(a, 2, 100000, 100, 100, 100, 5, 3, 0, 0);
-        engine::start_combat(a, 2);
+        engine::start_combat_test(a, 2);
         engine::set_plan(a, 2, 0, vector[840]);
         step(a, 2);
         let (h2, max2, _, _, _, _) = engine::enemy_state(2, 0);
@@ -2110,7 +2111,7 @@ module mohayo::tests {
         let cid = character::owner_latest_char(addr);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 4000, 100000, 100, 100);        // 成员 0(大厅)
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         assert!(engine::member_arrive_delay(1, 0) == 0, 1);      // 开局成员立即在场
         engine::join_room_as_char(a, 1, cid);                    // 战斗中入队 → 延迟
         assert!(engine::member_count(1) == 2, 2);
@@ -2133,7 +2134,7 @@ module mohayo::tests {
         set_mutator_now(a, engine::MUT_NONE(), 0);
         engine::create_room(a, 2);
         engine::join_room(a, 1, 1000000, 10, 10, 1);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         let g = 0;
         while (g < 30 && engine::room_phase(1) == 1) { step(a, 1); g = g + 1; };
         let (hp0, _, _, _, _, _) = engine::member_state(1, 0);
@@ -2141,7 +2142,7 @@ module mohayo::tests {
         set_mutator_now(a, engine::MUT_FOG(), 900);
         engine::create_room(a, 2);
         engine::join_room(a, 2, 1000000, 10, 10, 1);
-        engine::start_combat(a, 2);
+        engine::start_combat_test(a, 2);
         let g2 = 0;
         while (g2 < 30 && engine::room_phase(2) == 1) { step(a, 2); g2 = g2 + 1; };
         let (hp1, _, _, _, _, _) = engine::member_state(2, 0);
@@ -2162,7 +2163,7 @@ module mohayo::tests {
         skill_registry::set_dungeon_battles(a, 3, vector[types::make_battle_config(32, 1)]);
         engine::create_room(a, 3);
         engine::join_room(a, 1, 1000000, 10, 10, 1);   // 1 名玩家 → 上限 = 1+2 = 3
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         let g = 0;
         while (g < 20 && engine::room_phase(1) == 1) { step(a, 1); g = g + 1; };
         let ec = engine::enemy_count(1);
@@ -2180,9 +2181,9 @@ module mohayo::tests {
         content_registration::register_all_content(a);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 4000, 100, 100, 100);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         // 同一回合的第二笔交易(或重放)带着过期的 turn_id → E_TURN_MISMATCH(24), 状态零变更
-        engine::advance_turn(a, 1, 999);
+        engine::advance_turn_test(a, 1, 999);
     }
 
     #[test]
@@ -2193,9 +2194,9 @@ module mohayo::tests {
         content_registration::register_all_content(a);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 4000, 100, 100, 100);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         // 开战后立刻再推进(距上次 < 2 秒) → E_ADVANCE_COOLDOWN(25)
-        engine::advance_turn(a, 1, engine::room_turn(1));
+        engine::advance_turn_test(a, 1, engine::room_turn(1));
     }
 
     #[test]
@@ -2206,8 +2207,8 @@ module mohayo::tests {
         content_registration::register_all_content(a);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 4000, 100, 100, 100);
-        engine::start_combat(a, 1);
-        engine::emergency_advance(a, 1); // 未达 30 秒 → E_NOT_EMERGENCY(26)
+        engine::start_combat_test(a, 1);
+        engine::emergency_advance_test(a, 1); // 未达 30 秒 → E_NOT_EMERGENCY(26)
     }
 
     #[test]
@@ -2217,10 +2218,10 @@ module mohayo::tests {
         content_registration::register_all_content(a);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 4000, 100, 100, 100);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         let t0 = aptos_framework::timestamp::now_seconds();
         aptos_framework::timestamp::update_global_time_for_test_secs(t0 + 30);
-        engine::emergency_advance(a, 1);            // Keeper 挂掉后任何人都能解卡
+        engine::emergency_advance_test(a, 1);            // Keeper 挂掉后任何人都能解卡
         assert!(engine::room_turn(1) == 2, 1);
     }
 
@@ -2339,7 +2340,7 @@ module mohayo::tests {
             engine::create_room(a, 1);
             let rid = i + 1;
             engine::join_room(a, rid, 5000, 100, 100, 99);   // 面板通道(char_id=0)
-            engine::start_combat(a, rid);
+            engine::start_combat_test(a, rid);
             // ACC_DOWN(op6) 1500‰ → 命中阈值被压到 MIN_HIT_RATE=50
             engine::test_add_member_effect(a, rid, 0, 6, 9, 1500);
             engine::set_plan(a, rid, 0, vector[430]);
@@ -2370,7 +2371,7 @@ module mohayo::tests {
 
         engine::create_room(a, 1);
         engine::join_room(a, 1, 1000, 10, 0, 1);       // A: 大厅期入场 → 立即到场
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::join_room(a, 1, 1000, 10, 0, 1);       // B: 战斗中入队 → 延迟到场
         assert!(engine::member_arrive_delay(1, 1) == 3, 1);
         step(a, 1);                                    // 敌 spd 99 先手放全体攻击
@@ -2404,7 +2405,7 @@ module mohayo::tests {
         engine::set_reclaim_delay(a, 3600);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 30000, 26000, 13000, 600);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[820]);
         run_room(a, 1);
         assert!(engine::room_phase(1) == 2, 1);      // 已结算
@@ -2420,7 +2421,7 @@ module mohayo::tests {
         engine::set_reclaim_delay(a, 60);
         engine::create_room(a, 1);
         engine::join_room(a, 1, 30000, 26000, 13000, 600);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[820]);
         run_room(a, 1);
         assert!(engine::room_phase(1) == 2, 1);
@@ -2486,7 +2487,7 @@ module mohayo::tests {
         economy::gm_mint(a, addr, 1000);
         engine::create_room(a, 1);
         engine::join_room_as_char(a, 1, cid);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         let bal_before = economy::balance_of(addr);
         let t0 = aptos_framework::timestamp::now_seconds();
         aptos_framework::timestamp::update_global_time_for_test_secs(t0 + 61);
@@ -2510,7 +2511,7 @@ module mohayo::tests {
         engine::create_room(a, 1);
         engine::join_room(a, 1, 5000, 10, 0, 99);
         engine::join_room(a, 1, 5000, 10, 0, 1);
-        engine::start_combat(a, 1);
+        engine::start_combat_test(a, 1);
         engine::set_plan(a, 1, 0, vector[190]);   // 待机: ap_cost 0 / ap_gain 0 / 魔素 0
         step(a, 1);
         step(a, 1);
@@ -2535,7 +2536,7 @@ module mohayo::tests {
             engine::create_room(a, 1);
             let rid = i + 1;
             engine::join_room(a, rid, 5000, 100, 100, 99);
-            engine::start_combat(a, rid);
+            engine::start_combat_test(a, rid);
             // ACC_DOWN(op6) 1500‰ → 命中阈值被压到 MIN_HIT_RATE=50
             engine::test_add_member_effect(a, rid, 0, 6, 9, 1500);
             engine::set_plan(a, rid, 0, vector[310]);
@@ -2547,4 +2548,27 @@ module mohayo::tests {
         };
     }
 
+
+    // ===================== §2.6.14 生产随机数入口 =====================
+
+    /// 生产入口是私有 `#[randomness] entry`，测试里用 engine 的 `#[test_only]` 钩子穿进去，
+    /// 验证「真实协议随机数 → 开战 → 推进一回合」这条链路真的能跑通(§2.6.14)。
+    /// 其余用例走 `*_test` 变体（不注入协议熵），所以既有标定值不受影响。
+    #[test]
+    fun test_production_randomness_entries_smoke() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let f = &std::account::create_account_for_test(@aptos_framework);
+        randomness::initialize_for_testing(f);              // PerBlockRandomness 必须存在
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 5000, 100, 100, 99);
+        engine::test_production_start_combat(a, 1);
+        assert!(engine::room_phase(1) == 1, 1);
+        assert!(engine::enemy_count(1) == 2, 2);            // D1 b1 出了怪
+        let t = aptos_framework::timestamp::now_seconds();
+        aptos_framework::timestamp::update_global_time_for_test_secs(t + 2);
+        engine::test_production_advance_turn(a, 1, engine::room_turn(1));
+        assert!(engine::room_turn(1) == 2, 3);
+    }
 }

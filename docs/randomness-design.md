@@ -1,5 +1,12 @@
 # 随机数设计（Randomness Design）
 
+> **Move 实现现状（2026-09-30，见 `technical-design.md` §2.6.14）**：本文档主体是 EVM/Solidity 时代的
+> 设计（`block.prevrandao`、`keccak256` 链、`RNGRouter`）。当前 `aptos/sources` 的实现按 Aptos 的
+> 等价物落地：熵源换成 **`aptos_framework::randomness`（AIP-41）**，消费随机数的入口一律是**私有
+> `#[randomness] entry fun`**（建号、开战、推进回合、兜底推进、进入下一场、命运骰子/重生卷轴），
+> 每笔交易取一次协议随机数作为该回合的种子，房内同回合的多次抽数继续走内部 xorshift 链。
+> 「区块熵注入」这一条由协议随机数承担；`prevrandao`/`keccak256`/`RNGRouter` 的表述按 Aptos 口径读。
+
 本文档独立描述本游戏的链上随机数架构：为什么采用「房间级链式伪随机数生成器（PRNG，Pseudo-Random Number Generator）+ 区块熵（PREVRANDAO）」作为战斗内默认随机源，以及它与「可验证随机函数（VRF，Verifiable Random Function）」在抽卡等高价值场景上的分工。代码实现落点在 `CombatTypes.nextRandom` 与 `CombatEngine.createRoom`，与 `technical-design.md` §2.3 相互印证。
 
 ## 1. 总览：两层随机架构

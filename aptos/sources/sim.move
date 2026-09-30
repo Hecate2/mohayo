@@ -101,7 +101,7 @@ module mohayo::sim {
         } else {
             engine::join_room_affixed(a, room_id, hp, atk, mag, spd, md, ad, ab, mg);
         };
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, plan);
         let guard = 0;
         while (guard < 600) {
@@ -111,7 +111,7 @@ module mohayo::sim {
             } else if (ph == 3) {
                 let (bi, _total) = engine::room_battle(room_id);
                 if (bi >= stop_nb) { return 1; };
-                engine::advance_battle(a, room_id);
+                engine::advance_battle_test(a, room_id);
             } else {
                 break;
             };
@@ -133,7 +133,7 @@ module mohayo::sim {
         } else {
             engine::join_room_affixed(a, room_id, hp, atk, mag, spd, md, ad, ab, mg);
         };
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, plan);
         // Hard safety cap: a handful of turns per battle per dungeon is ample; a
         // battle that cannot be won still ends by the per-battle turn timeout.
@@ -143,7 +143,7 @@ module mohayo::sim {
             if (ph == 1) {
                 step(a, room_id);
             } else if (ph == 3) {
-                engine::advance_battle(a, room_id);
+                engine::advance_battle_test(a, room_id);
             } else {
                 break;
             };
@@ -195,14 +195,14 @@ module mohayo::sim {
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room(a, room_id, h1, atk1, m1, s1);
         engine::join_room(a, room_id, h2, atk2, m2, s2);
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, p1);
         engine::set_plan(a, room_id, 1, p2);
         let guard = 0;
         while (guard < 800) {
             let ph = engine::room_phase(room_id);
             if (ph == 1) { step(a, room_id); }
-            else if (ph == 3) { engine::advance_battle(a, room_id); }
+            else if (ph == 3) { engine::advance_battle_test(a, room_id); }
             else { break; };
             guard = guard + 1;
         };
@@ -234,7 +234,7 @@ module mohayo::sim {
         engine::join_room(a, room_id, h1, atk1, m1, s1);
         engine::join_room(a, room_id, h2, atk2, m2, s2);
         engine::join_room(a, room_id, h3, atk3, m3, s3);
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, p1);
         engine::set_plan(a, room_id, 1, p2);
         engine::set_plan(a, room_id, 2, p3);
@@ -242,7 +242,7 @@ module mohayo::sim {
         while (guard < 800) {
             let ph = engine::room_phase(room_id);
             if (ph == 1) { step(a, room_id); }
-            else if (ph == 3) { engine::advance_battle(a, room_id); }
+            else if (ph == 3) { engine::advance_battle_test(a, room_id); }
             else { break; };
             guard = guard + 1;
         };
@@ -277,7 +277,7 @@ module mohayo::sim {
         engine::join_room(a, room_id, h2, atk2, m2, s2);
         engine::join_room(a, room_id, h3, atk3, m3, s3);
         engine::join_room(a, room_id, h4, atk4, m4, s4);
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, p1);
         engine::set_plan(a, room_id, 1, p2);
         engine::set_plan(a, room_id, 2, p3);
@@ -286,7 +286,7 @@ module mohayo::sim {
         while (guard < 800) {
             let ph = engine::room_phase(room_id);
             if (ph == 1) { step(a, room_id); }
-            else if (ph == 3) { engine::advance_battle(a, room_id); }
+            else if (ph == 3) { engine::advance_battle_test(a, room_id); }
             else { break; };
             guard = guard + 1;
         };
@@ -322,7 +322,7 @@ module mohayo::sim {
         engine::join_room_as_char(a, room_id, c2);
         engine::join_room_as_char(a, room_id, c3);
         engine::join_room_as_char(a, room_id, c4);
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, p1);
         engine::set_plan(a, room_id, 1, p2);
         engine::set_plan(a, room_id, 2, p3);
@@ -331,7 +331,7 @@ module mohayo::sim {
         while (guard < 900) {
             let ph = engine::room_phase(room_id);
             if (ph == 1) { step(a, room_id); }
-            else if (ph == 3) { engine::advance_battle(a, room_id); }
+            else if (ph == 3) { engine::advance_battle_test(a, room_id); }
             else { break; };
             guard = guard + 1;
         };
@@ -357,7 +357,7 @@ module mohayo::sim {
     fun step(who: &signer, room_id: u64) {
         let t = aptos_framework::timestamp::now_seconds();
         aptos_framework::timestamp::update_global_time_for_test_secs(t + 2);
-        engine::advance_turn(who, room_id, engine::room_turn(room_id));
+        engine::advance_turn_test(who, room_id, engine::room_turn(room_id));
     }
 
     // ---- report as one [wins, total, pct-per-100k] triple per line (readable) ----
@@ -424,7 +424,7 @@ module mohayo::sim {
         engine::create_room(a, 9);
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room(a, room_id, 30000, 26000, 13000, 600);
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, plan_attack());
         let guard = 0;
         while (guard < 700) {
@@ -433,7 +433,7 @@ module mohayo::sim {
             let ec = engine::enemy_count(room_id);
             std::debug::print(&vector[guard, (ph as u64), mhp, ec]);
             if (ph == 1) { step(a, room_id); }
-            else if (ph == 3) { engine::advance_battle(a, room_id); }
+            else if (ph == 3) { engine::advance_battle_test(a, room_id); }
             else { break; };
             guard = guard + 1;
         };
@@ -572,7 +572,7 @@ module mohayo::sim {
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, char_id);
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, vector[1015]); // 火花锯=敌技 → abort 20
     }
 
@@ -588,7 +588,7 @@ module mohayo::sim {
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, char_id);
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         let b = &std::account::create_account_for_test(@0xCAFE);
         engine::set_plan(b, room_id, 0, vector[820]); // b 不是成员 owner → abort 19
     }
@@ -631,14 +631,14 @@ module mohayo::sim {
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, char_id);
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         // 计划=自选急救(39)+守卫职业技盾击(31), 均在技能集内 → 应通过
         engine::set_plan(a, room_id, 0, vector[850, 210]);
         let guard = 0;
         while (guard < 40) {
             let ph = engine::room_phase(room_id);
             if (ph == 1) { step(a, room_id); }
-            else if (ph == 3) { engine::advance_battle(a, room_id); }
+            else if (ph == 3) { engine::advance_battle_test(a, room_id); }
             else { break; };
             guard = guard + 1;
         };
@@ -690,7 +690,7 @@ module mohayo::sim {
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, guard);
         engine::join_room_as_char(a, room_id, squishy);
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, vector[210]); // 守卫: 每回盾击(眩晕40%+嘲讽2轮)
         engine::set_plan(a, room_id, 1, vector[]);   // 脆皮: 空过
         let guard_i = 0;
@@ -717,7 +717,7 @@ module mohayo::sim {
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_affixed(a, room_id, 4000, 300, 300, 100, 0, 0, 0, 1); // A: 魔素产量+1
         engine::join_room_affixed(a, room_id, 4000, 300, 300, 100, 0, 0, 0, 1); // B: 魔素产量+1
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         // 两成员都空过(plan 空, 不消耗 mana): 池应每回合 + (2 + 1 + 1) = +4
         engine::set_plan(a, room_id, 0, vector[]);
         engine::set_plan(a, room_id, 1, vector[]);
@@ -806,7 +806,7 @@ module mohayo::sim {
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, cid);
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, vector[410]);
         step(a, room_id);
         step(a, room_id);
@@ -833,7 +833,7 @@ module mohayo::sim {
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, cid);
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, vector[530]); // 每回召唤一人偶
         let gi = 0;
         while (gi < 5) { step(a, room_id); gi = gi + 1; };
@@ -897,14 +897,14 @@ module mohayo::sim {
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, c_b);
         engine::join_room_as_char(a, room_id, c_w);
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, vector[410, 410, 410, 430]);
         engine::set_plan(a, room_id, 1, vector[520]);
         let gi = 0;
         while (gi < 120) {
             let ph2 = engine::room_phase(room_id);
             if (ph2 == 1) { step(a, room_id); }
-            else if (ph2 == 3) { engine::advance_battle(a, room_id); }
+            else if (ph2 == 3) { engine::advance_battle_test(a, room_id); }
             else { break; };
             if ((gi + 1) % 10 == 0) {
                 let mp = engine::room_mana(room_id);
@@ -934,7 +934,7 @@ module mohayo::sim {
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, cid);
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, vector[620]); // 左轮弹雨(每施放耗 3 发)
         step(a, room_id); // r1: 耗 3 发施放(段伤 150×452/1000×3≈202)
         step(a, room_id); // r2: 剩 2 发不足 → 空过
@@ -956,7 +956,7 @@ module mohayo::sim {
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, cid);
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         // 道具占计划队列: ITEM_SKILL_BASE(61440) + 魔素礼花(type 100) = 61540, 占 1 回合行动位
         engine::set_plan(a, room_id, 0, vector[61540]);
         step(a, room_id);
@@ -980,7 +980,7 @@ module mohayo::sim {
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, cid);
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         // 铅弹标记战斗中不可使用 → 不可进计划队列
         engine::set_plan(a, room_id, 0, vector[61441]);
     }
@@ -1018,7 +1018,7 @@ module mohayo::sim {
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, cid);
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, vector[620]); // 左轮弹雨(3 发/施放)
         let guard = 0;
         while (guard < 200) {
@@ -1053,7 +1053,7 @@ module mohayo::sim {
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, cid);
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, vector[620]); // 空过, 故意挨打
         let i = 0;
         while (i < 5) { step(a, room_id); i = i + 1; }; // 磨血 5 回合
@@ -1081,7 +1081,7 @@ module mohayo::sim {
         engine::create_room(a, 1);
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, cid);
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, vector[61543]); // 烟幕弹(103+61440)
         step(a, room_id);
         let mc = engine::member_effect_count(room_id, 0);
@@ -1113,7 +1113,7 @@ module mohayo::sim {
         let room_id = skill_registry::next_room_id() - 1;
         engine::join_room_as_char(a, room_id, ca);
         engine::join_room_as_char(b, room_id, cb);
-        engine::start_combat(a, room_id);
+        engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, vector[61544]); // 不死鸟之羽
         let feathers_before = item::balance_whole(item::ITEM_PHOENIX_FEATHER, aaddr);
         let guard = 0;

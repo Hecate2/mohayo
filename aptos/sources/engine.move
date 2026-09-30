@@ -2,7 +2,9 @@
 /// Uses types, skill_registry, character, economy modules.
 module mohayo::engine {
     use aptos_framework::event;
+    use aptos_framework::randomness;
     use aptos_std::table::{Self, Table};
+    use std::option::{Self, Option};
     use std::signer;
     use std::vector;
     use mohayo::types::{Self, Skill, Member, Enemy, Target};
@@ -128,7 +130,7 @@ module mohayo::engine {
     }
 
     #[event]
-    struct TurnAdvanced has drop, store { room_id: u64, turn_id: u64 }
+    struct TurnAdvanced has drop, store { room_id: u64, turn_id: u64, seed: u64 }
     #[event]
     struct UnitActed has drop, store { room_id: u64, is_enemy: bool, index: u64, skill_id: u64 }
     #[event]
@@ -551,7 +553,20 @@ module mohayo::engine {
 
     // ============================ combat start ============================
 
-    public entry fun start_combat(account: &signer, room_id: u64) acquires RoomStore {
+    /// 开战（生产入口）。**私有 `entry` + `#[randomness]`**：从 Aptos 协议随机数（AIP-41）取本局
+    /// 初始种子，玩家无法预判也无法挑房号(§2.6.14)。
+    #[randomness]
+    entry fun start_combat(account: &signer, room_id: u64) acquires RoomStore {
+        do_start_combat(account, room_id, randomness::u64_integer());
+    }
+
+    /// 开战（测试/仿真入口）：不注入协议熵，沿用 `room_id` 派生的旧种子，既有标定因此可复现。
+    #[test_only]
+    public entry fun start_combat_test(account: &signer, room_id: u64) acquires RoomStore {
+        do_start_combat(account, room_id, room_id * 1000 + 1);
+    }
+
+    fun do_start_combat(account: &signer, room_id: u64, seed: u64) acquires RoomStore {
         let addr = signer::address_of(account);
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
@@ -562,7 +577,7 @@ module mohayo::engine {
         room.phase = 1;
         room.turn_id = 1;
         room.last_advance_secs = aptos_framework::timestamp::now_seconds();
-        room.rng_seed = room_id * 1000 + 1;
+        room.rng_seed = seed;
         room.mana_pool = room.mana_per_turn + mutator_mana_bonus(room);
         spawn_battle(room, room_id);
         event::emit(CombatStarted { room_id, turn_id: room.turn_id });
@@ -617,11 +632,24 @@ module mohayo::engine {
 
     // ============================ advance turn ============================
 
-    /// 推进一回合（§4.1：自动/手动**同一入口**）。
+    /// 推进一回合（生产入口，§4.1：自动/手动**同一入口**）。私有 `entry` + `#[randomness]`：
+    /// **每笔推进交易换一次协议熵**，因此下一回合的随机结果在玩家排计划时不可预判(§2.6.14)。
     /// 防重复推进（§3.1）：① `expected_turn_id` 必须等于当前 `turn_id` —— 同一回合只有第一笔
     /// 成功交易能推进，并发/重放的后来者在断言上失败、状态零变更；② 距上次推进 ≥ `TURN_COOLDOWN_SECS`。
-    /// 手动提前结束不受「等满 5 区块」约束（这是玩法特性），但同样受冷却约束。
-    public entry fun advance_turn(account: &signer, room_id: u64, expected_turn_id: u64) acquires RoomStore {
+    #[randomness]
+    entry fun advance_turn(account: &signer, room_id: u64, expected_turn_id: u64) acquires RoomStore {
+        do_advance_turn(account, room_id, expected_turn_id, option::some(randomness::u64_integer()));
+    }
+
+    /// 推进一回合（测试/仿真入口）：`none` = 不刷新随机流，保持既有标定可复现。
+    #[test_only]
+    public entry fun advance_turn_test(account: &signer, room_id: u64, expected_turn_id: u64) acquires RoomStore {
+        do_advance_turn(account, room_id, expected_turn_id, option::none());
+    }
+
+    fun do_advance_turn(
+        account: &signer, room_id: u64, expected_turn_id: u64, seed: Option<u64>,
+    ) acquires RoomStore {
         let _ = account;
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
@@ -630,12 +658,23 @@ module mohayo::engine {
         let now = aptos_framework::timestamp::now_seconds();
         assert!(now >= room.last_advance_secs + TURN_COOLDOWN_SECS, E_ADVANCE_COOLDOWN);
         room.last_advance_secs = now;
-        advance_turn_inner(room, room_id);
+        let used_seed = apply_seed(room, &seed);
+        advance_turn_inner(room, room_id, used_seed);
     }
 
-    /// Keeper 单点故障兜底（§3.1）：距上次推进 ≥ `EMERGENCY_SECS` 时，**任何人**都能解卡；
-    /// 只推进一回合与超时判定，不含任何特权。正常节奏下因门槛够高而不可用。
-    public entry fun emergency_advance(account: &signer, room_id: u64) acquires RoomStore {
+    /// Keeper 单点故障兜底（§3.1）：距上次推进 ≥ `EMERGENCY_SECS` 时允许解卡。
+    /// 同样走 `#[randomness]`，因为推进本身会消耗随机数。
+    #[randomness]
+    entry fun emergency_advance(account: &signer, room_id: u64) acquires RoomStore {
+        do_emergency_advance(account, room_id, option::some(randomness::u64_integer()));
+    }
+
+    #[test_only]
+    public entry fun emergency_advance_test(account: &signer, room_id: u64) acquires RoomStore {
+        do_emergency_advance(account, room_id, option::none());
+    }
+
+    fun do_emergency_advance(account: &signer, room_id: u64, seed: Option<u64>) acquires RoomStore {
         let _ = account;
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
@@ -643,7 +682,15 @@ module mohayo::engine {
         let now = aptos_framework::timestamp::now_seconds();
         assert!(now >= room.last_advance_secs + EMERGENCY_SECS, E_NOT_EMERGENCY);
         room.last_advance_secs = now;
-        advance_turn_inner(room, room_id);
+        let used_seed = apply_seed(room, &seed);
+        advance_turn_inner(room, room_id, used_seed);
+    }
+
+    /// 把本次推进要用的种子写进房间，并返回它（`none` = 不刷新，沿用当前链值）。
+    /// 返回值同时进 `TurnAdvanced` 事件，便于事后审计这一回合的随机流。
+    fun apply_seed(room: &mut Room, seed: &Option<u64>): u64 {
+        if (option::is_some(seed)) { room.rng_seed = *option::borrow(seed); };
+        room.rng_seed
     }
 
     /// 该房间距上次推进是否已达冷却（客户端/Keeper 判可用性用）
@@ -655,7 +702,7 @@ module mohayo::engine {
         aptos_framework::timestamp::now_seconds() >= r.last_advance_secs + TURN_COOLDOWN_SECS
     }
 
-    fun advance_turn_inner(room: &mut Room, room_id: u64) {
+    fun advance_turn_inner(room: &mut Room, room_id: u64, seed_used: u64) {
         room.turn_id = room.turn_id + 1;
         room.battle_turns = room.battle_turns + 1;
         tick_escapes(room, room_id);   // 先结算个人逃离(离场者本回合起不参战)
@@ -676,18 +723,31 @@ module mohayo::engine {
         room.mana_pool = room.mana_pool + mut_delta;
         event::emit(ManaChanged { room_id, pool: room.mana_pool });
         check_end(room, room_id);
-        event::emit(TurnAdvanced { room_id, turn_id: room.turn_id });
+        event::emit(TurnAdvanced { room_id, turn_id: room.turn_id, seed: seed_used });
     }
 
     // ============================ battle advancement ============================
 
-    public entry fun advance_battle(account: &signer, room_id: u64) acquires RoomStore {
+    /// 进入下一场（生产入口）。也要换熵：本场的敌人构成 / 变体掷骰都用房间随机流，
+    /// 不刷新的话旁观者能从上回合的种子推出这一场是「宝箱」还是「皇帝」(§2.6.14)。
+    #[randomness]
+    entry fun advance_battle(account: &signer, room_id: u64) acquires RoomStore {
+        do_advance_battle(account, room_id, option::some(randomness::u64_integer()));
+    }
+
+    #[test_only]
+    public entry fun advance_battle_test(account: &signer, room_id: u64) acquires RoomStore {
+        do_advance_battle(account, room_id, option::none());
+    }
+
+    fun do_advance_battle(account: &signer, room_id: u64, seed: Option<u64>) acquires RoomStore {
         let addr = signer::address_of(account);
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
         assert!(room.phase == 3, E_NOT_INTERMISSION);
         assert!(room.leader == addr, E_NOT_LEADER);
         assert!(room.battle_index < room.total_battles, E_LAST_BATTLE);
+        apply_seed(room, &seed);
         room.phase = 1;
         spawn_battle(room, room_id);
         event::emit(BattleAdvanced { room_id, new_battle_index: room.battle_index });
@@ -2161,5 +2221,24 @@ module mohayo::engine {
                 weekly_mutators: table::new(),
             });
         };
+    }
+
+    /// 测试钩子：走**生产入口**（私有 `#[randomness] entry`）开战，用于验证真实随机数路径能跑通。
+    /// 测试环境下 `is_unbiasable` 为真，所以模块内可以直接调用自己的 entry(§2.6.14)。
+    /// `#[lint::allow_unsafe_randomness]` 只为绕过「public 函数不得暴露随机数」的 lint ——
+    /// 这两个钩子是 `#[test_only]`，不会进发布产物。
+    #[test_only]
+    #[lint::allow_unsafe_randomness]
+    public fun test_production_start_combat(account: &signer, room_id: u64) acquires RoomStore {
+        start_combat(account, room_id);
+    }
+
+    /// 测试钩子：走生产入口推进一回合（同样消费协议随机数）。
+    #[test_only]
+    #[lint::allow_unsafe_randomness]
+    public fun test_production_advance_turn(
+        account: &signer, room_id: u64, expected_turn_id: u64,
+    ) acquires RoomStore {
+        advance_turn(account, room_id, expected_turn_id);
     }
 }
