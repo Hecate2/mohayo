@@ -301,8 +301,8 @@ module mohayo::tests {
     fun test_variant() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
-        skill_registry::add_battle_variant(a, 9, 4, 74, 150);
-        skill_registry::add_battle_variant(a, 9, 4, 75, 850);
+        skill_registry::add_battle_variant(a, 9, 4, 74, 150, 0);
+        skill_registry::add_battle_variant(a, 9, 4, 75, 850, 0);
         let variants = skill_registry::get_variants(9, 4);
         assert!(vector::length(&variants) == 2, 1);
     }
@@ -2411,6 +2411,9 @@ module mohayo::tests {
         assert!(
             (types::variant_weight(vector::borrow(&v9, 0)) as u64)
             + (types::variant_weight(vector::borrow(&v9, 1)) as u64) == 1000, 7);
+        // 变体自带的敌人数: D5 b3 混沌变体出 3 只混编(§8.2), 基准变体沿用本场配置
+        assert!(types::variant_enemy_count(vector::borrow(&v5, 0)) == 0, 8);
+        assert!(types::variant_enemy_count(vector::borrow(&v5, 1)) == 3, 9);
     }
 
     // ===================== §2.6.11 复审修正 =====================
@@ -2509,6 +2512,43 @@ module mohayo::tests {
         run_room(a, 1);
         assert!(engine::room_phase(1) == 2, 1);      // 已结算
         engine::reclaim_room(a, 1);                  // 窗口没到
+    }
+
+    /// §2.6.14: 变体抽选必须真的按权重遍历**所有**变体。
+    /// 判据用「两个变体携带不同敌人数」: 若抽选循环忘了累加权重(曾经的 bug),
+    /// 第二个变体永远不可达, 只会出现一种敌人数。两个变体等权, 20 个房间必然都出现。
+    #[test]
+    fun test_variant_selection_reaches_all_variants() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        // 最小内容: 一个技能/AI/模板/表 + 单场副本; 两个变体都指向同一张表, 但敌人数不同
+        skill_registry::register_skill(a, types::make_skill(1801, types::KIND_PHYSICAL(), 0, 0, 0, 0, 0, 0,
+            types::TGT_RAND_SINGLE_ENEMY(), types::WT_UNIFORM(), 1, 100, 0, 900, 0,
+            vector::empty(), types::make_summon_rule(0, 0, 0)));
+        skill_registry::register_ai(a, types::make_monster_ai(vector[1801], 1));
+        skill_registry::register_template(a, types::make_enemy_template(1, 0, 100, 10, 0, 1, 900, 1, 1,
+            types::make_on_death_spawn(0, 0, 0)));
+        skill_registry::register_table(a, vector[types::make_table_entry(1, 1000)]);
+        skill_registry::set_dungeon(a, 1, types::make_dungeon_config(1, 1, 5, 0, 0, 120, 1));
+        skill_registry::set_dungeon_battles(a, 1, vector[types::make_battle_config(1, 1)]);
+        skill_registry::add_battle_variant(a, 1, 1, 1, 500, 0);   // 基准: 沿用本场敌人数(1)
+        skill_registry::add_battle_variant(a, 1, 1, 1, 500, 3);   // 变体: 出 3 只
+
+        let one = false;
+        let three = false;
+        let i = 0;
+        while (i < 20) {
+            engine::create_room(a, 1);
+            let rid = i + 1;
+            engine::join_room(a, rid, 5000, 100, 100, 99);
+            engine::start_combat_test(a, rid);
+            let n = engine::enemy_count(rid);
+            if (n == 1) { one = true; };
+            if (n == 3) { three = true; };
+            i = i + 1;
+        };
+        assert!(one, 1);
+        assert!(three, 2);
     }
 
     /// §2.6.14: 房间可被枚举 —— 活跃列表 + 分页视图；回收后从列表里 swap-remove。

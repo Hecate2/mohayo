@@ -248,7 +248,12 @@ module mohayo::skill_registry {
         };
     }
 
-    public entry fun add_battle_variant(account: &signer, difficulty: u64, battle_index: u64, table_id: u64, weight: u16) acquires Registry {
+    /// 给某场战斗挂一个变体（§8.2）。`enemy_count = 0` 表示沿用这场战斗配置的敌人数，
+    /// 大于 0 时该变体自己决定出几只（「督军+魔像+哨兵」这类混编靠它表达）。
+    public entry fun add_battle_variant(
+        account: &signer, difficulty: u64, battle_index: u64,
+        table_id: u64, weight: u16, enemy_count: u64,
+    ) acquires Registry {
         let addr = signer::address_of(account);
         assert!(addr == @mohayo, E_NOT_OWNER);
         let r = borrow_global_mut<Registry>(@mohayo);
@@ -258,7 +263,7 @@ module mohayo::skill_registry {
         };
         let list = table::borrow_mut(&mut r.variants, key);
         assert!(vector::length(list) < MAX_VARIANTS, E_VARIANT_CAP);
-        vector::push_back(list, types::make_variant_entry(table_id, weight));
+        vector::push_back(list, types::make_variant_entry(table_id, weight, enemy_count));
     }
 
     // ---- view functions ----

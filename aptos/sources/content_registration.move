@@ -491,7 +491,7 @@ module mohayo::content_registration {
         skill_registry::register_table(account, vector[te(15, 1000)]);                        // 14 D5b1 机神哨兵
         skill_registry::register_table(account, vector[te(16, 700), te(15, 300)]);            // 15 D5b2 魔像+哨兵
         skill_registry::register_table(account, vector[te(17, 1000)]);                        // 16 D5b3 机神督军(基准)
-        skill_registry::register_table(account, vector[te(17, 750), te(16, 180), te(15, 70)]); // 17 D5b3 混沌变体
+        skill_registry::register_table(account, vector[te(17, 300), te(16, 400), te(15, 300)]); // 17 D5b3 混沌变体(三只混编, 权重配平到接近一比一)
         skill_registry::register_table(account, vector[te(18, 1000)]);                        // 18 D6b1 白骨卫士
         skill_registry::register_table(account, vector[te(18, 650), te(19, 350)]);            // 19 D6b2 卫士+缚灵
         skill_registry::register_table(account, vector[te(20, 1000)]);                        // 20 D6b3 守墓骸王
@@ -522,8 +522,8 @@ module mohayo::content_registration {
         // D5 b3 变体掷骰: 基准「督军单挑」80% / 混沌变体「督军+魔像+哨兵」20% (§8.2)。
         // §2.6.11 复审: 此前只登记了 weight=200 的变体、没有基准条目, 而 spawn_battle 把非空
         // variants 当作完整候选集 → 混沌变体实际 100%, 与文档「20% 权重切换」不符。
-        skill_registry::add_battle_variant(account, 5, 3, 16, 800);   // 基准(督军单挑) 80%
-        skill_registry::add_battle_variant(account, 5, 3, 17, 200);   // 混沌变体 20%
+        skill_registry::add_battle_variant(account, 5, 3, 16, 800, 0);  // 基准: 督军单挑(沿用本场敌人数 1)
+        skill_registry::add_battle_variant(account, 5, 3, 17, 200, 3);  // 混沌变体: 出 3 只混编(§8.2)
         skill_registry::set_dungeon(account, 6, dng(18, 3, 5, 25, 50, BATTLE_TURN_CAP, 3)); // D6 亡者回廊深处
         skill_registry::set_dungeon_battles(account, 6, vector[bt(18, 3), bt(19, 3), bt(20, 1)]);
         skill_registry::set_dungeon(account, 7, dng(21, 3, 6, 30, 60, BATTLE_TURN_CAP, 3)); // D7 熔渊龙巢
@@ -534,8 +534,8 @@ module mohayo::content_registration {
         // (组队标定 2026-09-02: 由 85/15 上调皇帝路, 防顶配 duo/trio 100% 稳过, 贴 §3.1 60~90% 上限)
         skill_registry::set_dungeon(account, 9, dng(27, 3, 7, 40, 100, BATTLE_TURN_CAP, 4));
         skill_registry::set_dungeon_battles(account, 9, vector[bt(27, 4), bt(28, 4), bt(29, 3), bt(30, 1)]);
-        skill_registry::add_battle_variant(account, 9, 4, 30, 700);   // 王座宝箱
-        skill_registry::add_battle_variant(account, 9, 4, 31, 300);   // 皇帝备用机体
+        skill_registry::add_battle_variant(account, 9, 4, 30, 700, 0);   // 王座宝箱
+        skill_registry::add_battle_variant(account, 9, 4, 31, 300, 0);   // 皇帝备用机体
         // ===================== DROP TABLES (掉落表: difficulty → 条目, 千分比权重) =====================
         // 数值为初值(数值层可调): 权重是同一张表内的相对比例; item_type 0 = 「空手而归」。
         // 通关 / 队长全员逃离时, 每个存活者独立掷一次(item::pick_drop)。

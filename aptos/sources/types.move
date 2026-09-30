@@ -156,6 +156,8 @@ module mohayo::types {
     struct VariantEntry has copy, drop, store {
         table_id: u64,
         weight: u16,
+        /// 该变体自带的敌人数；0 = 沿用这场战斗配置里的敌人数（§8.2 的「混编」变体靠它表达）
+        enemy_count: u64,
     }
 
     struct BattleConfig has copy, drop, store {
@@ -289,8 +291,8 @@ module mohayo::types {
         TableEntry { template_id, weight }
     }
 
-    public fun make_variant_entry(table_id: u64, weight: u16): VariantEntry {
-        VariantEntry { table_id, weight }
+    public fun make_variant_entry(table_id: u64, weight: u16, enemy_count: u64): VariantEntry {
+        VariantEntry { table_id, weight, enemy_count }
     }
 
     public fun make_battle_config(table_id: u64, enemy_count: u64): BattleConfig {
@@ -367,6 +369,7 @@ module mohayo::types {
     // ---- VariantEntry accessors ----
     public fun variant_table_id(v: &VariantEntry): u64 { v.table_id }
     public fun variant_weight(v: &VariantEntry): u16 { v.weight }
+    public fun variant_enemy_count(v: &VariantEntry): u64 { v.enemy_count }
 
     // ---- TableEntry accessors ----
     public fun table_entry_template_id(e: &TableEntry): u64 { e.template_id }

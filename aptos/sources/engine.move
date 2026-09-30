@@ -1028,6 +1028,8 @@ module mohayo::engine {
             enemy_count = types::dungeon_enemy_count(&dungeon);
         };
 
+        // 变体可以自带敌人数（§8.2 的混编变体）；0 = 沿用本场配置的敌人数
+        let variant_count: u64 = 0;
         let variants = skill_registry::get_variants(difficulty, bi);
         if (vector::length(&variants) > 0) {
             let total_weight: u64 = 0;
@@ -1047,11 +1049,15 @@ module mohayo::engine {
                 let new_acc = acc + (types::variant_weight(v) as u64);
                 if (roll < new_acc) {
                     table_id = types::variant_table_id(v);
+                    variant_count = types::variant_enemy_count(v);
                     break;
                 };
+                acc = new_acc;   // 必须累加, 否则只有第一个变体可达、其余情况静默回落到本场配置表
                 vi = vi + 1;
             };
         };
+
+        if (variant_count > 0) { enemy_count = variant_count; };
 
         let entries = skill_registry::get_table(table_id);
         let total_weight: u64 = 0;
