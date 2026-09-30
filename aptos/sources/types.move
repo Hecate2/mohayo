@@ -219,7 +219,6 @@ module mohayo::types {
         base_acc: u16,
         threat: u8,
         ai_id: u64,
-        turn_counter: u8,
         effects: vector<ActiveEffect>,
         alive: bool,
     }
@@ -335,10 +334,10 @@ module mohayo::types {
     public fun make_enemy(
         template_id: u64, hp: u64, max_hp: u64, attack: u64, magic: u64,
         speed: u64, base_acc: u16, threat: u8, ai_id: u64,
-        turn_counter: u8, effects: vector<ActiveEffect>, alive: bool,
+        effects: vector<ActiveEffect>, alive: bool,
     ): Enemy {
         Enemy { template_id, hp, max_hp, attack, magic, speed, base_acc,
-                threat, ai_id, turn_counter, effects, alive }
+                threat, ai_id, effects, alive }
     }
 
     public fun make_monster_ai(skill_cycle: vector<u64>, cycle_len: u8): MonsterAI {
@@ -510,14 +509,12 @@ module mohayo::types {
     public fun enemy_base_acc(e: &Enemy): u16 { e.base_acc }
     public fun enemy_threat(e: &Enemy): u8 { e.threat }
     public fun enemy_ai_id(e: &Enemy): u64 { e.ai_id }
-    public fun enemy_turn_counter(e: &Enemy): u8 { e.turn_counter }
     public fun enemy_alive(e: &Enemy): bool { e.alive }
     public fun enemy_effects(e: &Enemy): &vector<ActiveEffect> { &e.effects }
 
     // ---- Enemy mutators ----
     public fun enemy_set_hp(e: &mut Enemy, v: u64) { e.hp = v; }
     public fun enemy_set_alive(e: &mut Enemy, v: bool) { e.alive = v; }
-    public fun enemy_set_turn_counter(e: &mut Enemy, v: u8) { e.turn_counter = v; }
     public fun enemy_set_max_hp(e: &mut Enemy, v: u64) { e.max_hp = v; }
 
     // ---- Enemy effect mutation ----

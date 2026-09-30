@@ -8,7 +8,6 @@ module mohayo::character {
     use std::vector;
     use mohayo::types::{Self, ClassDef, RaceDef, AffixTemplate};
     use mohayo::skill_registry;
-    use mohayo::content;
     use mohayo::rng;
     use mohayo::economy;
 

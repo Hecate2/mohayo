@@ -113,7 +113,7 @@ module mohayo::sim {
         while (guard < guard_cap) {
             let ph = engine::room_phase(room_id);
             if (ph == 1) {
-                step(a, room_id);
+                engine::step_for_test(a, room_id);
             } else if (ph == 3) {
                 let (bi, _total) = engine::room_battle(room_id);
                 if (stop_nb > 0 && bi >= stop_nb) { return 1; };
@@ -276,7 +276,7 @@ module mohayo::sim {
         engine::init_for_test(a);
         use_item::init_for_test(a);
         use_item::set_window_limit(a, 1000); // 仿真需成千上万次开房
-        init_timestamp();                      // 入场次数门控读 timestamp::now_seconds
+        engine::init_timestamp_for_test();                      // 入场次数门控读 timestamp::now_seconds
 
         economy::init_for_test(a);
         // 测试钱包：覆盖入场费/救援费/收益结算链路(生产走真实玩家余额)
@@ -286,12 +286,6 @@ module mohayo::sim {
 
     /// 推进一步(测试/仿真用): 先过 ≥2 秒推进冷却, 再以**当前 turn_id** 作为期望值调用
     /// —— 同时覆盖 §4.1 的自动/手动同入口与 §3.1 的「turnId 单调 + 冷却」两道防重。
-    fun step(who: &signer, room_id: u64) {
-        let t = aptos_framework::timestamp::now_seconds();
-        aptos_framework::timestamp::update_global_time_for_test_secs(t + 2);
-        engine::advance_turn_test(who, room_id, engine::room_turn(room_id));
-    }
-
     // ---- report as one [wins, total, pct-per-100k] triple per line (readable) ----
     fun report(w: u64, t: u64) {
         let pct = if (t == 0) { 0u64 } else { w * 100000 / t };
@@ -364,7 +358,7 @@ module mohayo::sim {
             let (mhp, _, _, _, _, _) = engine::member_state(room_id, 0);
             let ec = engine::enemy_count(room_id);
             std::debug::print(&vector[guard, (ph as u64), mhp, ec]);
-            if (ph == 1) { step(a, room_id); }
+            if (ph == 1) { engine::step_for_test(a, room_id); }
             else if (ph == 3) { engine::advance_battle_test(a, room_id); }
             else { break; };
             guard = guard + 1;
@@ -569,7 +563,7 @@ module mohayo::sim {
         let guard = 0;
         while (guard < 40) {
             let ph = engine::room_phase(room_id);
-            if (ph == 1) { step(a, room_id); }
+            if (ph == 1) { engine::step_for_test(a, room_id); }
             else if (ph == 3) { engine::advance_battle_test(a, room_id); }
             else { break; };
             guard = guard + 1;
@@ -629,7 +623,7 @@ module mohayo::sim {
         engine::set_plan(a, room_id, 0, vector[210]); // 守卫: 每回盾击(眩晕40%+嘲讽2轮)
         engine::set_plan(a, room_id, 1, vector[]);   // 脆皮: 空过
         let guard_i = 0;
-        while (guard_i < 8) { step(a, room_id); guard_i = guard_i + 1; };
+        while (guard_i < 8) { engine::step_for_test(a, room_id); guard_i = guard_i + 1; };
         let (gh, gmax, _, _, _, _) = engine::member_state(room_id, 0);
         let (sh, smax, _, _, _, _) = engine::member_state(room_id, 1);
         let guard_drop = gmax - gh;
@@ -657,7 +651,7 @@ module mohayo::sim {
         engine::set_plan(a, room_id, 0, vector[]);
         engine::set_plan(a, room_id, 1, vector[]);
         let gi = 0;
-        while (gi < 5) { step(a, room_id); gi = gi + 1; };
+        while (gi < 5) { engine::step_for_test(a, room_id); gi = gi + 1; };
         let pool = engine::room_mana(room_id);
         std::debug::print(&vector[pool]);
         // 起点 mana2(mana_per_turn) + 5 回合 × 4 = 22; 若多人词条未被聚合则 2+5×2=12
@@ -743,8 +737,8 @@ module mohayo::sim {
         engine::join_room_as_char(a, room_id, cid);
         engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, vector[410]);
-        step(a, room_id);
-        step(a, room_id);
+        engine::step_for_test(a, room_id);
+        engine::step_for_test(a, room_id);
         let pool = engine::room_mana(room_id);
         let (eh, _, _, _, _, _) = engine::enemy_state(room_id, 0);
         std::debug::print(&vector[pool, eh]);
@@ -771,7 +765,7 @@ module mohayo::sim {
         engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, vector[530]); // 每回召唤一人偶
         let gi = 0;
-        while (gi < 5) { step(a, room_id); gi = gi + 1; };
+        while (gi < 5) { engine::step_for_test(a, room_id); gi = gi + 1; };
         let mc = engine::member_count(room_id);
         std::debug::print(&vector[mc]);
         assert!(mc >= 3, 1); // 白魔 + ≥2 只人偶(mana 8/回合 足够每回招)
@@ -838,7 +832,7 @@ module mohayo::sim {
         let gi = 0;
         while (gi < 120) {
             let ph2 = engine::room_phase(room_id);
-            if (ph2 == 1) { step(a, room_id); }
+            if (ph2 == 1) { engine::step_for_test(a, room_id); }
             else if (ph2 == 3) { engine::advance_battle_test(a, room_id); }
             else { break; };
             if ((gi + 1) % 10 == 0) {
@@ -871,8 +865,8 @@ module mohayo::sim {
         engine::join_room_as_char(a, room_id, cid);
         engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, vector[620]); // 左轮弹雨(每施放耗 3 发)
-        step(a, room_id); // r1: 耗 3 发施放(段伤 150×452/1000×3≈202)
-        step(a, room_id); // r2: 剩 2 发不足 → 空过
+        engine::step_for_test(a, room_id); // r1: 耗 3 发施放(段伤 150×452/1000×3≈202)
+        engine::step_for_test(a, room_id); // r2: 剩 2 发不足 → 空过
         let bal = item::balance_whole(item::ITEM_LEAD_BULLET, own);
         let (eh, _, _, _, _, _) = engine::enemy_state(room_id, 0);
         std::debug::print(&vector[bal, eh]);
@@ -894,8 +888,8 @@ module mohayo::sim {
         engine::start_combat_test(a, room_id);
         // 道具占计划队列: ITEM_SKILL_BASE(61440) + 魔素礼花(type 100) = 61540, 占 1 回合行动位
         engine::set_plan(a, room_id, 0, vector[61540]);
-        step(a, room_id);
-        step(a, room_id);
+        engine::step_for_test(a, room_id);
+        engine::step_for_test(a, room_id);
         let pool = engine::room_mana(room_id);
         let bal = item::balance_whole(item::ITEM_MANA_FIREWORK, own);
         std::debug::print(&vector[pool, bal]);
@@ -958,7 +952,7 @@ module mohayo::sim {
         let guard = 0;
         while (guard < 200) {
             let ph = engine::room_phase(room_id);
-            if (ph == 1) { step(a, room_id); }
+            if (ph == 1) { engine::step_for_test(a, room_id); }
             else { break; };
             guard = guard + 1;
         };
@@ -991,10 +985,10 @@ module mohayo::sim {
         engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, vector[620]); // 空过, 故意挨打
         let i = 0;
-        while (i < 5) { step(a, room_id); i = i + 1; }; // 磨血 5 回合
+        while (i < 5) { engine::step_for_test(a, room_id); i = i + 1; }; // 磨血 5 回合
         let (hp1, _, _, _, _, _) = engine::member_state(room_id, 0);
         engine::set_plan(a, room_id, 0, vector[61541]); // 疗伤药水(占 1 回合)
-        step(a, room_id);
+        engine::step_for_test(a, room_id);
         let (hp2, mh, _, _, _, _) = engine::member_state(room_id, 0);
         let bal = item::balance_whole(item::ITEM_HEALING_POTION, own);
         let (eh, _, _, _, _, _) = engine::enemy_state(room_id, 0);
@@ -1018,7 +1012,7 @@ module mohayo::sim {
         engine::join_room_as_char(a, room_id, cid);
         engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, vector[61543]); // 烟幕弹(103+61440)
-        step(a, room_id);
+        engine::step_for_test(a, room_id);
         let mc = engine::member_effect_count(room_id, 0);
         let ec = engine::enemy_effect_count(room_id, 0);
         let (mop, _, mmag) = engine::member_effect(room_id, 0, 0);
@@ -1053,7 +1047,7 @@ module mohayo::sim {
         let feathers_before = item::balance_whole(item::ITEM_PHOENIX_FEATHER, aaddr);
         let guard = 0;
         while (guard < 8 && engine::room_phase(room_id) == 1) {
-            step(a, room_id);
+            engine::step_for_test(a, room_id);
             guard = guard + 1;
         };
         let feathers = item::balance_whole(item::ITEM_PHOENIX_FEATHER, aaddr);
@@ -1132,9 +1126,4 @@ module mohayo::sim {
     }
 
     /// 初始化 aptos_framework 时间戳, 并把"今日"推进到非零日(便于每日领取判定)。
-    fun init_timestamp() {
-        let f = &std::account::create_account_for_test(@aptos_framework);
-        aptos_framework::timestamp::set_time_has_started_for_testing(f);
-        aptos_framework::timestamp::update_global_time_for_test_secs(1760000000);
-    }
 }

@@ -1126,7 +1126,6 @@ module mohayo::engine {
             types::template_base_acc(&tmpl),
             types::template_threat(&tmpl),
             types::template_ai_id(&tmpl),
-            0,
             vector::empty(),
             true,
         )
@@ -1275,9 +1274,6 @@ module mohayo::engine {
         let pick = mohayo::rng::below(&mut mut_rng, cycle_len);
         room.rng_seed = room.rng_seed + 1;
         let skill_id = *vector::borrow(cyc, pick);
-        let e_mut = vector::borrow_mut(&mut room.enemies, idx);
-        let cur_turn = types::enemy_turn_counter(e_mut);
-        types::enemy_set_turn_counter(e_mut, cur_turn + 1);
         let s = skill_registry::get_skill(skill_id);
         execute_skill(room, room_id, idx, true, &s);
     }
@@ -2335,6 +2331,24 @@ module mohayo::engine {
                 weekly_mutators: table::new(),
             });
         };
+    }
+
+    /// 测试钩子: 初始化 aptos_framework 时间戳（推进冷却与参与次数窗口都读它）。
+    /// 放在 engine 是为了让 tests / sim 共用一份 —— 此前两边各有一份逐字相同的实现。
+    #[test_only]
+    public fun init_timestamp_for_test() {
+        let f = &std::account::create_account_for_test(@aptos_framework);
+        aptos_framework::timestamp::set_time_has_started_for_testing(f);
+        aptos_framework::timestamp::update_global_time_for_test_secs(1760000000);
+    }
+
+    /// 测试钩子: 过掉 ≥2 秒的推进冷却后, 以**当前 turn_id** 推进一回合
+    /// —— 同时覆盖 §4.1 自动/手动同入口与 §3.1 的「turnId 单调 + 冷却」两道防重。
+    #[test_only]
+    public fun step_for_test(who: &signer, room_id: u64) acquires RoomStore {
+        let t = aptos_framework::timestamp::now_seconds();
+        aptos_framework::timestamp::update_global_time_for_test_secs(t + 2);
+        advance_turn_test(who, room_id, room_turn(room_id));
     }
 
     /// 测试钩子：走**生产入口**（私有 `#[randomness] entry`）开战，用于验证真实随机数路径能跑通。
