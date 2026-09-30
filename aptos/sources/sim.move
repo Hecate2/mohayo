@@ -8,6 +8,7 @@
 /// It is `#[test_only]`: it depends on test-only initializers and is never deployed.
 #[test_only]
 module mohayo::sim {
+    use std::vector;
     use mohayo::engine;
     use mohayo::item;
     use mohayo::character;
@@ -88,6 +89,44 @@ module mohayo::sim {
         (wins, samples)
     }
 
+    // ===================== 统一执行器 =====================
+    // 此前 run / run_n / run_duo / run_trio / run_four / run_pro4 是六份近乎克隆的实现,
+    // 只有「建几个成员、谁来建」不同。循环体、结果判定与 guard 语义现在只在 drive 一处。
+
+    /// 面板入房(测试通道)。四项资源词条全 0 时走普通 join, 否则走带词条的 join。
+    fun join_panel(
+        a: &signer, room_id: u64, hp: u64, atk: u64, mag: u64, spd: u64,
+        md: u16, ad: u16, ab: u16, mg: i64,
+    ) {
+        if (md == 0 && ad == 0 && ab == 0 && mg == 0) {
+            engine::join_room(a, room_id, hp, atk, mag, spd);
+        } else {
+            engine::join_room_affixed(a, room_id, hp, atk, mag, spd, md, ad, ab, mg);
+        };
+    }
+
+    /// 把一战推到结算, 返回是否通关。
+    /// `stop_nb > 0` 时「打到第 stop_nb 场」即算过(用于观察中途关卡的门槛);
+    /// `stop_nb = 0` 表示打完整座地下城。`guard_cap` 是循环上限保护(不同规模队伍留的余量不同)。
+    fun drive(a: &signer, room_id: u64, stop_nb: u64, guard_cap: u64): u64 {
+        let guard = 0;
+        while (guard < guard_cap) {
+            let ph = engine::room_phase(room_id);
+            if (ph == 1) {
+                step(a, room_id);
+            } else if (ph == 3) {
+                let (bi, _total) = engine::room_battle(room_id);
+                if (stop_nb > 0 && bi >= stop_nb) { return 1; };
+                engine::advance_battle_test(a, room_id);
+            } else {
+                break;
+            };
+            guard = guard + 1;
+        };
+        if (engine::room_result(room_id) == 1) { 1 } else { 0 }
+    }
+
+    /// 单人（可选资源词条）。`stop_nb = 0` 等价于打到底。
     fun run_n(
         a: &signer, difficulty: u64,
         hp: u64, atk: u64, mag: u64, spd: u64,
@@ -96,28 +135,10 @@ module mohayo::sim {
     ): u64 {
         engine::create_room(a, difficulty);
         let room_id = skill_registry::next_room_id() - 1;
-        if (md == 0 && ad == 0 && ab == 0 && mg == 0) {
-            engine::join_room(a, room_id, hp, atk, mag, spd);
-        } else {
-            engine::join_room_affixed(a, room_id, hp, atk, mag, spd, md, ad, ab, mg);
-        };
+        join_panel(a, room_id, hp, atk, mag, spd, md, ad, ab, mg);
         engine::start_combat_test(a, room_id);
         engine::set_plan(a, room_id, 0, plan);
-        let guard = 0;
-        while (guard < 600) {
-            let ph = engine::room_phase(room_id);
-            if (ph == 1) {
-                step(a, room_id);
-            } else if (ph == 3) {
-                let (bi, _total) = engine::room_battle(room_id);
-                if (bi >= stop_nb) { return 1; };
-                engine::advance_battle_test(a, room_id);
-            } else {
-                break;
-            };
-            guard = guard + 1;
-        };
-        if (engine::room_result(room_id) == 1) { 1 } else { 0 }
+        drive(a, room_id, stop_nb, 600)
     }
 
     fun run(
@@ -126,33 +147,10 @@ module mohayo::sim {
         md: u16, ad: u16, ab: u16, mg: i64,
         plan: vector<u64>,
     ): u64 {
-        engine::create_room(a, difficulty);
-        let room_id = skill_registry::next_room_id() - 1;
-        if (md == 0 && ad == 0 && ab == 0 && mg == 0) {
-            engine::join_room(a, room_id, hp, atk, mag, spd);
-        } else {
-            engine::join_room_affixed(a, room_id, hp, atk, mag, spd, md, ad, ab, mg);
-        };
-        engine::start_combat_test(a, room_id);
-        engine::set_plan(a, room_id, 0, plan);
-        // Hard safety cap: a handful of turns per battle per dungeon is ample; a
-        // battle that cannot be won still ends by the per-battle turn timeout.
-        let guard = 0;
-        while (guard < 600) {
-            let ph = engine::room_phase(room_id);
-            if (ph == 1) {
-                step(a, room_id);
-            } else if (ph == 3) {
-                engine::advance_battle_test(a, room_id);
-            } else {
-                break;
-            };
-            guard = guard + 1;
-        };
-        if (engine::room_result(room_id) == 1) { 1 } else { 0 }
+        run_n(a, difficulty, hp, atk, mag, spd, md, ad, ab, mg, 0, plan)
     }
 
-    /// Aggregate clearance rate across `samples` room seeds. Returns (wins, total).
+    /// 单人通关率(样本数 → (胜, 总))。
     public fun clear_rate(
         a: &signer, difficulty: u64, samples: u64,
         hp: u64, atk: u64, mag: u64, spd: u64,
@@ -167,6 +165,7 @@ module mohayo::sim {
         (wins, samples)
     }
 
+    /// 单人通关率(带资源词条)。
     public fun clear_rate_affixed(
         a: &signer, difficulty: u64, samples: u64,
         hp: u64, atk: u64, mag: u64, spd: u64,
@@ -182,31 +181,14 @@ module mohayo::sim {
         (wins, samples)
     }
 
-    // ===================== party (multi-member) helpers =====================
-    // 组队仿真: 同一房间多名成员(各自面板+计划)打完整座地下城。成员经 #[test_only]
-    // 面板 join(owner=同 signer, char_id=0 免检), 用于 D5-D9 组队胜率标定。
-
-    fun run_duo(
-        a: &signer, difficulty: u64,
-        h1: u64, atk1: u64, m1: u64, s1: u64, p1: vector<u64>,
-        h2: u64, atk2: u64, m2: u64, s2: u64, p2: vector<u64>,
-    ): u64 {
-        engine::create_room(a, difficulty);
-        let room_id = skill_registry::next_room_id() - 1;
-        engine::join_room(a, room_id, h1, atk1, m1, s1);
-        engine::join_room(a, room_id, h2, atk2, m2, s2);
-        engine::start_combat_test(a, room_id);
-        engine::set_plan(a, room_id, 0, p1);
-        engine::set_plan(a, room_id, 1, p2);
-        let guard = 0;
-        while (guard < 800) {
-            let ph = engine::room_phase(room_id);
-            if (ph == 1) { step(a, room_id); }
-            else if (ph == 3) { engine::advance_battle_test(a, room_id); }
-            else { break; };
-            guard = guard + 1;
+    fun rate_of(a: &signer, difficulty: u64, samples: u64, stats: vector<u64>, plans: vector<vector<u64>>): (u64, u64) {
+        let wins = 0;
+        let i = 0;
+        while (i < samples) {
+            wins = wins + run_party(a, difficulty, stats, plans, 800);
+            i = i + 1;
         };
-        if (engine::room_result(room_id) == 1) { 1 } else { 0 }
+        (wins, samples)
     }
 
     public fun clear_rate_duo(
@@ -214,39 +196,8 @@ module mohayo::sim {
         h1: u64, atk1: u64, m1: u64, s1: u64, p1: vector<u64>,
         h2: u64, atk2: u64, m2: u64, s2: u64, p2: vector<u64>,
     ): (u64, u64) {
-        let wins = 0;
-        let i = 0;
-        while (i < samples) {
-            wins = wins + run_duo(a, difficulty, h1, atk1, m1, s1, p1, h2, atk2, m2, s2, p2);
-            i = i + 1;
-        };
-        (wins, samples)
-    }
-
-    fun run_trio(
-        a: &signer, difficulty: u64,
-        h1: u64, atk1: u64, m1: u64, s1: u64, p1: vector<u64>,
-        h2: u64, atk2: u64, m2: u64, s2: u64, p2: vector<u64>,
-        h3: u64, atk3: u64, m3: u64, s3: u64, p3: vector<u64>,
-    ): u64 {
-        engine::create_room(a, difficulty);
-        let room_id = skill_registry::next_room_id() - 1;
-        engine::join_room(a, room_id, h1, atk1, m1, s1);
-        engine::join_room(a, room_id, h2, atk2, m2, s2);
-        engine::join_room(a, room_id, h3, atk3, m3, s3);
-        engine::start_combat_test(a, room_id);
-        engine::set_plan(a, room_id, 0, p1);
-        engine::set_plan(a, room_id, 1, p2);
-        engine::set_plan(a, room_id, 2, p3);
-        let guard = 0;
-        while (guard < 800) {
-            let ph = engine::room_phase(room_id);
-            if (ph == 1) { step(a, room_id); }
-            else if (ph == 3) { engine::advance_battle_test(a, room_id); }
-            else { break; };
-            guard = guard + 1;
-        };
-        if (engine::room_result(room_id) == 1) { 1 } else { 0 }
+        rate_of(a, difficulty, samples,
+            vector[h1, atk1, m1, s1, h2, atk2, m2, s2], vector[p1, p2])
     }
 
     public fun clear_rate_trio(
@@ -255,42 +206,8 @@ module mohayo::sim {
         h2: u64, atk2: u64, m2: u64, s2: u64, p2: vector<u64>,
         h3: u64, atk3: u64, m3: u64, s3: u64, p3: vector<u64>,
     ): (u64, u64) {
-        let wins = 0;
-        let i = 0;
-        while (i < samples) {
-            wins = wins + run_trio(a, difficulty, h1, atk1, m1, s1, p1, h2, atk2, m2, s2, p2, h3, atk3, m3, s3, p3);
-            i = i + 1;
-        };
-        (wins, samples)
-    }
-
-    fun run_four(
-        a: &signer, difficulty: u64,
-        h1: u64, atk1: u64, m1: u64, s1: u64, p1: vector<u64>,
-        h2: u64, atk2: u64, m2: u64, s2: u64, p2: vector<u64>,
-        h3: u64, atk3: u64, m3: u64, s3: u64, p3: vector<u64>,
-        h4: u64, atk4: u64, m4: u64, s4: u64, p4: vector<u64>,
-    ): u64 {
-        engine::create_room(a, difficulty);
-        let room_id = skill_registry::next_room_id() - 1;
-        engine::join_room(a, room_id, h1, atk1, m1, s1);
-        engine::join_room(a, room_id, h2, atk2, m2, s2);
-        engine::join_room(a, room_id, h3, atk3, m3, s3);
-        engine::join_room(a, room_id, h4, atk4, m4, s4);
-        engine::start_combat_test(a, room_id);
-        engine::set_plan(a, room_id, 0, p1);
-        engine::set_plan(a, room_id, 1, p2);
-        engine::set_plan(a, room_id, 2, p3);
-        engine::set_plan(a, room_id, 3, p4);
-        let guard = 0;
-        while (guard < 800) {
-            let ph = engine::room_phase(room_id);
-            if (ph == 1) { step(a, room_id); }
-            else if (ph == 3) { engine::advance_battle_test(a, room_id); }
-            else { break; };
-            guard = guard + 1;
-        };
-        if (engine::room_result(room_id) == 1) { 1 } else { 0 }
+        rate_of(a, difficulty, samples,
+            vector[h1, atk1, m1, s1, h2, atk2, m2, s2, h3, atk3, m3, s3], vector[p1, p2, p3])
     }
 
     public fun clear_rate_four(
@@ -300,13 +217,36 @@ module mohayo::sim {
         h3: u64, atk3: u64, m3: u64, s3: u64, p3: vector<u64>,
         h4: u64, atk4: u64, m4: u64, s4: u64, p4: vector<u64>,
     ): (u64, u64) {
-        let wins = 0;
+        rate_of(a, difficulty, samples,
+            vector[h1, atk1, m1, s1, h2, atk2, m2, s2, h3, atk3, m3, s3, h4, atk4, m4, s4],
+            vector[p1, p2, p3, p4])
+    }
+
+    /// 组队执行器: 面板入房, `stats` 每 4 个一组(hp, atk, mag, spd), `plans` 与成员一一对应。
+    fun run_party(
+        a: &signer, difficulty: u64,
+        stats: vector<u64>, plans: vector<vector<u64>>, guard_cap: u64,
+    ): u64 {
+        engine::create_room(a, difficulty);
+        let room_id = skill_registry::next_room_id() - 1;
+        let n = vector::length(&plans);
         let i = 0;
-        while (i < samples) {
-            wins = wins + run_four(a, difficulty, h1, atk1, m1, s1, p1, h2, atk2, m2, s2, p2, h3, atk3, m3, s3, p3, h4, atk4, m4, s4, p4);
+        while (i < n) {
+            join_panel(
+                a, room_id,
+                *vector::borrow(&stats, i * 4), *vector::borrow(&stats, i * 4 + 1),
+                *vector::borrow(&stats, i * 4 + 2), *vector::borrow(&stats, i * 4 + 3),
+                0, 0, 0, 0,
+            );
             i = i + 1;
         };
-        (wins, samples)
+        engine::start_combat_test(a, room_id);
+        let j = 0;
+        while (j < n) {
+            engine::set_plan(a, room_id, j, *vector::borrow(&plans, j));
+            j = j + 1;
+        };
+        drive(a, room_id, 0, guard_cap)
     }
 
     // 真实角色 4 人队执行器: 4 个已 mint 的角色(生产链路 join_room_as_char) + 各自计划。
@@ -327,15 +267,7 @@ module mohayo::sim {
         engine::set_plan(a, room_id, 1, p2);
         engine::set_plan(a, room_id, 2, p3);
         engine::set_plan(a, room_id, 3, p4);
-        let guard = 0;
-        while (guard < 900) {
-            let ph = engine::room_phase(room_id);
-            if (ph == 1) { step(a, room_id); }
-            else if (ph == 3) { engine::advance_battle_test(a, room_id); }
-            else { break; };
-            guard = guard + 1;
-        };
-        if (engine::room_result(room_id) == 1) { 1 } else { 0 }
+        drive(a, room_id, 0, 900)
     }
 
     fun reg(a: &signer) {
