@@ -530,6 +530,22 @@ struct RoomMember {
 - **连带标定**：缺口公式封顶了 D5「督军增援」的兵源（原本可无限补哨兵），D5 near-max solo 由 86.7% 升到 95%；
   已回调 D5 敌值（机神哨兵 atk 2950→3400、机神魔像 3800→4200、机神督军 4000→4600），回到 **51/60 ≈ 85%**。
 
+### 2.6.9 Move 回合驱动防护注记（Keeper，2026-09-30 实现）
+
+对齐 `technical-design.md` §3 / §3.1（此前 `advance_turn` 是一个无防护的公开入口）。
+
+- **同一入口**：自动（Keeper）与手动（任何队员/队长）都调 `advance_turn(account, room_id, expected_turn_id)`。
+- **turnId 单调互斥**：`expected_turn_id` 必须等于房间当前 `turn_id`——同一回合只有**第一笔成功交易**
+  能推进，并发/重放的后来者在 `E_TURN_MISMATCH(24)` 上失败且**状态零变更**（只浪费调用者自己的 gas）。
+- **推进冷却**：距上次成功推进 ≥ `TURN_COOLDOWN_SECS = 2` 秒（§3.1「≥ 2 区块」的墙钟等价物），
+  否则 `E_ADVANCE_COOLDOWN(25)`——任何人（含恶意 CLI）都无法高频刷推进。手动提前结束**不受「等满 5 区块」
+  约束**（那是玩法特性），但同样受冷却约束；推进后计时基准重置。
+- **Keeper 单点故障兜底**：`emergency_advance(account, room_id)` 在距上次推进 ≥ `EMERGENCY_SECS = 30` 秒时
+  **任何人**都能调用（只推进一回合与超时判定，无任何特权）；正常节奏下门槛不可达。
+- **超时判定随推进执行**：回合上限清退仍内嵌在推进路径（`check_end`），无需单独触发器。
+- 辅助视图 `advance_ready(room_id)`（距上次推进是否已过冷却）。
+- **客户端/Keeper 注意**：调用方需先读 `room_turn(room_id)` 再带进 `expected_turn_id`。
+
 ### 2.7.1 Move 道具层注记（数据驱动, 2026-09-02 实现）
 
 - **每种道具 = item_type + ItemDef**（name/group/combat_usable/effect_kind/effect_value/decimals），**无 per-type struct**。

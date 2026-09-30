@@ -27,6 +27,9 @@ module mohayo::engine {
     const E_CANNOT_ESCAPE: u64 = 21;
     const E_ALREADY_GONE: u64 = 22;
     const E_SUMMON_NO_ESCAPE: u64 = 23;
+    const E_TURN_MISMATCH: u64 = 24;
+    const E_ADVANCE_COOLDOWN: u64 = 25;
+    const E_NOT_EMERGENCY: u64 = 26;
 
     /// 个人逃离的延迟回合数(§6.2「若干回合后」；数值层可调)
     const ESCAPE_DELAY: u64 = 3;
@@ -34,6 +37,10 @@ module mohayo::engine {
     const JOIN_DELAY: u64 = 3;
     /// 一个自然周 = 604800 秒(§3.4 周常变异按周快照)
     const WEEK_SECS: u64 = 604800;
+    /// 推进冷却(秒)：§3.1「距上次推进 ≥ 2 区块」——等价为 ≥2 秒的墙钟冷却
+    const TURN_COOLDOWN_SECS: u64 = 2;
+    /// 兜底推进门槛(秒)：§3.1「距上次推进 ≥ 30 区块」后任何人都可解卡
+    const EMERGENCY_SECS: u64 = 30;
 
     // ---- 周常变异种类(§3.4「只采纳便宜实现」) ----
     public fun MUT_NONE(): u8 { 0 }
@@ -393,6 +400,7 @@ module mohayo::engine {
         assert!(room.leader == addr, E_NOT_LEADER);
         room.phase = 1;
         room.turn_id = 1;
+        room.last_advance_secs = aptos_framework::timestamp::now_seconds();
         room.rng_seed = room_id * 1000 + 1;
         room.mana_pool = room.mana_per_turn + mutator_mana_bonus(room);
         spawn_battle(room, room_id);
@@ -448,11 +456,42 @@ module mohayo::engine {
 
     // ============================ advance turn ============================
 
-    public entry fun advance_turn(account: &signer, room_id: u64) acquires RoomStore {
+    /// 推进一回合（§4.1：自动/手动**同一入口**）。
+    /// 防重复推进（§3.1）：① `expected_turn_id` 必须等于当前 `turn_id` —— 同一回合只有第一笔
+    /// 成功交易能推进，并发/重放的后来者在断言上失败、状态零变更；② 距上次推进 ≥ `TURN_COOLDOWN_SECS`。
+    /// 手动提前结束不受「等满 5 区块」约束（这是玩法特性），但同样受冷却约束。
+    public entry fun advance_turn(account: &signer, room_id: u64, expected_turn_id: u64) acquires RoomStore {
+        let _ = account;
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
         assert!(room.phase == 1, E_NOT_COMBAT);
+        assert!(room.turn_id == expected_turn_id, E_TURN_MISMATCH);
+        let now = aptos_framework::timestamp::now_seconds();
+        assert!(now >= room.last_advance_secs + TURN_COOLDOWN_SECS, E_ADVANCE_COOLDOWN);
+        room.last_advance_secs = now;
         advance_turn_inner(room, room_id);
+    }
+
+    /// Keeper 单点故障兜底（§3.1）：距上次推进 ≥ `EMERGENCY_SECS` 时，**任何人**都能解卡；
+    /// 只推进一回合与超时判定，不含任何特权。正常节奏下因门槛够高而不可用。
+    public entry fun emergency_advance(account: &signer, room_id: u64) acquires RoomStore {
+        let _ = account;
+        let rs = borrow_global_mut<RoomStore>(@mohayo);
+        let room = table::borrow_mut(&mut rs.rooms, room_id);
+        assert!(room.phase == 1, E_NOT_COMBAT);
+        let now = aptos_framework::timestamp::now_seconds();
+        assert!(now >= room.last_advance_secs + EMERGENCY_SECS, E_NOT_EMERGENCY);
+        room.last_advance_secs = now;
+        advance_turn_inner(room, room_id);
+    }
+
+    /// 该房间距上次推进是否已达冷却（客户端/Keeper 判可用性用）
+    #[view]
+    public fun advance_ready(room_id: u64): bool acquires RoomStore {
+        let rs = borrow_global<RoomStore>(@mohayo);
+        assert!(table::contains(&rs.rooms, room_id), E_ROOM_NOT_FOUND);
+        let r = table::borrow(&rs.rooms, room_id);
+        aptos_framework::timestamp::now_seconds() >= r.last_advance_secs + TURN_COOLDOWN_SECS
     }
 
     fun advance_turn_inner(room: &mut Room, room_id: u64) {
