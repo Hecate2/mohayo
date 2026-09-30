@@ -671,28 +671,67 @@ module mohayo::engine {
 
     // ============================ internal: turn loop ============================
 
-    fun act_all(room: &mut Room, room_id: u64) {
+    /// 本回合行动顺序（§4.2：全体在场单位按**敏捷降序**）。
+    /// 同速时**玩家优先**、同侧按索引升序。打包成 key = speed × 64 + priority 后插入排序：
+    /// priority 玩家 = 40 − idx（31..40）、敌人 = 20 − idx（11..20），两段互不重叠且可反解。
+    /// 召唤物（替身人偶）不行动、不进序列。n ≤ 20，插入排序 O(n²) 且无额外存储结构。
+    fun action_order(room: &Room): vector<u64> {
+        let keys = vector::empty<u64>();
         let mlen = vector::length(&room.members);
         let i = 0;
         while (i < mlen) {
-            let alive = types::member_alive(vector::borrow(&room.members, i));
-            let gone = types::member_escaped(vector::borrow(&room.members, i));
-            let is_summon = types::member_is_summon(vector::borrow(&room.members, i));
-            let stunned = types::member_has_effect(vector::borrow(&room.members, i), 1);
-            if (alive && !gone && !is_summon && !stunned) {
-                act_member(room, room_id, i);
+            let m = vector::borrow(&room.members, i);
+            if (types::member_alive(m) && !types::member_escaped(m) && !types::member_is_summon(m)) {
+                vector::push_back(&mut keys, types::member_speed(m) * 64 + (40 - i));
             };
             i = i + 1;
         };
         let elen = vector::length(&room.enemies);
         let j = 0;
         while (j < elen) {
-            let alive = types::enemy_alive(vector::borrow(&room.enemies, j));
-            let stunned = types::enemy_has_effect(vector::borrow(&room.enemies, j), 1);
-            if (alive && !stunned) {
-                act_enemy(room, room_id, j);
+            let e = vector::borrow(&room.enemies, j);
+            if (types::enemy_alive(e)) {
+                vector::push_back(&mut keys, types::enemy_speed(e) * 64 + (20 - j));
             };
             j = j + 1;
+        };
+        let n = vector::length(&keys);
+        let a = 1;
+        while (a < n) {
+            let v = *vector::borrow(&keys, a);
+            let b = a;
+            while (b > 0 && *vector::borrow(&keys, b - 1) > v) {
+                *vector::borrow_mut(&mut keys, b) = *vector::borrow(&keys, b - 1);
+                b = b - 1;
+            };
+            *vector::borrow_mut(&mut keys, b) = v;
+            a = a + 1;
+        };
+        keys
+    }
+
+    fun act_all(room: &mut Room, room_id: u64) {
+        let keys = action_order(room);
+        let n = vector::length(&keys);
+        let k = n;
+        while (k > 0) {
+            k = k - 1; // 从最大 key 起 = 敏捷最高者先动
+            let key = *vector::borrow(&keys, k);
+            let p = key % 64;
+            if (p <= 20) {
+                let idx = 20 - p;
+                if (types::enemy_alive(vector::borrow(&room.enemies, idx))
+                    && !types::enemy_has_effect(vector::borrow(&room.enemies, idx), 1)) {
+                    act_enemy(room, room_id, idx);
+                };
+            } else {
+                let idx = 40 - p;
+                if (types::member_alive(vector::borrow(&room.members, idx))
+                    && !types::member_escaped(vector::borrow(&room.members, idx))
+                    && !types::member_has_effect(vector::borrow(&room.members, idx), 1)) {
+                    act_member(room, room_id, idx);
+                };
+            };
         };
     }
 
@@ -819,15 +858,16 @@ module mohayo::engine {
             room.mana_all_consumed = 0;
         };
 
-        let targets = select_targets(room, targeting, types::skill_target_count(s), actor_is_enemy, actor_idx);
-
+        // 多段连击(targeting 3)：**每段独立抽取随机目标**（§4.2）——可能重复命中同一目标，
+        // 也可能分摊给不同目标；每段独立命中掷骰。非多段技 strikes=1，等价于只抽一次。
         let strikes = if (targeting == 3) { types::skill_target_count(s) as u64 } else { 1 };
         let mut_strike = 0;
         while (mut_strike < strikes) {
-            let tlen = vector::length(&targets);
+            let ts = select_targets(room, targeting, types::skill_target_count(s), actor_is_enemy, actor_idx);
+            let tlen = vector::length(&ts);
             let k = 0;
             while (k < tlen) {
-                let t = vector::borrow(&targets, k);
+                let t = vector::borrow(&ts, k);
                 resolve_target(room, room_id, actor_idx, actor_is_enemy, s, t, guaranteed);
                 k = k + 1;
             };

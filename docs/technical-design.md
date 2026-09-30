@@ -440,6 +440,22 @@ struct RoomMember {
   离开房间（`leave_room`，仅大厅期）现在真正移除成员并触发继任。
 - 新增视图：`room_leader` / `member_escaped` / `member_escape_delay` / `economy::balance_of`（i128）/ `is_debtor`。
 
+### 2.6.4 Move 行动顺序与逐段目标注记（2026-09-30 实现）
+
+对齐 `gameplay-design.md` §4.2；此前实现是「玩家固定先动、速度不参与排序」，多段技是「选定一个目标连击 N 段」。
+
+- **敏捷降序行动**（`engine::action_order`）：每回合把全体在场单位（玩家 + 敌人）按 `speed` 降序排列后依次行动。
+  实现为打包 key = `speed × 64 + priority` 的**插入排序**（n ≤ 20，O(n²)，无额外存储结构）：
+  priority 玩家 = `40 − idx`（31..40）、敌人 = `20 − idx`（11..20），两段互不重叠且可反解。
+  **同速时玩家优先**，同侧按索引升序。替身人偶（召唤物）不行动、不进序列。
+  行动时重新确认存活（先手可能已把后手打死）；眩晕者跳过。
+- **逐段独立随机目标**（`resolve_skill`）：`targeting == 3` 的多段技**每一段各自调用一次目标抽取**
+  ——可能重复命中同一目标、也可能分摊给多只敌人；每段独立命中掷骰、独立享受伤害上限（§4.2 原文语义）。
+  AP/魔素/弹药仍按**行动整体**只扣一次。
+- **影响面**：`speed` 此前从未参与任何计算，敌人模板的 speed 值（D2 的 45~90 等）从未被校准过；
+  上线后慢速面板（例：守卫×巨人的 1 级极限面板 spd 27）会**后手**，控制类敌人（缠绕眩晕）先落地。
+  相关 sim 标定已按新引擎重跑（`sim_d2_l1_talented` 等）。
+
 ### 2.7.1 Move 道具层注记（数据驱动, 2026-09-02 实现）
 
 - **每种道具 = item_type + ItemDef**（name/group/combat_usable/effect_kind/effect_value/decimals），**无 per-type struct**。

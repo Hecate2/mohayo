@@ -1618,4 +1618,66 @@ module mohayo::tests {
             guard = guard + 1;
         };
     }
+
+    // ===================== P1: 敏捷行动顺序与逐段随机目标（§4.2） =====================
+
+    #[test]
+    fun test_agility_order_decides_who_acts_first() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        // 覆写 D2 战斗 1 为单只残破机仆(110hp, spd 90)
+        skill_registry::set_dungeon(a, 2, types::make_dungeon_config(5, 1, 10, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon_battles(a, 2, vector[types::make_battle_config(5, 1)]);
+        // ① 高速(spd 1000)先手秒杀 → 全程零受击
+        engine::create_room(a, 2);
+        engine::join_room(a, 1, 100, 1000, 100, 1000);
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[820]);
+        engine::advance_turn(a, 1);
+        assert!(engine::room_result(1) == 1, 1);
+        let (fhp, _, _, _, _, _) = engine::member_state(1, 0);
+        assert!(fhp == 100, 2);
+        // ② 低速(spd 1): 机仆(spd 90)先动 → 必然吃到攻击
+        engine::create_room(a, 2);
+        engine::join_room(a, 2, 1000000, 10, 10, 1);
+        engine::start_combat(a, 2);
+        // 不排计划(空过): 只观察「谁先动手」——低速者必经敌人的行动
+        let guard = 0;
+        while (guard < 30 && engine::room_phase(2) == 1) {
+            engine::advance_turn(a, 2);
+            guard = guard + 1;
+        };
+        let (shp, _, _, _, _, _) = engine::member_state(2, 0);
+        assert!(shp < 1000000, 3);
+    }
+
+    #[test]
+    fun test_multi_strike_redraws_random_targets() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        // 暴风剑(840) = 4 段连击。若四段锁死同一目标, 一回合内只会有 1 只敌人掉血;
+        // 逐段独立抽目标(§4.2)才会出现「分摊到 ≥2 只敌人」。
+        let any_split = false;
+        let s = 0;
+        while (s < 10) {
+            let rid = s + 1;
+            engine::create_room(a, 5);                              // D5 b1 = 机神哨兵 ×3 (1100hp)
+            engine::join_room_affixed(a, rid, 1000000, 100, 100, 200, 5, 3, 0, 0);
+            engine::start_combat(a, rid);
+            engine::set_plan(a, rid, 0, vector[840]);
+            engine::advance_turn(a, rid);
+            let hits = 0;
+            let e = 0;
+            while (e < 3) {
+                let (hp, max_hp, _, _, _, _) = engine::enemy_state(rid, e);
+                if (hp < max_hp) { hits = hits + 1; };
+                e = e + 1;
+            };
+            if (hits >= 2) { any_split = true; };
+            s = s + 1;
+        };
+        assert!(any_split, 1);
+    }
 }
