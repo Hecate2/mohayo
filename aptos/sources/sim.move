@@ -1143,15 +1143,15 @@ module mohayo::sim {
         item::gm_mint(a, item::ITEM_DICE_OF_FATE, own, 1);
         // §2.3 二选一: 首号自带 3 次免费重掷 → 前三次不核销骰子
         assert!(character::free_rerolls(own) == 3, 5);
-        use_item::dice_of_fate(a, cid);
+        use_item::dice_of_fate_test(a, cid, 101);
         assert!(character::free_rerolls(own) == 2, 6);
         assert!(item::balance_whole(item::ITEM_DICE_OF_FATE, own) == 1, 7);
         // 用光免费次数后才核销骰子
-        use_item::dice_of_fate(a, cid);
-        use_item::dice_of_fate(a, cid);
+        use_item::dice_of_fate_test(a, cid, 102);
+        use_item::dice_of_fate_test(a, cid, 103);
         assert!(character::free_rerolls(own) == 0, 8);
         assert!(item::balance_whole(item::ITEM_DICE_OF_FATE, own) == 1, 9);
-        use_item::dice_of_fate(a, cid);
+        use_item::dice_of_fate_test(a, cid, 104);
         let (cls, race, lvl, _, _, _, _, _, _, _) = character::get_character(cid);
         let ss = character::get_self_select(cid);
         let bal = item::balance_whole(item::ITEM_DICE_OF_FATE, own);
@@ -1170,7 +1170,7 @@ module mohayo::sim {
         character::gm_mint_at_level(a, own, 2, 0, vector[0, 0, 0, 0], vector[850], 40);
         let cid = character::owner_latest_char(own);
         item::gm_mint(a, item::ITEM_REBIRTH_SCROLL, own, 1);
-        use_item::rebirth_scroll(a, cid);
+        use_item::rebirth_scroll_test(a, cid, 777);
         let (cls, race, lvl, _, _, _, _, _, _, _) = character::get_character(cid);
         let ss = character::get_self_select(cid);
         let bal = item::balance_whole(item::ITEM_REBIRTH_SCROLL, own);

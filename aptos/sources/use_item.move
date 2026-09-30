@@ -10,6 +10,7 @@
 ///   再计当日次数; 超额则拒入。**免费地下城不消耗次数**(§6.3 负债者仍可进免费图打工)。
 module mohayo::use_item {
     use aptos_framework::event;
+    use aptos_framework::randomness;
     use aptos_framework::timestamp;
     use aptos_std::table::{Self, Table};
     use std::signer;
@@ -30,8 +31,6 @@ module mohayo::use_item {
     #[event]
     struct EntryCreditAdded has drop, store { player: address, amount: u64, source: u64 }
 
-    struct RerollSeq has key { counter: u64 }
-
     struct EntryGate has key {
         last_claimed_day: Table<address, u64>,
         credits: Table<address, u64>,      // 额外入场额度(挑战券/每日券兑出)
@@ -41,7 +40,6 @@ module mohayo::use_item {
     }
 
     fun init_module(account: &signer) {
-        move_to(account, RerollSeq { counter: 0 });
         move_to(account, EntryGate {
             last_claimed_day: table::new(),
             credits: table::new(),
@@ -53,21 +51,31 @@ module mohayo::use_item {
 
     #[test_only]
     public fun init_for_test(account: &signer) {
-        if (!exists<RerollSeq>(@mohayo)) { init_module(account); };
+        if (!exists<EntryGate>(@mohayo)) { init_module(account); };
     }
 
     // ===================== 重掷 / 重建 =====================
 
     /// 命运骰子: 种族+词条全重掷(保留职业/等级/已选自选技); 仅关卡外。
-    public entry fun dice_of_fate(account: &signer, char_id: u64)
-    acquires RerollSeq {
+    /// 私有 `entry` + `#[randomness]`: 掷骰用协议随机数(§2.6.14)。
+    /// 此前用全局自增计数器当种子, 结果可以被任何人预先算出 —— 等于「重掷前先看答案」。
+    #[randomness]
+    entry fun dice_of_fate(account: &signer, char_id: u64) {
+        do_dice_of_fate(account, char_id, randomness::u64_integer());
+    }
+
+    #[test_only]
+    public entry fun dice_of_fate_test(account: &signer, char_id: u64, seed: u64) {
+        do_dice_of_fate(account, char_id, seed);
+    }
+
+    fun do_dice_of_fate(account: &signer, char_id: u64, seed: u64) {
         let owner = signer::address_of(account);
         assert!(character::char_owner(char_id) == owner, E_NOT_OWNER);
         // §2.3 二选一: 先扣 playerId 级免费重掷计数器, 没有才核销一枚命运骰子
         if (!character::try_consume_free_reroll(owner)) {
             item::consume_raw(item::ITEM_DICE_OF_FATE, owner, item::one());
         };
-        let seed = next_seed();
         let r = rng::new(seed);
         let race = character::roll_random_race(&mut r);
         let tiers = character::roll_random_affix_tiers(&mut r);
@@ -75,22 +83,24 @@ module mohayo::use_item {
     }
 
     /// 重生卷轴: 整体重建角色(换种族+词条, 等级重置为 1, 自选技清空); 仅关卡外。
-    public entry fun rebirth_scroll(account: &signer, char_id: u64)
-    acquires RerollSeq {
+    #[randomness]
+    entry fun rebirth_scroll(account: &signer, char_id: u64) {
+        do_rebirth_scroll(account, char_id, randomness::u64_integer());
+    }
+
+    #[test_only]
+    public entry fun rebirth_scroll_test(account: &signer, char_id: u64, seed: u64) {
+        do_rebirth_scroll(account, char_id, seed);
+    }
+
+    fun do_rebirth_scroll(account: &signer, char_id: u64, seed: u64) {
         let owner = signer::address_of(account);
         assert!(character::char_owner(char_id) == owner, E_NOT_OWNER);
         item::consume_raw(item::ITEM_REBIRTH_SCROLL, owner, item::one());
-        let seed = next_seed();
         let r = rng::new(seed);
         let race = character::roll_random_race(&mut r);
         let tiers = character::roll_random_affix_tiers(&mut r);
         character::rebuild_character(char_id, race, tiers);
-    }
-
-    fun next_seed(): u64 acquires RerollSeq {
-        let s = borrow_global_mut<RerollSeq>(@mohayo);
-        s.counter = s.counter + 1;
-        s.counter
     }
 
     // ===================== 入场类 =====================
