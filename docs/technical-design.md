@@ -778,12 +778,9 @@ struct RoomMember {
    （`register_skill` 断言 id 不存在、AI/模板/表用自增 id append、`add_battle_variant` 只能追加）。
    副本 / 场次 / 掉落表 / 道具 / 职业 / 种族 / 词条模板 **可以**覆写。
    「数值层无需改代码」对前者不成立 —— 修一个超模技能只能靠发新 id，旧 id 永久可用。
-3. **DISPEL 白名单不含 SHIELD(op4) 与 GUAR_NEXT(op7)**：`dispel_effects` 只清 1/2/3/5/6/8/11，
-   与 §2.5.1 效果表「SHIELD 可驱散=是」「GUAR_NEXT 可被敌方 DISPEL 剥」冲突。
-   当前内容只有矮人种族技 730 自解，且无敌方 DISPEL，故暂未显形。
-4. **SHIELD 扣减顺序是 LIFO**，§2.5.1 写的是 FIFO（先挂入的先消耗）。只影响多盾并存时的到期顺序。
-5. **同 op 合并的 duration 是覆盖**，§2.5.1 对可叠加类要求 `max(原剩余, 新持续)` ——
-   更短的新效果会把既有长效果压短（如 2 回合尘幕覆盖 3 回合黑幕的剩余时长）。
+3. ✅ **已按 §2.5.1 对齐**：DISPEL 白名单补上 op4(SHIELD) 与 op7(GUAR_NEXT)。
+4. ✅ **已按 §2.5.1 改为 FIFO**（从头遍历，先挂入的先消耗）。
+5. ✅ **已按 §2.5.1 改为 max(原剩余, 新持续)**（GUAR_NEXT 按文档单列「替换」语义）。
 6. **负债者可以创建免费房**：`charge_entry` 在 `amount==0` 时提前返回，不查 `is_debtor`。
    §6.3 写「负债者不得创建房间」，但也承诺「仍可加入免费地下城打工」——两条如何取舍需定案
    （现状：负债者能开免费房、也能用既有角色进去打）。
@@ -791,13 +788,12 @@ struct RoomMember {
    `join_room_as_char` 各扣一次窗口额度，同一账号 24h 内「开房 + 加入」的总次数受限，
    创建泛滥因此也被封顶；开房者即队长（且队长必须是在场队员）。
 8. **副本无最低等级门槛**：§3.1 列为可选设计（「D5 例如要求 40 级以上」），`DungeonConfig` 无此字段。
-9. **`expire_room` / `disband_room` 可重复调用刷新 `end_secs`**，回收窗口被不断推迟（存储滞留）。
-   建议改成幂等：已关闭则不再刷新。`roll_random_race` 在种族池被 GM 配空时会 abort（建号被砖）。
-10. **GM 参数无上界**：`set_weekly_mutator` 的 `value`（`MUT_DROP` 会直接变成结算循环次数）、
-    `set_room_ttl` / `set_reclaim_delay` 都无范围校验 —— 运营误配置可能砖化结算。
-11. **`skill_registry::consume_next_room_id` 是裸 `public fun`**：任何模块都能烧房号（建议改 friend）。
-12. **`settle_rewards` 在奖池为 0 时提前 return**，掉落掷骰整段跳过（当前内容不触发：
-    所有会出现在终局的敌人都有奖励）。
+9. ✅ **已改为幂等**：已关闭的房间不再刷新 `end_secs`，重复解散/过期是静默 no-op。
+   （遗留：`roll_random_race` 在种族池被 GM 配空时会 abort —— 建号被砖，属 GM 配置 footgun。）
+10. ✅ **`MUT_DROP` 的额外掷骰次数已钳制到 100**（结算循环不再被 GM 误配置拉爆）。
+    `set_room_ttl` / `set_reclaim_delay` 仍无上界（调得离谱只影响过期/回收时机，无循环风险）。
+11. ✅ **已收权为 `public(friend)`**（skill_registry 新增 `friend mohayo::engine`）。
+12. ✅ **已修**：去掉「奖池为 0 就提前 return」，掉落掷骰与奖池解耦（§7.2「每个存活者独立掷一次」）。
 13. **`roll_random_race` 在种族池为空时 abort**（GM 配置 footgun）。
 14. **预留未消费**：`ActiveEffect.source_id`（只写不读，留给「伤害归属回写」的履历统计）、
     `SummonRule.enemy_headroom`（召唤缺口目前硬编码 +2）。
