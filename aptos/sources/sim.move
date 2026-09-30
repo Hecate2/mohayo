@@ -13,6 +13,7 @@ module mohayo::sim {
     use mohayo::skill_registry;
     use mohayo::content_registration;
     use mohayo::use_item;
+    use mohayo::economy;
 
     /// Play one full dungeon run for a single-member party with flat stats (no
     /// resource affixes). Returns 1 if cleared, 0 otherwise.
@@ -341,6 +342,9 @@ module mohayo::sim {
         skill_registry::init_for_test(a);
         engine::init_for_test(a);
         use_item::init_for_test(a);
+        economy::init_for_test(a);
+        // 测试钱包：覆盖入场费/救援费/收益结算链路(生产走真实玩家余额)
+        economy::gm_mint(a, @mohayo, 1000000000);
         content_registration::register_all_content(a);
     }
 

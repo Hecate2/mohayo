@@ -9,6 +9,7 @@ module mohayo::engine {
     use mohayo::skill_registry;
     use mohayo::character;
     use mohayo::item;
+    use mohayo::economy;
 
     const E_ROOM_NOT_FOUND: u64 = 3;
     const E_BAD_INDEX: u64 = 4;
@@ -22,6 +23,12 @@ module mohayo::engine {
     const E_LAST_BATTLE: u64 = 18;
     const E_NOT_PLAN_OWNER: u64 = 19;
     const E_SKILL_NOT_OWNED: u64 = 20;
+    const E_CANNOT_ESCAPE: u64 = 21;
+    const E_ALREADY_GONE: u64 = 22;
+    const E_SUMMON_NO_ESCAPE: u64 = 23;
+
+    /// 个人逃离的延迟回合数(§6.2「若干回合后」；数值层可调)
+    const ESCAPE_DELAY: u64 = 3;
 
     // ============================ resource ============================
 
@@ -98,6 +105,18 @@ module mohayo::engine {
     struct SmokeApplied has drop, store { room_id: u64, magnitude: u64, duration: u8 }
     #[event]
     struct UnitRevived has drop, store { room_id: u64, index: u64, hp: u64 }
+    #[event]
+    struct MemberEscaped has drop, store { room_id: u64, player: address }
+    #[event]
+    struct LeaderChanged has drop, store { room_id: u64, new_leader: address }
+    #[event]
+    struct RewardPaid has drop, store { room_id: u64, player: address, amount: u64 }
+    #[event]
+    struct RewardForfeited has drop, store { room_id: u64, amount: u64 }
+    #[event]
+    struct RescuePaid has drop, store { room_id: u64, player: address, amount: u64 }
+    #[event]
+    struct RunRetreated has drop, store { room_id: u64 }
 
     // ============================ init ============================
 
@@ -110,6 +129,8 @@ module mohayo::engine {
     public entry fun create_room(account: &signer, difficulty: u64) acquires RoomStore {
         let addr = signer::address_of(account);
         let dungeon = skill_registry::get_dungeon(difficulty);
+        // 入场费(§3.1): 开房即扣、直接销毁；余额不足则整笔交易回滚
+        economy::charge_entry(addr, types::dungeon_entry_fee(&dungeon));
         let rid = skill_registry::consume_next_room_id();
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = Room {
@@ -203,12 +224,68 @@ module mohayo::engine {
         event::emit(MemberJoined { room_id, player: signer::address_of(account) });
     }
 
+    /// 大厅期离房(§3.1 解散前的自由加入/退出)。开战后改用 `request_escape`。
     public entry fun leave_room(account: &signer, room_id: u64) acquires RoomStore {
         let addr = signer::address_of(account);
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
         assert!(room.phase == 0, E_NOT_LOBBY);
+        let n = vector::length(&room.members);
+        let i = 0;
+        let found = false;
+        while (i < n) {
+            let m = vector::borrow(&room.members, i);
+            if (types::member_owner(m) == addr && !types::member_is_summon(m)) {
+                vector::remove(&mut room.members, i);
+                found = true;
+                break;
+            };
+            i = i + 1;
+        };
+        assert!(found, E_BAD_INDEX);
+        ensure_leader(room, room_id);
         event::emit(MemberLeft { room_id, player: addr });
+    }
+
+    // ============================ escape & retreat (§6.2) ============================
+
+    /// 个人逃离：任何队员(含队长)在关卡内任意时刻可发起。
+    /// - 战斗进行中(phase 1)：**延迟 ESCAPE_DELAY 回合**后离场；
+    /// - 战斗间歇(phase 3)：**立即离场**。
+    /// 离场者无收益、不再参战、不占活人名额、**不吃救援费**(§6.2/§6.3)。
+    /// 队长离场时按加入顺序自动继任(§3.2/§6.2)。
+    public entry fun request_escape(account: &signer, room_id: u64, member_index: u64) acquires RoomStore {
+        let addr = signer::address_of(account);
+        let rs = borrow_global_mut<RoomStore>(@mohayo);
+        let room = table::borrow_mut(&mut rs.rooms, room_id);
+        assert!(room.phase == 1 || room.phase == 3, E_CANNOT_ESCAPE);
+        assert!(member_index < vector::length(&room.members), E_BAD_INDEX);
+        {
+            let m = vector::borrow(&room.members, member_index);
+            assert!(types::member_owner(m) == addr, E_NOT_PLAN_OWNER);
+            assert!(!types::member_is_summon(m), E_SUMMON_NO_ESCAPE);
+            assert!(types::member_alive(m) && !types::member_escaped(m), E_ALREADY_GONE);
+        };
+        if (room.phase == 3) {
+            do_escape(room, room_id, member_index);
+            check_end(room, room_id);
+        } else {
+            types::member_set_escape_delay(vector::borrow_mut(&mut room.members, member_index), ESCAPE_DELAY as u8);
+        };
+    }
+
+    /// 队长全员逃离(§6.1/§6.2)：**仅在战斗获胜后的间歇期**可发起。
+    /// 提前结束关卡，存活者按随机权重分配收益。
+    public entry fun leader_retreat(account: &signer, room_id: u64) acquires RoomStore {
+        let addr = signer::address_of(account);
+        let rs = borrow_global_mut<RoomStore>(@mohayo);
+        let room = table::borrow_mut(&mut rs.rooms, room_id);
+        assert!(room.phase == 3, E_NOT_INTERMISSION);
+        assert!(room.leader == addr, E_NOT_LEADER);
+        settle_rewards(room, room_id);
+        room.phase = 2;
+        room.result = 1;
+        event::emit(RunRetreated { room_id });
     }
 
     // ============================ combat start ============================
@@ -287,6 +364,7 @@ module mohayo::engine {
     fun advance_turn_inner(room: &mut Room, room_id: u64) {
         room.turn_id = room.turn_id + 1;
         room.battle_turns = room.battle_turns + 1;
+        tick_escapes(room, room_id); // 先结算个人逃离(离场者本回合起不参战)
         tick_all_effects(room, room_id);
         act_all(room, room_id);
         let mut_delta = room.mana_per_turn;
@@ -376,6 +454,34 @@ module mohayo::engine {
         (types::member_hp(m), types::member_max_hp(m), types::member_attack(m),
          types::member_magic(m), types::member_speed(m),
          if (types::member_alive(m)) { 1 } else { 0 })
+    }
+
+    /// 当前队长地址(§3.2 继承后由合约自动更新)
+    #[view]
+    public fun room_leader(room_id: u64): address acquires RoomStore {
+        let rs = borrow_global<RoomStore>(@mohayo);
+        assert!(table::contains(&rs.rooms, room_id), E_ROOM_NOT_FOUND);
+        table::borrow(&rs.rooms, room_id).leader
+    }
+
+    /// 该成员是否已个人逃离(§6.2)
+    #[view]
+    public fun member_escaped(room_id: u64, member_index: u64): bool acquires RoomStore {
+        let rs = borrow_global<RoomStore>(@mohayo);
+        assert!(table::contains(&rs.rooms, room_id), E_ROOM_NOT_FOUND);
+        let r = table::borrow(&rs.rooms, room_id);
+        assert!(member_index < vector::length(&r.members), E_BAD_INDEX);
+        types::member_escaped(vector::borrow(&r.members, member_index))
+    }
+
+    /// 待处理逃离的剩余回合数(0 = 无)
+    #[view]
+    public fun member_escape_delay(room_id: u64, member_index: u64): u64 acquires RoomStore {
+        let rs = borrow_global<RoomStore>(@mohayo);
+        assert!(table::contains(&rs.rooms, room_id), E_ROOM_NOT_FOUND);
+        let r = table::borrow(&rs.rooms, room_id);
+        assert!(member_index < vector::length(&r.members), E_BAD_INDEX);
+        (types::member_escape_delay(vector::borrow(&r.members, member_index)) as u64)
     }
 
     #[view]
@@ -570,9 +676,10 @@ module mohayo::engine {
         let i = 0;
         while (i < mlen) {
             let alive = types::member_alive(vector::borrow(&room.members, i));
+            let gone = types::member_escaped(vector::borrow(&room.members, i));
             let is_summon = types::member_is_summon(vector::borrow(&room.members, i));
             let stunned = types::member_has_effect(vector::borrow(&room.members, i), 1);
-            if (alive && !is_summon && !stunned) {
+            if (alive && !gone && !is_summon && !stunned) {
                 act_member(room, room_id, i);
             };
             i = i + 1;
@@ -1091,6 +1198,141 @@ module mohayo::engine {
             types::member_clear_effects(m);
         };
         event::emit(UnitDied { room_id, is_enemy: false, index: idx });
+        ensure_leader(room, room_id); // 队长阵亡 → 按加入顺序自动继任(§3.2/§6.2)
+    }
+
+    // ============================ internal: escape / leader / 结算 ============================
+
+    /// 该槽位是否为「在场的玩家成员」（存活、未逃离、非召唤物）。
+    fun is_active_player(room: &Room, i: u64): bool {
+        let m = vector::borrow(&room.members, i);
+        types::member_alive(m) && !types::member_escaped(m) && !types::member_is_summon(m)
+    }
+
+    /// 回合初推进逃离倒计时；归零者当场离场（§6.2 战斗中的延迟逃离）。
+    fun tick_escapes(room: &mut Room, room_id: u64) {
+        let n = vector::length(&room.members);
+        let i = 0;
+        while (i < n) {
+            let d = types::member_escape_delay(vector::borrow(&room.members, i));
+            if (d > 0) {
+                let nd = d - 1;
+                types::member_set_escape_delay(vector::borrow_mut(&mut room.members, i), nd);
+                if (nd == 0) { do_escape(room, room_id, i); };
+            };
+            i = i + 1;
+        };
+    }
+
+    /// 离场状态置位：无收益、不再参战、不占活人名额、不吃救援费（§6.2/§6.3）。
+    fun do_escape(room: &mut Room, room_id: u64, idx: u64) {
+        let owner = types::member_owner(vector::borrow(&room.members, idx));
+        {
+            let m = vector::borrow_mut(&mut room.members, idx);
+            types::member_set_escaped(m, true);
+            types::member_set_alive(m, false);
+            types::member_set_escape_delay(m, 0);
+            types::member_set_plan(m, vector::empty());
+            types::member_clear_effects(m);
+        };
+        event::emit(MemberEscaped { room_id, player: owner });
+        ensure_leader(room, room_id);
+    }
+
+    /// 队长去位（阵亡 / 逃离 / 退房）后的自动继任：
+    /// 按**加入房间的先后顺序**（members 向量序 = push_back 序）取第一个仍在场者（§3.2/§6.2）。
+    /// 召唤物（替身人偶）永远跳过 —— 继承链只走玩家角色。
+    fun ensure_leader(room: &mut Room, room_id: u64) {
+        let n = vector::length(&room.members);
+        let i = 0;
+        while (i < n) {
+            if (types::member_owner(vector::borrow(&room.members, i)) == room.leader && is_active_player(room, i)) {
+                return; // 现队长仍在场
+            };
+            i = i + 1;
+        };
+        let j = 0;
+        while (j < n) {
+            if (is_active_player(room, j)) {
+                let owner = types::member_owner(vector::borrow(&room.members, j));
+                room.leader = owner;
+                event::emit(LeaderChanged { room_id, new_leader: owner });
+                return;
+            };
+            j = j + 1;
+        };
+    }
+
+    /// 有资格分享收益的成员槽位：存活、未逃离、非召唤物（§6.1）。
+    fun eligible_survivors(room: &Room): vector<u64> {
+        let out = vector::empty<u64>();
+        let n = vector::length(&room.members);
+        let i = 0;
+        while (i < n) {
+            if (is_active_player(room, i)) { vector::push_back(&mut out, i); };
+            i = i + 1;
+        };
+        out
+    }
+
+    /// 收益发放（§6.1）：对每个存活者独立抽取随机权重（1..=1000），按权重分配奖池；
+    /// 期望均衡、实际有波动。余数归最后一人，保证账目守恒。
+    /// 无人可领（全灭/全逃离）则整池作废。
+    fun settle_rewards(room: &mut Room, room_id: u64) {
+        let pool = room.reward_pool;
+        room.reward_pool = 0;
+        if (pool == 0) return;
+        let idxs = eligible_survivors(room);
+        let n = vector::length(&idxs);
+        if (n == 0) {
+            event::emit(RewardForfeited { room_id, amount: pool });
+            return;
+        };
+        let r = mohayo::rng::new(room.rng_seed);
+        let weights = vector::empty<u64>();
+        let total: u128 = 0;
+        let i = 0;
+        while (i < n) {
+            let w = mohayo::rng::range(&mut r, 1, 1001);
+            vector::push_back(&mut weights, w);
+            total = total + (w as u128);
+            i = i + 1;
+        };
+        room.rng_seed = mohayo::rng::next(&mut r);
+        let remaining = pool;
+        let k = 0;
+        while (k < n) {
+            let share = if (k == n - 1) { remaining } else {
+                (((pool as u128) * (*vector::borrow(&weights, k) as u128) / total) as u64)
+            };
+            remaining = remaining - share;
+            let idx = *vector::borrow(&idxs, k);
+            let owner = types::member_owner(vector::borrow(&room.members, idx));
+            economy::credit(owner, share);
+            event::emit(RewardPaid { room_id, player: owner, amount: share });
+            k = k + 1;
+        };
+    }
+
+    /// 救援费（§6.3）：全队被击败 / 超时 → 每个仍在局内的玩家成员按难度固定费扣款，
+    /// **允许扣成负数、负余额无上限**；已个人逃离者与召唤物不扣（§6.2）。
+    fun charge_rescue_fees(room: &mut Room, room_id: u64) {
+        let dungeon = skill_registry::get_dungeon(room.difficulty as u64);
+        let fee = types::dungeon_rescue_fee(&dungeon);
+        if (fee == 0) return;
+        let n = vector::length(&room.members);
+        let i = 0;
+        while (i < n) {
+            {
+                let m = vector::borrow(&room.members, i);
+                if (!types::member_is_summon(m) && !types::member_escaped(m)) {
+                    let owner = types::member_owner(m);
+                    economy::charge_rescue(owner, fee);
+                    event::emit(RescuePaid { room_id, player: owner, amount: fee });
+                };
+            };
+            i = i + 1;
+        };
     }
 
     // ============================ internal: end check ============================
@@ -1098,15 +1340,22 @@ module mohayo::engine {
     fun check_end(room: &mut Room, room_id: u64) {
         // Defeat is checked FIRST: a mutual wipe (party dies the same action the
         // last enemy dies) is a loss, never a victory — the party must SURVIVE to win.
-        let all_members_dead = true;
+        // 「全队被击败」= 没有任何**玩家成员**仍在场(存活且未逃离)。
+        // 召唤物(替身人偶)不算玩家单位：它们活者也不能阻止败北判定(§3.2)。
+        let any_player_alive = false;
+        let player_count: u64 = 0;
         let mlen = vector::length(&room.members);
         let j = 0;
         while (j < mlen) {
-            let alive = types::member_alive(vector::borrow(&room.members, j));
-            if (alive) { all_members_dead = false; break; };
+            let m = vector::borrow(&room.members, j);
+            if (!types::member_is_summon(m)) {
+                player_count = player_count + 1;
+                if (types::member_alive(m) && !types::member_escaped(m)) { any_player_alive = true; };
+            };
             j = j + 1;
         };
-        if (all_members_dead && mlen > 0) {
+        if (!any_player_alive && player_count > 0) {
+            charge_rescue_fees(room, room_id); // 全队被击败 → 全员倒扣救援费(可负)
             room.phase = 2;
             room.result = 2;
             event::emit(DefeatEvt { room_id });
@@ -1129,10 +1378,8 @@ module mohayo::engine {
             } else {
                 room.phase = 2;
                 room.result = 1;
-                let share = room.reward_pool;
-                room.reward_pool = 0;
+                settle_rewards(room, room_id); // 存活者按随机权重分配奖池(§6.1)
                 event::emit(VictoryEvt { room_id });
-                let _ = share;
             };
             return;
         };
@@ -1142,6 +1389,7 @@ module mohayo::engine {
         let dungeon = skill_registry::get_dungeon(room.difficulty as u64);
         let turn_budget = types::dungeon_turn_interval(&dungeon);
         if (turn_budget > 0 && room.battle_turns > turn_budget) {
+            charge_rescue_fees(room, room_id); // 超时按全队被击败处理(§6.3)
             room.phase = 2;
             room.result = 2;
             event::emit(DefeatEvt { room_id });

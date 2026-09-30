@@ -17,6 +17,8 @@ module mohayo::tests {
         character::init_for_test(account);
         economy::init_for_test(account);
         engine::init_for_test(account);
+        // 测试钱包：覆盖入场费/救援费/收益结算链路
+        economy::gm_mint(account, @mohayo, 1000000000);
     }
 
     fun skill_attack(): types::Skill {
@@ -1370,5 +1372,250 @@ module mohayo::tests {
         assert!(engine::room_phase(1) == 3, 2);
         // Reward accumulated from killing both stones.
         assert!(engine::reward_pool(1) > 0, 3);
+    }
+
+    // ===================== P0: 经济闭环（入场费/救援费/收益发放） =====================
+
+    #[test]
+    fun test_economy_negative_balance_and_debt_repayment() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        economy::init_for_test(a);
+        economy::gm_charge_rescue(a, @0xD001, 50);
+        assert!(economy::balance_of(@0xD001) == -50, 1);   // 救援费允许负余额
+        assert!(economy::is_debtor(@0xD001), 2);
+        economy::gm_charge_rescue(a, @0xD001, 30);         // 负余额无上限
+        assert!(economy::balance_of(@0xD001) == -80, 3);
+        economy::gm_credit(a, @0xD001, 30);                // 收益先自动偿债
+        assert!(economy::balance_of(@0xD001) == -50, 4);
+        economy::gm_credit(a, @0xD001, 90);
+        assert!(economy::balance_of(@0xD001) == 40, 5);    // 还清后才形成可支配余额
+        assert!(!economy::is_debtor(@0xD001), 6);
+    }
+
+    #[test]
+    fun test_entry_fee_charged_on_create_room() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let p = &std::account::create_account_for_test(@0xAA11);
+        let paddr = std::signer::address_of(p);
+        economy::gm_mint(a, paddr, 100);
+        engine::create_room(p, 2);                          // D2 入场费 5
+        assert!(economy::balance_of(paddr) == 95, 1);
+        engine::create_room(p, 1);                          // D1 免费
+        assert!(economy::balance_of(paddr) == 95, 2);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 4)]
+    fun test_entry_fee_insufficient_rejected() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let p = &std::account::create_account_for_test(@0xAA12);
+        economy::gm_mint(a, std::signer::address_of(p), 4);  // < D2 入场费 5
+        engine::create_room(p, 2);
+    }
+
+    #[test]
+    fun test_victory_reward_credited_to_survivor() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let addr = std::signer::address_of(a);
+        let before = economy::balance_of(addr);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 4000, 100000, 100, 100);
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[820]);
+        run_room(a, 1);
+        assert!(engine::room_result(1) == 1, 1);      // 通关 D1 全部四场
+        assert!(engine::reward_pool(1) == 0, 2);      // 奖池已一次性发放
+        assert!(economy::balance_of(addr) > before, 3);
+    }
+
+    #[test]
+    fun test_rescue_fee_defeat_drives_negative_balance() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let addr = std::signer::address_of(a);
+        engine::create_room(a, 2);                          // D2 入场费 5
+        let after_entry = economy::balance_of(addr);
+        assert!(after_entry == 1000000000 - 5, 1);
+        engine::join_room(a, 1, 1, 1, 1, 1);                // 1 HP 玻璃人
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[820]);
+        run_room(a, 1);
+        assert!(engine::room_result(1) == 2, 2);            // 败北 / 超时
+        assert!(economy::balance_of(addr) == after_entry - 15, 3); // 救援费 15
+        assert!(economy::balance_of(addr) == 1000000000 - 20, 4);
+    }
+
+    // ===================== P0: 逃离与队长继承（§6.2 / §3.2） =====================
+
+    #[test]
+    #[expected_failure(abort_code = 21)]
+    fun test_escape_rejected_in_lobby() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 4000, 100, 100, 100);
+        engine::request_escape(a, 1, 0);                    // 未开战 → E_CANNOT_ESCAPE
+    }
+
+    #[test]
+    fun test_escape_in_combat_delayed_then_exempt_from_rescue() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let addr = std::signer::address_of(a);
+        engine::create_room(a, 2);
+        let after_entry = economy::balance_of(addr);
+        engine::join_room(a, 1, 100000, 1, 1, 1);           // 肉盾: 保证活到逃离完成
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[820]);
+        engine::request_escape(a, 1, 0);
+        assert!(engine::member_escape_delay(1, 0) == 3, 1);
+        engine::advance_turn(a, 1);
+        assert!(engine::member_escape_delay(1, 0) == 2, 2);
+        engine::advance_turn(a, 1);
+        assert!(engine::member_escape_delay(1, 0) == 1, 3);
+        engine::advance_turn(a, 1);
+        assert!(engine::member_escaped(1, 0), 4);           // 三回合后离场
+        assert!(engine::room_result(1) == 2, 5);            // 无人留守 → 关卡结束
+        assert!(economy::balance_of(addr) == after_entry, 6); // 逃离者免救援费(§6.2)
+    }
+
+    #[test]
+    fun test_lobby_leave_removes_member_and_succeeds_leader() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        let b = &std::account::create_account_for_test(@0xBB10);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 4000, 100, 100, 100);
+        engine::join_room(b, 1, 4000, 100, 100, 100);
+        assert!(engine::member_count(1) == 2, 1);
+        engine::leave_room(a, 1);
+        assert!(engine::member_count(1) == 1, 2);
+        assert!(engine::room_leader(1) == std::signer::address_of(b), 3);
+    }
+
+    #[test]
+    fun test_intermission_escape_immediate_and_leader_succeeds() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        let b = &std::account::create_account_for_test(@0xBB11);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 4000, 100000, 100, 100);
+        engine::join_room(b, 1, 4000, 100000, 100, 100);
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[820]);
+        engine::set_plan(b, 1, 1, vector[820]);
+        let guard = 0;
+        while (guard < 40 && engine::room_phase(1) == 1) {
+            engine::advance_turn(a, 1);
+            guard = guard + 1;
+        };
+        assert!(engine::room_phase(1) == 3, 1);
+        assert!(engine::room_leader(1) == std::signer::address_of(a), 2);
+        engine::request_escape(a, 1, 0);                    // 间歇期 → 立即离场
+        assert!(engine::member_escaped(1, 0), 3);
+        assert!(engine::room_leader(1) == std::signer::address_of(b), 4); // 自动继任
+        engine::advance_battle(b, 1);                       // 新队长可推进下一场
+        assert!(engine::room_phase(1) == 1, 5);
+    }
+
+    #[test]
+    fun test_leader_succession_on_death() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        let b = &std::account::create_account_for_test(@0xBB12);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::create_room(a, 2);
+        engine::join_room(a, 1, 1, 1, 1, 1);                // 队长: 1 HP
+        engine::join_room(b, 1, 100000, 1, 1, 1);           // 肉盾(后加入)
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[820]);
+        engine::set_plan(b, 1, 1, vector[820]);
+        let aaddr = std::signer::address_of(a);
+        assert!(engine::room_leader(1) == aaddr, 1);
+        let guard = 0;
+        while (guard < 80 && engine::room_phase(1) == 1 && engine::room_leader(1) == aaddr) {
+            engine::advance_turn(a, 1);
+            guard = guard + 1;
+        };
+        assert!(engine::room_leader(1) == std::signer::address_of(b), 2); // 队长阵亡 → 继任
+    }
+
+    #[test]
+    fun test_leader_retreat_shares_reward() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        let b = &std::account::create_account_for_test(@0xBB13);
+        setup(a);
+        content_registration::register_all_content(a);
+        let aaddr = std::signer::address_of(a);
+        let baddr = std::signer::address_of(b);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 4000, 100000, 100, 100);
+        engine::join_room(b, 1, 4000, 100000, 100, 100);
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[820]);
+        engine::set_plan(b, 1, 1, vector[820]);
+        let guard = 0;
+        while (guard < 40 && engine::room_phase(1) == 1) {
+            engine::advance_turn(a, 1);
+            guard = guard + 1;
+        };
+        assert!(engine::room_phase(1) == 3, 1);
+        let pool = engine::reward_pool(1);
+        assert!(pool > 0, 2);
+        let ba = economy::balance_of(aaddr);
+        let bb = economy::balance_of(baddr);
+        engine::leader_retreat(a, 1);                       // 队长全员逃离(§6.1)
+        assert!(engine::room_phase(1) == 2, 3);
+        assert!(engine::room_result(1) == 1, 4);
+        assert!(engine::reward_pool(1) == 0, 5);
+        let da = economy::balance_of(aaddr) - ba;
+        let db = economy::balance_of(baddr) - bb;
+        assert!(da + db == (pool as i128), 6);              // 账目守恒
+        assert!(da > 0 && db > 0, 7);                       // 存活者都分到
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 6)]
+    fun test_retreat_rejected_for_non_leader() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        let b = &std::account::create_account_for_test(@0xBB14);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 4000, 100000, 100, 100);
+        engine::join_room(b, 1, 4000, 100000, 100, 100);
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[820]);
+        engine::set_plan(b, 1, 1, vector[820]);
+        let guard = 0;
+        while (guard < 40 && engine::room_phase(1) == 1) {
+            engine::advance_turn(a, 1);
+            guard = guard + 1;
+        };
+        assert!(engine::room_phase(1) == 3, 1);
+        engine::leader_retreat(b, 1);                       // 非队长 → E_NOT_LEADER
+    }
+
+    // 房间跑到底: 战斗 → 间歇 → 下一战 … 直到结算
+    fun run_room(a: &signer, room_id: u64) {
+        let guard = 0;
+        while (guard < 400) {
+            let ph = engine::room_phase(room_id);
+            if (ph == 1) { engine::advance_turn(a, room_id); }
+            else if (ph == 3) { engine::advance_battle(a, room_id); }
+            else { break; };
+            guard = guard + 1;
+        };
     }
 }

@@ -202,6 +202,10 @@ module mohayo::types {
         plan_start: u64,
         alive: bool,
         is_summon: bool,
+        /// 个人逃离(§6.2)：true = 已脱离关卡(无收益、不占活人名额、不吃救援费)
+        escaped: bool,
+        /// 战斗中发起逃离后的倒计时(回合)；0 = 无待处理逃离
+        escape_delay: u8,
         owner: address,
         char_id: u64,
     }
@@ -325,7 +329,8 @@ module mohayo::types {
     ): Member {
         Member { hp, max_hp, attack, magic, speed, ap, mana_discount,
                  ap_discount, ap_bonus, mana_gain_bonus, class_id,
-                 effects, plan, plan_start, alive, is_summon, owner, char_id }
+                 effects, plan, plan_start, alive, is_summon,
+                 escaped: false, escape_delay: 0, owner, char_id }
     }
 
     public fun make_enemy(
@@ -457,6 +462,8 @@ module mohayo::types {
     public fun member_ap(m: &Member): u16 { m.ap }
     public fun member_alive(m: &Member): bool { m.alive }
     public fun member_is_summon(m: &Member): bool { m.is_summon }
+    public fun member_escaped(m: &Member): bool { m.escaped }
+    public fun member_escape_delay(m: &Member): u8 { m.escape_delay }
     public fun member_owner(m: &Member): address { m.owner }
     public fun member_char_id(m: &Member): u64 { m.char_id }
     public fun member_effects(m: &Member): &vector<ActiveEffect> { &m.effects }
@@ -474,6 +481,8 @@ module mohayo::types {
     public fun member_set_ap(m: &mut Member, v: u16) { m.ap = v; }
     public fun member_set_plan(m: &mut Member, v: vector<u64>) { m.plan = v; }
     public fun member_set_plan_start(m: &mut Member, v: u64) { m.plan_start = v; }
+    public fun member_set_escaped(m: &mut Member, v: bool) { m.escaped = v; }
+    public fun member_set_escape_delay(m: &mut Member, v: u8) { m.escape_delay = v; }
 
     // ---- Member effect mutation (takes &mut Member) ----
     public fun member_tick_effects(m: &mut Member) { tick_effects(&mut m.effects); }
