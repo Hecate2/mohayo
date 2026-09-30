@@ -63,7 +63,10 @@ module mohayo::use_item {
     acquires RerollSeq {
         let owner = signer::address_of(account);
         assert!(character::char_owner(char_id) == owner, E_NOT_OWNER);
-        item::consume_raw(item::ITEM_DICE_OF_FATE, owner, item::one());
+        // §2.3 二选一: 先扣 playerId 级免费重掷计数器, 没有才核销一枚命运骰子
+        if (!character::try_consume_free_reroll(owner)) {
+            item::consume_raw(item::ITEM_DICE_OF_FATE, owner, item::one());
+        };
         let seed = next_seed();
         let r = rng::new(seed);
         let race = character::roll_random_race(&mut r);

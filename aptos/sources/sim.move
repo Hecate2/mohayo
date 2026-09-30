@@ -1140,6 +1140,16 @@ module mohayo::sim {
         character::gm_mint_at_level(a, own, 2, 0, vector[0, 0, 0, 0], vector[850], 40); // 剑士 Lv40
         let cid = character::owner_latest_char(own);
         item::gm_mint(a, item::ITEM_DICE_OF_FATE, own, 1);
+        // §2.3 二选一: 首号自带 3 次免费重掷 → 前三次不核销骰子
+        assert!(character::free_rerolls(own) == 3, 5);
+        use_item::dice_of_fate(a, cid);
+        assert!(character::free_rerolls(own) == 2, 6);
+        assert!(item::balance_whole(item::ITEM_DICE_OF_FATE, own) == 1, 7);
+        // 用光免费次数后才核销骰子
+        use_item::dice_of_fate(a, cid);
+        use_item::dice_of_fate(a, cid);
+        assert!(character::free_rerolls(own) == 0, 8);
+        assert!(item::balance_whole(item::ITEM_DICE_OF_FATE, own) == 1, 9);
         use_item::dice_of_fate(a, cid);
         let (cls, race, lvl, _, _, _, _, _, _, _) = character::get_character(cid);
         let ss = character::get_self_select(cid);
@@ -1148,7 +1158,7 @@ module mohayo::sim {
         assert!((cls as u64) == 2, 1);                 // 职业保留
         assert!((lvl as u64) == 40, 2);                // 等级保留
         assert!(std::vector::length(&ss) == 1, 3);     // 自选技保留
-        assert!(bal == 0, 4);                          // 骰子消耗
+        assert!(bal == 0, 4);                          // 免费次数用尽 → 骰子消耗
     }
 
     #[test]

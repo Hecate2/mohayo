@@ -546,6 +546,19 @@ struct RoomMember {
 - 辅助视图 `advance_ready(room_id)`（距上次推进是否已过冷却）。
 - **客户端/Keeper 注意**：调用方需先读 `room_turn(room_id)` 再带进 `expected_turn_id`。
 
+### 2.6.10 Move 首号免费重掷 / 房间解散与过期注记（2026-09-30 实现）
+
+- **首角色重掷包（§2.3 / §7.6）**：`CharacterStore` 增加 `free_rerolls: address → u8` 与
+  `created_before: address → bool`。**每个 playerId 只在首次创建角色时获得 3 次免费重掷**——
+  以 `created_before` 判定（卖掉首号再建也拿不到，杜绝「卖号→再建」循环领取）。
+  计数器是 **playerId 级、非道具、不可转移**，不随角色走。
+  重掷入口 `use_item::dice_of_fate` 改为**二选一**：先扣免费计数器（`character::try_consume_free_reroll`），
+  没有才核销一枚命运骰子。新视图 `character::free_rerolls(owner)`。
+- **房间解散（§3.1）**：`engine::disband_room` —— 仅队长、仅大厅期（`phase == 0`），关闭房间。
+- **房间闲置过期（§3.1）**：`RoomStore.room_ttl`（默认 7200 秒 = 2 小时，GM 可用 `set_room_ttl` 调）；
+  `engine::expire_room` 在「创建后未开始且闲置超过 TTL」时关闭房间，**任何人**可触发（防抢占/囤积房间号）。
+  已关闭房间拒绝加入与开战（`E_ROOM_CLOSED`）；事件 `RoomClosed{room_id, reason}`（1=解散 / 2=过期）。
+
 ### 2.7.1 Move 道具层注记（数据驱动, 2026-09-02 实现）
 
 - **每种道具 = item_type + ItemDef**（name/group/combat_usable/effect_kind/effect_value/decimals），**无 per-type struct**。

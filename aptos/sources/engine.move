@@ -30,6 +30,8 @@ module mohayo::engine {
     const E_TURN_MISMATCH: u64 = 24;
     const E_ADVANCE_COOLDOWN: u64 = 25;
     const E_NOT_EMERGENCY: u64 = 26;
+    const E_ROOM_CLOSED: u64 = 27;
+    const E_NOT_EXPIRED: u64 = 28;
 
     /// 个人逃离的延迟回合数(§6.2「若干回合后」；数值层可调)
     const ESCAPE_DELAY: u64 = 3;
@@ -54,6 +56,8 @@ module mohayo::engine {
 
     struct RoomStore has key {
         rooms: Table<u64, Room>,
+        /// 未开始房间的闲置过期时长(秒, §3.1 默认 2 小时, GM 可调)
+        room_ttl: u64,
         /// 自然周 → 当周变异(§3.4: 创建房间时快照当周, 周中变更不影响已创建房间)
         weekly_mutators: Table<u64, Mutator>,
     }
@@ -76,6 +80,9 @@ module mohayo::engine {
         mana_per_turn: u64,
         mana_all_consumed: u64,
         reward_pool: u64,
+        /// 创建时间(秒)与关闭标记(§3.1 闲置过期 / 队长解散)
+        created_secs: u64,
+        closed: bool,
         mutator_kind: u8,
         mutator_value: i64,
         leader: address,
@@ -154,11 +161,57 @@ module mohayo::engine {
     struct MemberArrived has drop, store { room_id: u64, index: u64 }
     #[event]
     struct MutatorSnapshot has drop, store { room_id: u64, kind: u8, value: i64 }
+    #[event]
+    struct RoomClosed has drop, store { room_id: u64, reason: u8 }
 
     // ============================ init ============================
 
     fun init_module(account: &signer) {
-        move_to(account, RoomStore { rooms: table::new(), weekly_mutators: table::new() });
+        move_to(account, RoomStore { rooms: table::new(), room_ttl: 7200, weekly_mutators: table::new() });
+    }
+
+    // ============================ 房间关闭(§3.1 解散 / 闲置过期) ============================
+
+    /// 队长在大厅期**解散**房间(§3.1)。
+    public entry fun disband_room(account: &signer, room_id: u64) acquires RoomStore {
+        let addr = signer::address_of(account);
+        let rs = borrow_global_mut<RoomStore>(@mohayo);
+        let room = table::borrow_mut(&mut rs.rooms, room_id);
+        assert!(room.phase == 0, E_NOT_LOBBY);
+        assert!(room.leader == addr, E_NOT_LEADER);
+        room.closed = true;
+        event::emit(RoomClosed { room_id, reason: 1 }); // 1 = 队长解散
+    }
+
+    /// 闲置过期(§3.1)：创建后一直未开始、闲置超过 `room_ttl` 即自动关闭，
+    /// 防恶意抢占/囤积房间号。**任何人**都能触发（与 Keeper 同权限，无特权）。
+    public entry fun expire_room(account: &signer, room_id: u64) acquires RoomStore {
+        let _ = account;
+        let rs = borrow_global_mut<RoomStore>(@mohayo);
+        let ttl = rs.room_ttl;
+        let room = table::borrow_mut(&mut rs.rooms, room_id);
+        assert!(room.phase == 0, E_NOT_LOBBY);
+        assert!(aptos_framework::timestamp::now_seconds() >= room.created_secs + ttl, E_NOT_EXPIRED);
+        room.closed = true;
+        event::emit(RoomClosed { room_id, reason: 2 }); // 2 = 闲置过期
+    }
+
+    /// GM 调整闲置过期时长(秒)
+    public entry fun set_room_ttl(account: &signer, secs: u64) acquires RoomStore {
+        assert!(signer::address_of(account) == @mohayo, E_NOT_LEADER);
+        borrow_global_mut<RoomStore>(@mohayo).room_ttl = secs;
+    }
+
+    #[view]
+    public fun room_closed(room_id: u64): bool acquires RoomStore {
+        let rs = borrow_global<RoomStore>(@mohayo);
+        assert!(table::contains(&rs.rooms, room_id), E_ROOM_NOT_FOUND);
+        table::borrow(&rs.rooms, room_id).closed
+    }
+
+    #[view]
+    public fun room_ttl(): u64 acquires RoomStore {
+        borrow_global<RoomStore>(@mohayo).room_ttl
     }
 
     // ============================ 周常变异(§3.4) ============================
@@ -227,6 +280,8 @@ module mohayo::engine {
             mana_per_turn: types::dungeon_mana_per_turn(&dungeon),
             mana_all_consumed: 0,
             reward_pool: 0,
+            created_secs: aptos_framework::timestamp::now_seconds(),
+            closed: false,
             mutator_kind: mut.kind,
             mutator_value: mut.value,
             leader: addr,
@@ -250,6 +305,7 @@ module mohayo::engine {
     ) acquires RoomStore {
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
+        assert!(!room.closed, E_ROOM_CLOSED);
         assert!(room.phase == 0 || room.phase == 1 || room.phase == 3, E_NOT_JOINABLE);
         assert!(vector::length(&room.members) < 10, E_ROOM_FULL);
         let member = types::make_member(
@@ -278,6 +334,7 @@ module mohayo::engine {
     ) acquires RoomStore {
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
+        assert!(!room.closed, E_ROOM_CLOSED);
         assert!(room.phase == 0 || room.phase == 1 || room.phase == 3, E_NOT_JOINABLE);
         assert!(vector::length(&room.members) < 10, E_ROOM_FULL);
         let member = types::make_member(
@@ -304,6 +361,7 @@ module mohayo::engine {
         let (_hp, max_hp, atk, mag, spd) = character::get_stats(char_id);
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
+        assert!(!room.closed, E_ROOM_CLOSED);
         assert!(room.phase == 0 || room.phase == 1 || room.phase == 3, E_NOT_JOINABLE);
         assert!(vector::length(&room.members) < 10, E_ROOM_FULL);
         let member = types::make_member(
@@ -396,6 +454,7 @@ module mohayo::engine {
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
         assert!(room.phase == 0, E_NOT_LOBBY);
+        assert!(!room.closed, E_ROOM_CLOSED);
         assert!(vector::length(&room.members) > 0, E_NO_MEMBERS);
         assert!(room.leader == addr, E_NOT_LEADER);
         room.phase = 1;
@@ -1946,7 +2005,7 @@ module mohayo::engine {
     #[test_only]
     public fun init_for_test(account: &signer) {
         if (!exists<RoomStore>(signer::address_of(account))) {
-            move_to(account, RoomStore { rooms: table::new(), weekly_mutators: table::new() });
+            move_to(account, RoomStore { rooms: table::new(), room_ttl: 7200, weekly_mutators: table::new() });
         };
     }
 }

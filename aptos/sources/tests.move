@@ -2197,4 +2197,70 @@ module mohayo::tests {
         engine::emergency_advance(a, 1);            // Keeper 挂掉后任何人都能解卡
         assert!(engine::room_turn(1) == 2, 1);
     }
+
+    // ===================== Q4: 首号免费重掷 / 房间解散与过期（§2.3 / §3.1） =====================
+
+    #[test]
+    fun test_free_rerolls_granted_once_per_player() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let addr = std::signer::address_of(a);
+        character::gm_mint(a, addr, 1, 0, vector[0, 0, 0, 0], vector[850]);   // 首角色
+        assert!(character::free_rerolls(addr) == 3, 1);
+        character::gm_mint(a, addr, 2, 0, vector[0, 0, 0, 0], vector[850]);   // 第二个角色不再发
+        assert!(character::free_rerolls(addr) == 3, 2);
+        // 卖掉首号也拿不到第二次(created_before 判定) —— 计数器也不随角色走
+        let cid = character::owner_latest_char(addr);
+        character::transfer_character(a, cid, @0xEE01);
+        assert!(character::free_rerolls(@0xEE01) == 0, 3);
+        assert!(character::free_rerolls(addr) == 3, 4);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 6)]
+    fun test_disband_room_leader_only() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        let b = &std::account::create_account_for_test(@0xEE02);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::create_room(a, 1);
+        engine::join_room(b, 1, 4000, 100, 100, 100);
+        engine::disband_room(b, 1);     // 非队长 → E_NOT_LEADER(6)
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 27)]
+    fun test_disbanded_room_rejects_join() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::create_room(a, 1);
+        engine::disband_room(a, 1);
+        assert!(engine::room_closed(1), 1);
+        engine::join_room(a, 1, 4000, 100, 100, 100);   // E_ROOM_CLOSED(27)
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 28)]
+    fun test_room_expire_requires_ttl() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::create_room(a, 1);
+        engine::expire_room(a, 1);     // 未满 TTL(默认 7200s) → E_NOT_EXPIRED(28)
+    }
+
+    #[test]
+    fun test_room_expires_after_ttl() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::set_room_ttl(a, 60);                        // 测试用短 TTL
+        engine::create_room(a, 1);
+        let t0 = aptos_framework::timestamp::now_seconds();
+        aptos_framework::timestamp::update_global_time_for_test_secs(t0 + 61);
+        engine::expire_room(a, 1);                          // 任何人可触发
+        assert!(engine::room_closed(1), 1);
+    }
 }

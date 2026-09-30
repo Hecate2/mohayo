@@ -12,6 +12,7 @@ module mohayo::character {
     use mohayo::economy;
 
     friend mohayo::engine;
+    friend mohayo::use_item;
 
     const E_NOT_OWNER: u64 = 1;
     const E_UNKNOWN_CLASS: u64 = 2;
@@ -91,6 +92,10 @@ module mohayo::character {
         count: u64,
         characters: Table<u64, Character>,
         owner_chars: Table<address, vector<u64>>,
+        /// 首角色重掷包(§2.3/§7.6): playerId 级绑定计数器, **非道具、不可转移**。
+        /// 一次性福利: 首号创建时置 3; 卖掉/删除首角色不返还、不重生(用 created_before 判定首号)。
+        free_rerolls: Table<address, u8>,
+        created_before: Table<address, bool>,
     }
 
     // ---- events ----
@@ -120,7 +125,10 @@ module mohayo::character {
             legendary_races: vector[6, 7],
         });
         move_to(account, AffixStore { count: 0, templates: table::new() });
-        move_to(account, CharacterStore { count: 0, characters: table::new(), owner_chars: table::new() });
+        move_to(account, CharacterStore {
+            count: 0, characters: table::new(), owner_chars: table::new(),
+            free_rerolls: table::new(), created_before: table::new(),
+        });
     }
 
     // ---- registration ----
@@ -222,6 +230,7 @@ module mohayo::character {
         let list = table::borrow_mut(&mut store.owner_chars, owner);
         vector::push_back(list, id);
         event::emit(CharacterCreated { id, owner, class_id, race, level: 1 });
+        grant_first_char_bonus(store, owner);
     }
 
     /// GM mint at arbitrary level.
@@ -264,6 +273,7 @@ module mohayo::character {
         let list = table::borrow_mut(&mut store.owner_chars, owner);
         vector::push_back(list, id);
         event::emit(CharacterCreated { id, owner, class_id, race, level });
+        grant_first_char_bonus(store, owner);
     }
 
     /// GM set level + recompute stats.
@@ -390,6 +400,25 @@ module mohayo::character {
         assert!(table::contains(&store.characters, char_id), E_NOT_FOUND);
         let c = table::borrow_mut(&mut store.characters, char_id);
         c.room_id = room_id;
+    }
+
+    /// 首角色重掷包(§2.3/§7.6): 每个 playerId 只在**首次创建角色**时获得 3 次免费重掷,
+    /// 以 created_before 判定(卖掉首号再建也拿不到 —— 一次性福利, 防止「卖号→再建」循环领取)。
+    fun grant_first_char_bonus(store: &mut CharacterStore, owner: address) {
+        if (!table::contains(&store.created_before, owner)) {
+            table::add(&mut store.created_before, owner, true);
+            table::add(&mut store.free_rerolls, owner, 3u8);
+        };
+    }
+
+    /// 重掷入口的资源检查(§2.3 二选一): 先扣免费重掷计数器, 没有则由调用方核销一枚命运骰子。
+    public(friend) fun try_consume_free_reroll(owner: address): bool acquires CharacterStore {
+        let store = borrow_global_mut<CharacterStore>(@mohayo);
+        if (!table::contains(&store.free_rerolls, owner)) { return false; };
+        let n = table::borrow_mut(&mut store.free_rerolls, owner);
+        if (*n == 0) { return false; };
+        *n = *n - 1;
+        true
     }
 
     // ---- 升级 / 转移 / 履历（§2.4 / §7.4） ----
@@ -576,6 +605,14 @@ module mohayo::character {
         assert!(table::contains(&store.characters, id), E_NOT_FOUND);
         let c = table::borrow(&store.characters, id);
         c.class_id
+    }
+
+    /// 该 playerId 剩余免费重掷次数(§2.3)
+    #[view]
+    public fun free_rerolls(owner: address): u8 acquires CharacterStore {
+        let store = borrow_global<CharacterStore>(@mohayo);
+        if (!table::contains(&store.free_rerolls, owner)) { return 0; };
+        *table::borrow(&store.free_rerolls, owner)
     }
 
     #[view]
@@ -777,7 +814,10 @@ module mohayo::character {
             move_to(account, AffixStore { count: 0, templates: table::new() });
         };
         if (!exists<CharacterStore>(addr)) {
-            move_to(account, CharacterStore { count: 0, characters: table::new(), owner_chars: table::new() });
+            move_to(account, CharacterStore {
+            count: 0, characters: table::new(), owner_chars: table::new(),
+            free_rerolls: table::new(), created_before: table::new(),
+        });
         };
     }
 }
