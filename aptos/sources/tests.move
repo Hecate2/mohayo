@@ -2305,4 +2305,71 @@ module mohayo::tests {
         engine::expire_room(a, 1);                          // 任何人可触发
         assert!(engine::room_closed(1), 1);
     }
+
+    // ===================== §2.6.11 复审修正 =====================
+
+    /// 爆裂魔法(430) 必须同时带 FLAG_GUARANTEED_HIT(bit0) 与 FLAG_MANA_ALL(bit1) —— §4.9 固有绝对命中。
+    #[test]
+    fun test_burst_magic_is_guaranteed_hit() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let s = skill_registry::get_skill(430);
+        assert!((types::skill_flags(&s) & 1) != 0, 1);   // GUARANTEED_HIT
+        assert!((types::skill_flags(&s) & 2) != 0, 2);   // FLAG_MANA_ALL
+    }
+
+    /// 端到端: 施法者命中率被压到下限时, 爆裂魔法仍必须每发必中(免掷骰)。
+    /// 缺 bit0 时命中率只有 MIN_HIT_RATE=5‰, 12 个房间不可能全中。
+    #[test]
+    fun test_burst_magic_hits_through_accuracy_penalty() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let hits = 0;
+        let i = 0;
+        while (i < 12) {
+            engine::create_room(a, 1);
+            let rid = i + 1;
+            engine::join_room(a, rid, 5000, 100, 100, 99);   // 面板通道(char_id=0)
+            engine::start_combat(a, rid);
+            // ACC_DOWN(op6) 1500‰ → 命中阈值被压到 MIN_HIT_RATE=50
+            engine::test_add_member_effect(a, rid, 0, 6, 9, 1500);
+            engine::set_plan(a, rid, 0, vector[430]);
+            step(a, rid);                                    // 玩家 spd 99 先手
+            let (ehp, _, _, _, _, _) = engine::enemy_state(rid, 0);   // D1b1 碎晶岩 hp 35
+            if (ehp < 35) { hits = hits + 1; };
+            i = i + 1;
+        };
+        assert!(hits == 12, 1);
+    }
+
+    /// §2.6.8/§2.6.11: 迟到成员(arrive_delay>0)在到场前不吃任何 AoE。
+    /// 三个全体目标分支此前只查 alive, 会让未到场者照样掉血。
+    #[test]
+    fun test_late_joiner_not_hit_by_aoe() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        // 敌方全体攻击(targeting 4) + AI + 模板 + 表 + 地牢
+        skill_registry::register_skill(a, types::make_skill(1701, types::KIND_PHYSICAL(), 0, 0, 0, 0, 0, 0,
+            types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 500, 0, 1000, 0,
+            vector::empty(), types::make_summon_rule(0, 0, 0)));
+        skill_registry::register_ai(a, types::make_monster_ai(vector[1701], 1));
+        skill_registry::register_template(a, types::make_enemy_template(1, 0, 5000, 100, 0, 99, 1000, 0, 0,
+            types::make_on_death_spawn(0, 0, 0)));
+        skill_registry::register_table(a, vector[types::make_table_entry(1, 1000)]);
+        skill_registry::set_dungeon(a, 1, types::make_dungeon_config(1, 1, 5, 0, 0, 0, 120, 1));
+        skill_registry::set_dungeon_battles(a, 1, vector[types::make_battle_config(1, 1)]);
+
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 1000, 10, 0, 1);       // A: 大厅期入场 → 立即到场
+        engine::start_combat(a, 1);
+        engine::join_room(a, 1, 1000, 10, 0, 1);       // B: 战斗中入队 → 延迟到场
+        assert!(engine::member_arrive_delay(1, 1) == 3, 1);
+        step(a, 1);                                    // 敌 spd 99 先手放全体攻击
+        let (b_hp, _, _, _, _, _) = engine::member_state(1, 1);
+        let (a_hp, _, _, _, _, _) = engine::member_state(1, 0);
+        assert!(b_hp == 1000, 2);                      // 未到场 → 不被 AoE 命中
+        assert!(a_hp < 1000, 3);                       // 已在场 → 照常吃 AoE
+    }
 }

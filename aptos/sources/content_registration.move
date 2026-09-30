@@ -161,9 +161,11 @@ module mohayo::content_registration {
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 210, 0, 950, 0,
             vector[eff(types::OP_MANA_DELTA(), 40, 1, 0, 1000)], (item::ITEM_DRAGON_BULLET as u16), 1), 5); // 630 龙击弹(耗龙击弹×1, 命中产魔)
         // --- 黑魔法师 ---
+        // §4.9 固有绝对命中: flags = GUARANTEED_HIT(bit0) | FLAG_MANA_ALL(bit1)。
+        // 此前只写了 FLAG_MANA_ALL, 靠 base_acc=1000 只是「基本必中」, 会被烟幕/致盲/回避削减(§2.6.11)。
         skill_registry::register_class_skill(account, sk(430,types::KIND_MAGIC(), 0, 1, 0, 0,
-            types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 3000, 0, 1000, types::FLAG_MANA_ALL(),
-            vector[eff(types::OP_STUN(), 1, 3, 0, 1000)]), 3);                         // 430 爆裂魔法(全魔素)
+            types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 3000, 0, 1000, types::FLAG_GUARANTEED_HIT() | types::FLAG_MANA_ALL(),
+            vector[eff(types::OP_STUN(), 1, 3, 0, 1000)]), 3);                         // 430 爆裂魔法(全魔素+绝对命中+自晕)
         skill_registry::register_class_skill(account, sk(310,types::KIND_PHYSICAL(), 0, 2, 3, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 220, 0, 900, 0,
             vector::empty()), 2);                                                       // 310 快速剑

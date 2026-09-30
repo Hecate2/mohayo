@@ -1821,6 +1821,13 @@ module mohayo::engine {
 
     // ============================ internal: targeting ============================
 
+    /// 可被选为目标的玩家成员：存活且**已到场**。§2.6.8 迟到成员在倒计时归零前不参与任何
+    /// 目标选择（含 AoE/ROOM_ALL）—— 此前只有加权随机池过滤了 arrive_delay, 三个全体分支漏了(§2.6.11)。
+    fun selectable_member(room: &Room, i: u64): bool {
+        let m = vector::borrow(&room.members, i);
+        types::member_alive(m) && types::member_arrive_delay(m) == 0
+    }
+
     fun select_targets(
         room: &mut Room, targeting: u8, target_count: u8,
         actor_is_enemy: bool, actor_idx: u64, weight_mode: u8,
@@ -1835,7 +1842,7 @@ module mohayo::engine {
                 let len = vector::length(&room.members);
                 let i = 0;
                 while (i < len) {
-                    if (types::member_alive(vector::borrow(&room.members, i))) {
+                    if (selectable_member(room, i)) {
                         vector::push_back(&mut targets, types::make_target(false, i));
                     };
                     i = i + 1;
@@ -1864,7 +1871,7 @@ module mohayo::engine {
                 let len = vector::length(&room.members);
                 let i = 0;
                 while (i < len) {
-                    if (types::member_alive(vector::borrow(&room.members, i))) {
+                    if (selectable_member(room, i)) {
                         vector::push_back(&mut targets, types::make_target(false, i));
                     };
                     i = i + 1;
@@ -1874,7 +1881,7 @@ module mohayo::engine {
             let mlen = vector::length(&room.members);
             let i = 0;
             while (i < mlen) {
-                if (types::member_alive(vector::borrow(&room.members, i))) {
+                if (selectable_member(room, i)) {
                     vector::push_back(&mut targets, types::make_target(false, i));
                 };
                 i = i + 1;
@@ -1970,8 +1977,8 @@ module mohayo::engine {
                         vector::push_back(&mut wts, w);
                     };
                 } else {
-                    let m = vector::borrow(&room.members, i);
-                    if (types::member_alive(m) && types::member_arrive_delay(m) == 0) {
+                    if (selectable_member(room, i)) {
+                        let m = vector::borrow(&room.members, i);
                         let w = if (weight_mode == 1) {
                             types::member_max_hp(m) - types::member_hp(m) + 1
                         } else { 1 };
@@ -2020,6 +2027,20 @@ module mohayo::engine {
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
         types::member_set_hp(vector::borrow_mut(&mut room.members, index), hp);
+    }
+
+    /// 测试钩子: 给某成员直接挂一条效果(用于构造命中率被压低的场景)。
+    #[test_only]
+    public fun test_add_member_effect(
+        account: &signer, room_id: u64, index: u64, op: u8, dur: u8, mag: u16,
+    ) acquires RoomStore {
+        let _ = account;
+        let rs = borrow_global_mut<RoomStore>(@mohayo);
+        let room = table::borrow_mut(&mut rs.rooms, room_id);
+        types::member_add_effect(
+            vector::borrow_mut(&mut room.members, index),
+            types::make_active_effect(op, dur, mag, 0),
+        );
     }
 
     #[test_only]
