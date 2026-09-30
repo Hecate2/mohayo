@@ -364,6 +364,9 @@ module mohayo::engine {
         // (人在旧房战斗中), §7.4「关卡内禁止转移」被绕过。
         assert!(character::get_room_id(char_id) == 0, E_CHAR_IN_ROOM);
         let (_hp, max_hp, atk, mag, spd) = character::get_stats(char_id);
+        // §2.6.11: 资源词条(class_id/ap_discount/…/mana_gain_bonus)必须随角色进 Member。
+        // 此前这里硬写 0，导致四条资源词条即使解析出来也永远到不了引擎。
+        let (class_id, mana_disc, ap_disc, ap_bon, mana_gain) = character::member_fields(char_id);
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);
         assert!(!room.closed, E_ROOM_CLOSED);
@@ -371,7 +374,7 @@ module mohayo::engine {
         assert!(vector::length(&room.members) < 10, E_ROOM_FULL);
         let member = types::make_member(
             max_hp, max_hp, atk, mag, spd,
-            0, 0, 0, 0, 0, 0,
+            0, mana_disc, ap_disc, ap_bon, mana_gain, class_id,
             vector::empty(), vector::empty(), 0,
             true, false, signer::address_of(account), char_id,
         );
@@ -652,6 +655,18 @@ module mohayo::engine {
         (types::member_hp(m), types::member_max_hp(m), types::member_attack(m),
          types::member_magic(m), types::member_speed(m),
          if (types::member_alive(m)) { 1 } else { 0 })
+    }
+
+    /// 成员的资源词条加成 (AP消耗−1, 魔素消耗−1, AP产量+1, 魔素产量+1)(§2.6.11)
+    #[view]
+    public fun member_resources(room_id: u64, index: u64): (u16, u16, u16, i64) acquires RoomStore {
+        let rs = borrow_global<RoomStore>(@mohayo);
+        assert!(table::contains(&rs.rooms, room_id), E_ROOM_NOT_FOUND);
+        let r = table::borrow(&rs.rooms, room_id);
+        assert!(index < vector::length(&r.members), E_BAD_INDEX);
+        let m = vector::borrow(&r.members, index);
+        (types::member_ap_discount(m), types::member_mana_discount(m),
+         types::member_ap_bonus(m), types::member_mana_gain_bonus(m))
     }
 
     /// 当前队长地址(§3.2 继承后由合约自动更新)

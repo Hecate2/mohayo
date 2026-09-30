@@ -40,6 +40,8 @@ module mohayo::character {
     const MAX_RACES: u64 = 16;
     const MAX_AFFIX_TEMPLATES: u64 = 64;
     const MAX_RESOURCE_AFFIX: u64 = 4;
+    /// 能力词条槽位数(HP/ATK/MAG/SPD)：资源词条从该下标之后开始(§2.3)
+    const ABILITY_SLOTS: u64 = 4;
 
     // ---- class/race/affix definitions (from types) ----
 
@@ -528,6 +530,16 @@ module mohayo::character {
         };
     }
 
+    /// 引擎回调：建 Member 所需的角色派生字段 —— class_id + 四项资源词条加成
+    /// (AP消耗−1 / AP产量+1 / 魔素消耗−1 / 魔素产量+1)，一次读出。
+    /// §2.6.11 复审修正：此前 `join_room_as_char` 把这四项硬写成 0，资源词条即使解析出来也到不了 Member。
+    public(friend) fun member_fields(char_id: u64): (u8, u16, u16, u16, i64) acquires CharacterStore {
+        let store = borrow_global<CharacterStore>(@mohayo);
+        if (!table::contains(&store.characters, char_id)) { return (0, 0, 0, 0, 0) };
+        let c = table::borrow(&store.characters, char_id);
+        (c.class_id, c.mana_discount, c.ap_discount, c.ap_bonus, c.mana_gain_bonus)
+    }
+
     // ---- view functions ----
 
     #[view]
@@ -700,7 +712,9 @@ module mohayo::character {
             };
             mut_i = mut_i + 1;
         };
-        let mut_j = vector::length(affix_tiers);
+        // 资源词条接在 4 个能力槽之后(§2.3)。此前初值误写成 vector::length(affix_tiers)
+        // 导致条件恒假、四项资源加成恒为 0(§2.6.11 复审修正)。
+        let mut_j = ABILITY_SLOTS;
         let mut_k = 0;
         while (mut_k < MAX_RESOURCE_AFFIX && mut_j < vector::length(affix_tiers)) {
             let rtype = *vector::borrow(affix_tiers, mut_j);

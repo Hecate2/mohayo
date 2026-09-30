@@ -487,6 +487,30 @@ module mohayo::tests {
         assert!(character::get_room_id(1) == 42, 2);
     }
 
+    /// §2.6.11 复审: 资源词条必须端到端生效 —— ① `compute_affixes` 解析出四项加成
+    /// ② `join_room_as_char` 把它们拷进 Member(此前分别因循环初值写错、入房硬写 0 而全线失效)。
+    #[test]
+    fun test_resource_affixes_reach_member() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let addr = std::signer::address_of(a);
+        // 4 个能力档 + 4 条资源词条(0=AP消耗−1, 1=AP产量+1, 2=魔素消耗−1, 3=魔素产量+1)
+        character::gm_mint(a, addr, 1, 0, vector[1, 1, 1, 1, 0, 1, 2, 3], vector::empty());
+        let cid = character::owner_latest_char(addr);
+        assert!(character::get_ap_discount(cid) == 1, 1);
+        assert!(character::get_ap_bonus(cid) == 1, 2);
+        assert!(character::get_mana_discount(cid) == 1, 3);
+        assert!(character::get_mana_gain_bonus(cid) == 1, 4);
+        engine::create_room(a, 1);
+        engine::join_room_as_char(a, 1, cid);
+        let (ap_disc, mana_disc, ap_bon, mana_gain) = engine::member_resources(1, 0);
+        assert!(ap_disc == 1, 5);
+        assert!(mana_disc == 1, 6);
+        assert!(ap_bon == 1, 7);
+        assert!(mana_gain == 1, 8);
+    }
+
     #[test]
     fun test_character_multiple_characters() {
         let a = &std::account::create_account_for_test(@mohayo);

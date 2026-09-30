@@ -578,10 +578,16 @@ struct RoomMember {
   探针：进房 1 → 再进房 2（`room_id` 被覆盖成 2）→ 退房 1 时 `lock_room(cid, 0)` 把角色解锁，
   而人仍在房 2 战斗，`transfer_character` 的 `room_id == 0` 断言因此被绕过（§7.4 硬规则失效）。
   修复：入房前 `assert!(character::get_room_id(char_id) == 0, E_CHAR_IN_ROOM(29))`。
-- **资源词条全线失效**：`character::compute_affixes` 的资源词条循环初值误写为
-  `vector::length(affix_tiers)`（应为 `4`），条件恒假 → AP 消耗−1 / AP 产量+1 / 魔素消耗−1 /
-  魔素产量+1 **四项恒为 0**（§2.3 的一半词条轴从未生效）。sim 的「天赋」走 `join_room_affixed`
-  旁路直填字段，因此标定从未暴露。修复：初值改 `4`，并补一条覆盖四种资源词条的用例。
+- **资源词条全线失效（两处独立断点）**：
+  ① `character::compute_affixes` 的资源词条循环初值误写为 `vector::length(affix_tiers)`
+  （应为能力槽数 `4`），条件恒假 → AP 消耗−1 / AP 产量+1 / 魔素消耗−1 / 魔素产量+1 **恒为 0**；
+  ② 即使解析出来，`engine::join_room_as_char` 建 Member 时也把这四个字段**硬写成 0**，
+  从未从 `Character` 拷贝 —— 代码注释声称「Production join copies these from Character via the
+  normal path」，实际上并没有。两处叠加使 §2.3 的一半词条轴从未生效。sim 的「天赋」走
+  `join_room_affixed` 旁路直填字段，因此标定从未暴露。
+  修复：循环初值改 `ABILITY_SLOTS(4)`；新增 `character::member_fields(char_id)`（friend）
+  一次读出 `class_id` + 四项资源加成并在入房时写入 Member；新增 `engine::member_resources` 视图
+  与 `test_resource_affixes_reach_member` 端到端用例（sim 走旁路，故本次修复不影响任何既有标定值）。
 - **爆裂魔法缺 `GUARANTEED_HIT`**：430 注册 flags 只有 `FLAG_MANA_ALL(2)`，与 §4.9 / content-design
   §4.1 要求的「固有绝对命中、无视一切命中惩罚」不符（`base_acc=1000` 只是「基本必中」，会被
   ACC_DOWN / EVADE_UP 削减）。修复：`flags = FLAG_GUARANTEED_HIT | FLAG_MANA_ALL = 3`。
