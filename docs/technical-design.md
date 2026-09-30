@@ -653,6 +653,31 @@ struct RoomMember {
 - 新增视图 `room_reclaimable(room_id)`。事件 `RoomClosed` 的 `reason` 取值：
   1 = 队长解散，2 = 大厅闲置过期，3 = 战斗期停摆过期。
 
+### 2.6.13 Move AP 机制实现口径（2026-09-30, 与 `gameplay-design.md` §4.6/§4.9 对齐）
+
+§4.6 此前只写了「技能命中产出 AP」，没写引擎里那条每回合的自动产出，也没写计划为空时会被跳过。
+本节把实现口径写全，作为 §4.6 的依据。
+
+- **每回合自动产出**：`act_member` 在成员行动开始时先 `AP + 1 + ap_bonus`，封顶 `AP_CAP_BASE = 22`，
+  再取计划里的下一个技能执行。这 1 点算进**本回合**可用余额（本回合就可能够放技能）。
+  `ap_bonus` 来自资源词条「AP 产量 +1」，可叠加。
+- **计划为空 → 整次行动跳过**：`act_member` 第一件事是读计划长度，为 0 就直接 return，
+  连这 1 点都不给，也不推进计划指针。想攒点必须挂着一条非空计划。
+- **被眩晕 → 整次行动跳过**：`act_all` 在调用 `act_member` 之前检查 STUN，命中则连那 1 点也不给。
+- **技能产出发生在施放之后，与命中无关**：`resolve_skill` 在结算末尾把 `apGain` 加到成员 AP 上，
+  这段代码在**多段循环之外**，所以每一段是命中还是落空都不影响产出。
+  **与 §4.9 冲突**：§4.9 写的是「物理技命中后本可产出的 AP 也拿不到」，当前实现并非如此。
+  是否改成「命中才产出」留给数值定案，本节按实现记录。
+- **`apGain` 不受 `ap_bonus` 影响**：资源词条只加每回合那 1 点。
+- **消耗与门槛**：`execute_skill` 用 `apply_ap_discount` 扣掉「AP 消耗 −1」词条后，若
+  `member_ap < ap_cost` 立即失败，该回合什么都不做（计划指针已经推进，等同空过）。
+  失败时**不扣 AP**（扣减发生在门槛检查之后）。敌人不走 AP 体系，`ap_cost` / `apGain` 对敌方技能无效。
+- **跨战斗继承**：`spawn_battle` 只清空敌人与 `battle_turns`，不碰成员 AP，所以 AP 在整座地下城内连续累积。
+- 新增视图 `member_ap(room_id, member_index)`：此前没有任何入口能读到成员 AP。
+- 回归护栏：`test_ap_grants_per_turn_and_needs_a_plan`（计划为空不涨 AP）、
+  `test_ap_gain_applies_even_when_the_cast_misses`（命中率压到下限后 AP 仍照常产出）。
+  两条都验证过「撤掉实现即失败」。
+
 ### 2.7.1 Move 道具层注记（数据驱动, 2026-09-02 实现）
 
 - **每种道具 = item_type + ItemDef**（name/group/combat_usable/effect_kind/effect_value/decimals），**无 per-type struct**。

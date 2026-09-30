@@ -2499,4 +2499,52 @@ module mohayo::tests {
         assert!(runs == 1 && clears == 0, 5);                    // 记了一次未通关
     }
 
+    // ===================== §2.6.13 AP 实现口径 =====================
+
+    /// AP 每回合行动开始时 +1（封顶 22）；**计划为空则整次行动被跳过，连这 1 点也不给**。
+    #[test]
+    fun test_ap_grants_per_turn_and_needs_a_plan() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 5000, 10, 0, 99);
+        engine::join_room(a, 1, 5000, 10, 0, 1);
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[190]);   // 待机: ap_cost 0 / ap_gain 0 / 魔素 0
+        step(a, 1);
+        step(a, 1);
+        step(a, 1);
+        assert!(engine::member_ap(1, 0) == 3, 1);   // 三个回合各 +1
+        assert!(engine::member_ap(1, 1) == 0, 2);   // 计划为空 → 不涨 AP
+    }
+
+    /// AP 产出发生在**施放之后**，与是否命中无关（§2.6.13 记录：这一条与 §4.9 的
+    /// 「未命中则拿不到 AP」表述不一致，属待定案项，此处按实现钉住行为）。
+    /// 快速剑(310)：apCost 0 / apGain 2 / 魔素 3，且**没有**绝对命中。
+    /// 第 1 回合魔素只有 2，技能施放失败 → AP = 1（只有回合那 1 点）。
+    /// 第 2 回合魔素 4，施放成功 → AP = 1 + 1 + 2 = 4，命中率被压到下限也不影响。
+    /// 若把 apGain 改成「命中才给」，约 95% 的房间只会停在 2，此用例即失败。
+    #[test]
+    fun test_ap_gain_applies_even_when_the_cast_misses() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let i = 0;
+        while (i < 12) {
+            engine::create_room(a, 1);
+            let rid = i + 1;
+            engine::join_room(a, rid, 5000, 100, 100, 99);
+            engine::start_combat(a, rid);
+            // ACC_DOWN(op6) 1500‰ → 命中阈值被压到 MIN_HIT_RATE=50
+            engine::test_add_member_effect(a, rid, 0, 6, 9, 1500);
+            engine::set_plan(a, rid, 0, vector[310]);
+            step(a, rid);
+            assert!(engine::member_ap(rid, 0) == 1, 1);   // 魔素不足, 施放失败
+            step(a, rid);
+            assert!(engine::member_ap(rid, 0) == 4, 2);   // 回合 +1, 施放产出 +2
+            i = i + 1;
+        };
+    }
+
 }

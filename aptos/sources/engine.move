@@ -751,6 +751,16 @@ module mohayo::engine {
          if (types::member_alive(m)) { 1 } else { 0 })
     }
 
+    /// 成员的 AP(§4.6；此前没有任何入口能读到成员 AP)
+    #[view]
+    public fun member_ap(room_id: u64, member_index: u64): u16 acquires RoomStore {
+        let rs = borrow_global<RoomStore>(@mohayo);
+        assert!(table::contains(&rs.rooms, room_id), E_ROOM_NOT_FOUND);
+        let r = table::borrow(&rs.rooms, room_id);
+        assert!(member_index < vector::length(&r.members), E_BAD_INDEX);
+        types::member_ap(vector::borrow(&r.members, member_index))
+    }
+
     /// 成员的资源词条加成 (AP消耗−1, 魔素消耗−1, AP产量+1, 魔素产量+1)(§2.6.11)
     #[view]
     public fun member_resources(room_id: u64, index: u64): (u16, u16, u16, i64) acquires RoomStore {
