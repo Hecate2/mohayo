@@ -754,6 +754,51 @@ struct RoomMember {
   ③ **关卡内升级白花钱**：`upgrade_level` 不检查 `room_id`，而在房间里的属性是入房时快照的，
   所以关卡内升级对当前这局没影响。这是有意保留的误操作空间。
 
+### 2.6.15 审计处置（2026-09-30，三个只读审计员 + 探针复核）
+
+三个并行审计员（经济权限 / 引擎结算 / 内容一致性）回收了 24 条结论，**逐条读码或写探针复核**后：
+确认 3 个引擎缺陷（已修，见上），确认 1 个设计-实现冲突（词条档位分布），其余归类如下。
+
+**已修（本轮）**：
+- 逃离后重进同一房间（高，可利用）；弹药在魔素/AP 门槛之前扣（中）；不死鸟之羽复活已逃离者（中）；
+  变体抽选 `acc` 不累加（高，D9 战斗④ 30% 皇帝从未出现 / D5 战斗③ 20% 混沌变体从未出现）；
+  变体无法自带敌人数（中）；`DungeonConfig.reward_base` 死字段；26 处 `expected_failure` 缺 `location=`；
+  `Enemy.turn_counter` 只写不读；`step` / `init_timestamp` 在 tests 与 sim 各一份逐字克隆；
+  sim 的六份 run 克隆合并为 `drive` / `run_party`（合并前后 241 行 sim 输出逐位一致）；
+  内容注册改用 `content::SKILL_*` 常量（16 个常量曾是死常量）。
+
+**待定案（已确认与文档/设计冲突，未改 —— 需要先定口径）**：
+1. **词条档位分布是均匀的**：`roll_random_affix_tiers` 对 10 档均匀抽（探针实测 80000 抽每档 ≈8000），
+   注册的 `AffixTemplate.tier_weights`（450/200/…/2）**从未被消费**。§11 要求「权重递减」、
+   §7.4 要求「传说档 ≈1.5% 长尾」。现状是**第 10 档（+2000‰）10% 出现**，是设计值的 ~50 倍，
+   直接动摇 §7.4/§7.6 的重掷经济学与极品价格锚。要么按 tier_weights 实现加权抽，要么改文档承认均匀。
+2. **内容注册层只增不改**：技能 / AI / 敌人模板 / 敌人表 / 变体列表注册后无法修改或删除
+   （`register_skill` 断言 id 不存在、AI/模板/表用自增 id append、`add_battle_variant` 只能追加）。
+   副本 / 场次 / 掉落表 / 道具 / 职业 / 种族 / 词条模板 **可以**覆写。
+   「数值层无需改代码」对前者不成立 —— 修一个超模技能只能靠发新 id，旧 id 永久可用。
+3. **DISPEL 白名单不含 SHIELD(op4) 与 GUAR_NEXT(op7)**：`dispel_effects` 只清 1/2/3/5/6/8/11，
+   与 §2.5.1 效果表「SHIELD 可驱散=是」「GUAR_NEXT 可被敌方 DISPEL 剥」冲突。
+   当前内容只有矮人种族技 730 自解，且无敌方 DISPEL，故暂未显形。
+4. **SHIELD 扣减顺序是 LIFO**，§2.5.1 写的是 FIFO（先挂入的先消耗）。只影响多盾并存时的到期顺序。
+5. **同 op 合并的 duration 是覆盖**，§2.5.1 对可叠加类要求 `max(原剩余, 新持续)` ——
+   更短的新效果会把既有长效果压短（如 2 回合尘幕覆盖 3 回合黑幕的剩余时长）。
+6. **负债者可以创建免费房**：`charge_entry` 在 `amount==0` 时提前返回，不查 `is_debtor`。
+   §6.3 写「负债者不得创建房间」，但也承诺「仍可加入免费地下城打工」——两条如何取舍需定案
+   （现状：负债者能开免费房、也能用既有角色进去打）。
+7. **24 小时窗口只计「开房」不计「加入他人房间」**：`join_room_as_char` 不扣窗口额度。
+   §7.2 的措辞是「加入地下城的次数」。若要计入，加入也应调 `consume_entry`。
+8. **副本无最低等级门槛**：§3.1 列为可选设计（「D5 例如要求 40 级以上」），`DungeonConfig` 无此字段。
+9. **`expire_room` / `disband_room` 可重复调用刷新 `end_secs`**，回收窗口被不断推迟（存储滞留）。
+   建议改成幂等：已关闭则不再刷新。`roll_random_race` 在种族池被 GM 配空时会 abort（建号被砖）。
+10. **GM 参数无上界**：`set_weekly_mutator` 的 `value`（`MUT_DROP` 会直接变成结算循环次数）、
+    `set_room_ttl` / `set_reclaim_delay` 都无范围校验 —— 运营误配置可能砖化结算。
+11. **`skill_registry::consume_next_room_id` 是裸 `public fun`**：任何模块都能烧房号（建议改 friend）。
+12. **`settle_rewards` 在奖池为 0 时提前 return**，掉落掷骰整段跳过（当前内容不触发：
+    所有会出现在终局的敌人都有奖励）。
+13. **`roll_random_race` 在种族池为空时 abort**（GM 配置 footgun）。
+14. **预留未消费**：`ActiveEffect.source_id`（只写不读，留给「伤害归属回写」的履历统计）、
+    `SummonRule.enemy_headroom`（召唤缺口目前硬编码 +2）。
+
 ### 2.7.1 Move 道具层注记（数据驱动, 2026-09-02 实现）
 
 - **每种道具 = item_type + ItemDef**（name/group/combat_usable/effect_kind/effect_value/decimals），**无 per-type struct**。
