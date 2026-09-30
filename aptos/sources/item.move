@@ -10,9 +10,13 @@
 /// 3. 每种道具标记「战斗中可使用 / 不可使用」；key-value 存储并按道具类型分组(group)。
 /// 4. 战斗内使用道具 = 以特殊技能 id（ITEM_SKILL_BASE + item_type）排进技能计划队列，
 ///    占用 1 回合行动位（technical-design §2.6 道具入队定案）；弹尽/无库存 → 空过不炸交易。
+/// 5. 掉落表（DropStore）：按难度登记「条目 + 权重」，通关/全员逃离时对每个存活者掷一次；
+///    GM 常驻入口可动态调整，数值层不必改代码（gameplay-design §7.2）。
 module mohayo::item {
     use std::signer;
     use std::table::{Self, Table};
+    use std::vector;
+    use mohayo::rng;
 
     // ===================== 道具类型 id（按组留区间: 组内小步长, 同组可扩展） =====================
     public const ITEM_LEAD_BULLET: u64 = 1;     // 铅弹(火枪左轮弹药, 战斗不可直接使用)
@@ -56,6 +60,7 @@ module mohayo::item {
     const E_NO_ITEM: u64 = 4;
     const E_ZERO: u64 = 5;
     const E_BOUND: u64 = 6;
+    const E_BAD_TABLE: u64 = 7;
 
     /// 道具定义(key-value, 按类型分组)
     struct ItemDef has copy, drop, store {
@@ -77,15 +82,95 @@ module mohayo::item {
         balances: Table<u64, Table<address, u128>>,
     }
 
+    /// 掉落表条目：item_type = 0 表示「空手而归」（用一个条目表达"没掉东西"的权重）
+    struct DropEntry has copy, drop, store {
+        item_type: u64,
+        weight: u16,
+        amount: u64,
+    }
+
+    /// difficulty → 掉落表（通关/全员逃离时结算）
+    struct DropStore has key {
+        tables: Table<u64, vector<DropEntry>>,
+    }
+
     // ===================== 初始化 =====================
     fun init_module(account: &signer) {
         move_to(account, DefStore { defs: table::new() });
         move_to(account, Vault { balances: table::new() });
+        move_to(account, DropStore { tables: table::new() });
     }
 
     #[test_only]
     public fun init_for_test(account: &signer) {
         if (!exists<DefStore>(@mohayo)) { init_module(account); };
+    }
+
+    // ===================== 掉落表（数据驱动，GM 可随时调整） =====================
+
+    /// 登记/覆写某难度的掉落表。weight 为千分比权重（同一张表内相对比例，无需凑满 1000）。
+    /// item_type = 0 的条目代表「没掉东西」。
+    ///
+    /// 参数用**三条等长的并行原始向量**（entry 交易的参数不能是结构体），
+    /// 因此上线后 GM 仍可一笔交易动态调整掉落，无需发布新代码。
+    public entry fun register_drop_table(
+        account: &signer, difficulty: u64,
+        item_types: vector<u64>, weights: vector<u16>, amounts: vector<u64>,
+    ) acquires DropStore {
+        assert!(signer::address_of(account) == @mohayo, E_NOT_OWNER);
+        let n = vector::length(&item_types);
+        assert!(n == vector::length(&weights) && n == vector::length(&amounts), E_BAD_TABLE);
+        if (!exists<DropStore>(@mohayo)) { init_module(account); };
+        let entries = vector::empty<DropEntry>();
+        let i = 0;
+        while (i < n) {
+            vector::push_back(&mut entries, DropEntry {
+                item_type: *vector::borrow(&item_types, i),
+                weight: *vector::borrow(&weights, i),
+                amount: *vector::borrow(&amounts, i),
+            });
+            i = i + 1;
+        };
+        let ds = borrow_global_mut<DropStore>(@mohayo);
+        if (table::contains(&ds.tables, difficulty)) {
+            *table::borrow_mut(&mut ds.tables, difficulty) = entries;
+        } else {
+            table::add(&mut ds.tables, difficulty, entries);
+        };
+    }
+
+    /// 构造掉落条目（外部注册用）
+    public fun drop_entry(item_type: u64, weight: u16, amount: u64): DropEntry {
+        DropEntry { item_type, weight, amount }
+    }
+
+    /// 按难度掉落表掷一次（确定性：seed 由调用方提供）。
+    /// 返回 (item_type, amount)；item_type = 0 表示没掉东西；无表 → (0, 0)。
+    public fun pick_drop(difficulty: u64, seed: u64): (u64, u64) acquires DropStore {
+        if (!exists<DropStore>(@mohayo)) { return (0, 0); };
+        let ds = borrow_global<DropStore>(@mohayo);
+        if (!table::contains(&ds.tables, difficulty)) { return (0, 0); };
+        let entries = table::borrow(&ds.tables, difficulty);
+        let n = vector::length(entries);
+        let total: u64 = 0;
+        let i = 0;
+        while (i < n) {
+            total = total + (vector::borrow(entries, i).weight as u64);
+            i = i + 1;
+        };
+        if (total == 0) { return (0, 0); };
+        let r = rng::new(seed);
+        let roll = rng::below(&mut r, total);
+        let acc: u64 = 0;
+        let j = 0;
+        while (j < n) {
+            let e = vector::borrow(entries, j);
+            let w = (e.weight as u64);
+            if (roll < acc + w) { return (e.item_type, e.amount); };
+            acc = acc + w;
+            j = j + 1;
+        };
+        (0, 0)
     }
 
     // ===================== 注册(数据驱动: 上线后亦可动态添加新道具) =====================

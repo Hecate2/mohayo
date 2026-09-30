@@ -524,6 +524,37 @@ module mohayo::content_registration {
         skill_registry::set_dungeon_battles(account, 9, vector[bt(27, 4), bt(28, 4), bt(29, 3), bt(30, 1)]);
         skill_registry::add_battle_variant(account, 9, 4, 30, 700);   // 王座宝箱
         skill_registry::add_battle_variant(account, 9, 4, 31, 300);   // 皇帝备用机体
+        // ===================== DROP TABLES (掉落表: difficulty → 条目, 千分比权重) =====================
+        // 数值为初值(数值层可调): 权重是同一张表内的相对比例; item_type 0 = 「空手而归」。
+        // 通关 / 队长全员逃离时, 每个存活者独立掷一次(item::pick_drop)。
+        // 参数 = (item_types, weights, amounts) 三条等长向量。
+        item::register_drop_table(account, 1,
+            vector[item::ITEM_MANA_FIREWORK, 0], vector[300, 700], vector[1, 0]);  // D1 入门: 偶尔一份魔素礼花
+        item::register_drop_table(account, 2,
+            vector[item::ITEM_LEAD_BULLET, item::ITEM_HEALING_POTION, 0],
+            vector[250, 120, 630], vector[5, 1, 0]);
+        item::register_drop_table(account, 3,
+            vector[item::ITEM_LEAD_BULLET, item::ITEM_HEALING_POTION, item::ITEM_SMOKE_BOMB, 0],
+            vector[250, 180, 80, 490], vector[8, 1, 1, 0]);
+        item::register_drop_table(account, 4,
+            vector[item::ITEM_HEALING_POTION, item::ITEM_SMOKE_BOMB, item::ITEM_DRAGON_BULLET, 0],
+            vector[200, 120, 60, 620], vector[1, 1, 1, 0]);
+        item::register_drop_table(account, 5,
+            vector[item::ITEM_DRAGON_BULLET, item::ITEM_SMOKE_BOMB, item::ITEM_SPRING_OF_LIFE, 0],
+            vector[90, 120, 40, 750], vector[1, 1, 1, 0]);
+        item::register_drop_table(account, 6,
+            vector[item::ITEM_DRAGON_BULLET, item::ITEM_SPRING_OF_LIFE, item::ITEM_CHALLENGE_TICKET, 0],
+            vector[100, 60, 40, 800], vector[1, 1, 1, 0]);
+        item::register_drop_table(account, 7,
+            vector[item::ITEM_SPRING_OF_LIFE, item::ITEM_CHALLENGE_TICKET, item::ITEM_PHOENIX_FEATHER, 0],
+            vector[80, 60, 25, 835], vector[1, 1, 1, 0]);
+        item::register_drop_table(account, 8,
+            vector[item::ITEM_CHALLENGE_TICKET, item::ITEM_PHOENIX_FEATHER, item::ITEM_DICE_OF_FATE, 0],
+            vector[80, 40, 15, 865], vector[1, 1, 1, 0]);
+        item::register_drop_table(account, 9,
+            vector[item::ITEM_PHOENIX_FEATHER, item::ITEM_DICE_OF_FATE, item::ITEM_REBIRTH_SCROLL, 0],
+            vector[60, 30, 12, 898], vector[1, 1, 1, 0]);
+
         // D10 超级难关 —— 占位(单场宝箱怪=待机, 砍开即胜), 后续配置
         skill_registry::set_dungeon(account, 10, dng(30, 1, 5, 0, 50, 200, BATTLE_TURN_CAP, 1));
 

@@ -342,6 +342,9 @@ module mohayo::sim {
         skill_registry::init_for_test(a);
         engine::init_for_test(a);
         use_item::init_for_test(a);
+        use_item::set_daily_limit(a, 1000000); // 仿真需成千上万次开房
+        init_timestamp();                      // 入场次数门控读 timestamp::now_seconds
+
         economy::init_for_test(a);
         // 测试钱包：覆盖入场费/救援费/收益结算链路(生产走真实玩家余额)
         economy::gm_mint(a, @mohayo, 1000000000);
@@ -1176,7 +1179,6 @@ module mohayo::sim {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
         let own = std::signer::address_of(a);
-        init_timestamp();
         use_item::claim_daily_ticket(a);             // 每日免费领 1 张绑定券
         assert!(item::balance_whole(item::ITEM_DAILY_TICKET, own) == 1, 1);
         use_item::use_daily_ticket(a);               // 兑成 1 额外入场额度
@@ -1203,7 +1205,6 @@ module mohayo::sim {
     fun sim_item_daily_ticket_twice() {
         let a = &std::account::create_account_for_test(@mohayo);
         reg(a);
-        init_timestamp();
         use_item::claim_daily_ticket(a);
         use_item::claim_daily_ticket(a); // 同一天再领 → E_ALREADY_CLAIMED(2)
     }

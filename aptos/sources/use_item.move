@@ -5,8 +5,9 @@
 ///   (创建层随机正式方案走 RNGRouter/VRF, 见 randomness-design §5; 此处先用
 ///   每道具一递增计数器作种子, 保证"每次消耗结果不同、测试可复现" —— 基本效果实现。)
 /// - 每日挑战券: 每日免费领取一券(绑定不可交易), 每日限一次。
-/// - 挑战券 / 每日挑战券: 兑成「额外入场额度」(credits, 抵消当日入场次数限制)。
-///   入场次数系统落地后, join 门控读 `entry_credits(player)` 即可豁免次数。
+/// - 挑战券 / 每日挑战券: 兑成「额外入场额度」(credits, 突破当日入场次数限制)。
+/// - 入场次数门控(§7.2): `engine::create_room` 调用 `consume_entry` —— 先扣额外额度,
+///   再计当日次数; 超额则拒入。**免费地下城不消耗次数**(§6.3 负债者仍可进免费图打工)。
 module mohayo::use_item {
     use aptos_framework::event;
     use aptos_framework::timestamp;
@@ -16,10 +17,15 @@ module mohayo::use_item {
     use mohayo::character;
     use mohayo::rng;
 
+    friend mohayo::engine;
+
     const E_NOT_OWNER: u64 = 1;
     const E_ALREADY_CLAIMED: u64 = 2;
+    const E_NO_ENTRIES: u64 = 3;
 
     const DAY_SECS: u64 = 86400;
+    /// 每自然日的免费入场次数（数值层参数，GM 可改）
+    const DEFAULT_DAILY_ENTRIES: u64 = 3;
 
     #[event]
     struct EntryCreditAdded has drop, store { player: address, amount: u64, source: u64 }
@@ -28,7 +34,10 @@ module mohayo::use_item {
 
     struct EntryGate has key {
         last_claimed_day: Table<address, u64>,
-        credits: Table<address, u64>, // 额外入场额度(挑战券/每日券兑出)
+        credits: Table<address, u64>,      // 额外入场额度(挑战券/每日券兑出)
+        daily_limit: u64,                  // 每自然日免费入场次数
+        entry_day: Table<address, u64>,    // 上次计次所在自然日
+        entry_count: Table<address, u64>,  // 该自然日已用次数
     }
 
     fun init_module(account: &signer) {
@@ -36,6 +45,9 @@ module mohayo::use_item {
         move_to(account, EntryGate {
             last_claimed_day: table::new(),
             credits: table::new(),
+            daily_limit: DEFAULT_DAILY_ENTRIES,
+            entry_day: table::new(),
+            entry_count: table::new(),
         });
     }
 
@@ -127,6 +139,47 @@ module mohayo::use_item {
         let gate = borrow_global<EntryGate>(@mohayo);
         if (!table::contains(&gate.credits, player)) { return 0; };
         *table::borrow(&gate.credits, player)
+    }
+
+    // ===================== 入场次数门控(§7.2) =====================
+
+    /// 消耗一次入场机会：**先扣额外额度**（挑战券/每日券，突破当日限制），
+    /// 否则计入当日次数，达到 `daily_limit` 则拒绝。由 `engine::create_room` 调用。
+    public(friend) fun consume_entry(player: address) acquires EntryGate {
+        let gate = borrow_global_mut<EntryGate>(@mohayo);
+        let credits = table::borrow_mut_with_default(&mut gate.credits, player, 0u64);
+        if (*credits > 0) { *credits = *credits - 1; return; };
+        let day = today();
+        let d = table::borrow_mut_with_default(&mut gate.entry_day, player, 0u64);
+        let c = table::borrow_mut_with_default(&mut gate.entry_count, player, 0u64);
+        if (*d != day) { *d = day; *c = 0; };
+        assert!(*c < gate.daily_limit, E_NO_ENTRIES);
+        *c = *c + 1;
+    }
+
+    /// 今日剩余免费入场次数（不含挑战券额度）
+    #[view]
+    public fun entries_left(player: address): u64 acquires EntryGate {
+        if (!exists<EntryGate>(@mohayo)) { return DEFAULT_DAILY_ENTRIES; };
+        let gate = borrow_global<EntryGate>(@mohayo);
+        let day = today();
+        if (!table::contains(&gate.entry_day, player)) { return gate.daily_limit; };
+        if (*table::borrow(&gate.entry_day, player) != day) { return gate.daily_limit; };
+        let used = *table::borrow(&gate.entry_count, player);
+        if (used >= gate.daily_limit) { 0 } else { gate.daily_limit - used }
+    }
+
+    #[view]
+    public fun daily_limit(): u64 acquires EntryGate {
+        if (!exists<EntryGate>(@mohayo)) { return DEFAULT_DAILY_ENTRIES; };
+        borrow_global<EntryGate>(@mohayo).daily_limit
+    }
+
+    /// GM 调整每日免费入场次数（数值层参数，无需改代码）
+    public entry fun set_daily_limit(account: &signer, limit: u64) acquires EntryGate {
+        assert!(signer::address_of(account) == @mohayo, E_NOT_OWNER);
+        let gate = borrow_global_mut<EntryGate>(@mohayo);
+        gate.daily_limit = limit;
     }
 
     /// 玩家能否再领取每日挑战券(今日已领 → false)。

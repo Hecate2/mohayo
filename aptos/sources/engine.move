@@ -10,6 +10,7 @@ module mohayo::engine {
     use mohayo::character;
     use mohayo::item;
     use mohayo::economy;
+    use mohayo::use_item;
 
     const E_ROOM_NOT_FOUND: u64 = 3;
     const E_BAD_INDEX: u64 = 4;
@@ -117,6 +118,8 @@ module mohayo::engine {
     struct RescuePaid has drop, store { room_id: u64, player: address, amount: u64 }
     #[event]
     struct RunRetreated has drop, store { room_id: u64 }
+    #[event]
+    struct ItemDropped has drop, store { room_id: u64, player: address, item_type: u64, amount: u64 }
 
     // ============================ init ============================
 
@@ -129,8 +132,12 @@ module mohayo::engine {
     public entry fun create_room(account: &signer, difficulty: u64) acquires RoomStore {
         let addr = signer::address_of(account);
         let dungeon = skill_registry::get_dungeon(difficulty);
+        // 入场次数门控(§7.2): 付费地下城消耗一次当日入场机会(挑战券额度优先扣);
+        // 免费地下城不消耗 —— §6.3 保证负债者仍可进免费图打工复健。
+        let entry_fee = types::dungeon_entry_fee(&dungeon);
+        if (entry_fee > 0) { use_item::consume_entry(addr); };
         // 入场费(§3.1): 开房即扣、直接销毁；余额不足则整笔交易回滚
-        economy::charge_entry(addr, types::dungeon_entry_fee(&dungeon));
+        economy::charge_entry(addr, entry_fee);
         let rid = skill_registry::consume_next_room_id();
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = Room {
@@ -1318,6 +1325,7 @@ module mohayo::engine {
     /// 收益发放（§6.1）：对每个存活者独立抽取随机权重（1..=1000），按权重分配奖池；
     /// 期望均衡、实际有波动。余数归最后一人，保证账目守恒。
     /// 无人可领（全灭/全逃离）则整池作废。
+    /// 同时为每个存活者掷一次掉落表（§7.2）。
     fun settle_rewards(room: &mut Room, room_id: u64) {
         let pool = room.reward_pool;
         room.reward_pool = 0;
@@ -1350,6 +1358,14 @@ module mohayo::engine {
             let owner = types::member_owner(vector::borrow(&room.members, idx));
             economy::credit(owner, share);
             event::emit(RewardPaid { room_id, player: owner, amount: share });
+            // 掉落(§7.2): 每个存活者独立掷一次本难度的掉落表(GM 可动态调整; item_type 0 = 空手)
+            let dseed = room.rng_seed;
+            room.rng_seed = room.rng_seed + 1;
+            let (drop_item, drop_amt) = item::pick_drop(room.difficulty as u64, dseed);
+            if (drop_item > 0 && drop_amt > 0) {
+                item::credit_raw(drop_item, owner, (drop_amt as u128) * item::one());
+                event::emit(ItemDropped { room_id, player: owner, item_type: drop_item, amount: drop_amt });
+            };
             k = k + 1;
         };
     }

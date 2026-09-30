@@ -456,6 +456,24 @@ struct RoomMember {
   上线后慢速面板（例：守卫×巨人的 1 级极限面板 spd 27）会**后手**，控制类敌人（缠绕眩晕）先落地。
   相关 sim 标定已按新引擎重跑（`sim_d2_l1_talented` 等）。
 
+### 2.6.5 Move 入场次数门控与掉落注记（2026-09-30 实现）
+
+对齐 `gameplay-design.md` §7.2（此前挑战券账本存在但**没有任何门控读它** → 空转道具）。
+
+- **入场次数门控**（`use_item::EntryGate`）：`daily_limit`（默认 **3 次/自然日**，GM 可用
+  `set_daily_limit` 改，数值层参数无需改代码）+ `entry_day` / `entry_count`（按 `timestamp::now_seconds()/86400`
+  的自然日粒度计次）+ `credits`（挑战券/每日券兑出的额外额度）。
+  `engine::create_room` 对 **`entry_fee > 0` 的付费图**扣一次机会：**先扣 credits**（突破当日限制），
+  再计当日次数，超额 `abort E_NO_ENTRIES`。**免费图不消耗次数** —— 这是为保 §6.3「负债者仍可进免费图打工」
+  的显式取舍（文档 §7.2 未区分，此处按 §6.3 的硬承诺处理）。
+- **掉落表**（`item::DropStore`）：`difficulty → vector<DropEntry{item_type, weight, amount}>`；
+  `item_type = 0` 的条目代表「空手而归」。注册入口
+  `item::register_drop_table(account, difficulty, item_types, weights, amounts)` 用**三条并行原始向量**
+  （Move entry 交易不支持结构体参数），因此**上线后 GM 仍可一笔交易调整掉落**。
+  结算时（通关 / 队长全员逃离）对**每个存活者**独立掷一次（`item::pick_drop`，seed 取自房间 RNG 流）。
+- 初始掉落表（D1–D9，初值）：D1 魔素礼花；D2–D3 铅弹/疗伤药水；D4–D5 龙击弹/烟幕弹/生命之泉；
+  D6–D7 生命之泉/挑战券/不死鸟之羽；D8–D9 挑战券/不死鸟之羽/命运骰子/重生卷轴。
+
 ### 2.7.1 Move 道具层注记（数据驱动, 2026-09-02 实现）
 
 - **每种道具 = item_type + ItemDef**（name/group/combat_usable/effect_kind/effect_value/decimals），**无 per-type struct**。

@@ -9,6 +9,8 @@ module mohayo::tests {
     use mohayo::engine;
     use mohayo::rng;
     use mohayo::content_registration;
+    use mohayo::use_item;
+    use mohayo::item;
 
     // ===================== helpers =====================
 
@@ -17,6 +19,10 @@ module mohayo::tests {
         character::init_for_test(account);
         economy::init_for_test(account);
         engine::init_for_test(account);
+        use_item::init_for_test(account); // 入场次数门控(create_room → consume_entry)
+        use_item::set_daily_limit(account, 1000000); // 测试需大量开房; 次数规则由专门用例验证
+        init_timestamp();
+
         // 测试钱包：覆盖入场费/救援费/收益结算链路
         economy::gm_mint(account, @mohayo, 1000000000);
     }
@@ -1607,6 +1613,13 @@ module mohayo::tests {
         engine::leader_retreat(b, 1);                       // 非队长 → E_NOT_LEADER
     }
 
+    /// 初始化 aptos_framework 时间戳(入场次数门控读 timestamp::now_seconds)
+    fun init_timestamp() {
+        let f = &std::account::create_account_for_test(@aptos_framework);
+        aptos_framework::timestamp::set_time_has_started_for_testing(f);
+        aptos_framework::timestamp::update_global_time_for_test_secs(1760000000);
+    }
+
     // 房间跑到底: 战斗 → 间歇 → 下一战 … 直到结算
     fun run_room(a: &signer, room_id: u64) {
         let guard = 0;
@@ -1679,5 +1692,84 @@ module mohayo::tests {
             s = s + 1;
         };
         assert!(any_split, 1);
+    }
+
+    // ===================== P1b: 入场次数门控与掉落 =====================
+
+    #[test]
+    fun test_daily_entry_limit_and_ticket_credit() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        use_item::set_daily_limit(a, 3);                     // 本用例验证规则本身
+        let p = &std::account::create_account_for_test(@0xCC01);
+        let paddr = std::signer::address_of(p);
+        economy::gm_mint(a, paddr, 1000);
+        // 付费地下城: 每日 3 次
+        engine::create_room(p, 2);
+        engine::create_room(p, 2);
+        engine::create_room(p, 2);
+        assert!(use_item::entries_left(paddr) == 0, 1);
+        // 免费地下城不消耗次数
+        engine::create_room(p, 1);
+        assert!(use_item::entries_left(paddr) == 0, 2);
+        // 第 4 次付费入场被拒 → 见 test_daily_entry_limit_rejects_fourth_paid_room
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 3)]
+    fun test_daily_entry_limit_rejects_fourth_paid_room() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        use_item::set_daily_limit(a, 3);
+        let p = &std::account::create_account_for_test(@0xCC02);
+        economy::gm_mint(a, std::signer::address_of(p), 1000);
+        engine::create_room(p, 2);
+        engine::create_room(p, 2);
+        engine::create_room(p, 2);
+        engine::create_room(p, 2); // 第四次 → E_NO_ENTRIES
+    }
+
+    #[test]
+    fun test_challenge_ticket_grants_extra_entry() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        use_item::set_daily_limit(a, 3);
+        let p = &std::account::create_account_for_test(@0xCC03);
+        let paddr = std::signer::address_of(p);
+        economy::gm_mint(a, paddr, 1000);
+        engine::create_room(p, 2);
+        engine::create_room(p, 2);
+        engine::create_room(p, 2);
+        assert!(use_item::entries_left(paddr) == 0, 1);
+        // 用一张挑战券 → +1 额外额度, 突破当日限制
+        item::gm_mint(a, item::ITEM_CHALLENGE_TICKET, paddr, 1);
+        use_item::use_challenge_ticket(p);
+        assert!(use_item::entry_credits(paddr) == 1, 2);
+        engine::create_room(p, 2);                            // 消耗额度, 不再计次数
+        assert!(use_item::entry_credits(paddr) == 0, 3);
+        assert!(use_item::entries_left(paddr) == 0, 4);
+    }
+
+    #[test]
+    fun test_drop_table_grants_item_on_victory() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let addr = std::signer::address_of(a);
+        // 覆写 D1 掉落表: 必掉 1 份魔素礼花(消除随机性以便断言)
+        item::register_drop_table(a, 1,
+            vector[item::ITEM_MANA_FIREWORK], vector[1000], vector[1]);
+        let before = item::balance_whole(item::ITEM_MANA_FIREWORK, addr);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 4000, 100000, 100, 100);
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[820]);
+        run_room(a, 1);
+        assert!(engine::room_result(1) == 1, 1);
+        // 存活者(仅一人)通关时掷一次掉落 → +1
+        assert!(item::balance_whole(item::ITEM_MANA_FIREWORK, addr) == before + 1, 2);
     }
 }
