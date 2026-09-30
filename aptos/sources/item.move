@@ -18,6 +18,10 @@ module mohayo::item {
     use std::vector;
     use mohayo::rng;
 
+    // 余额写入口只对引擎与关卡外编排模块开放(§2.6.11 复审): 防止任意模块凭空铸道具/销毁他人道具。
+    friend mohayo::engine;
+    friend mohayo::use_item;
+
     // ===================== 道具类型 id（按组留区间: 组内小步长, 同组可扩展） =====================
     public const ITEM_LEAD_BULLET: u64 = 1;     // 铅弹(火枪左轮弹药, 战斗不可直接使用)
     public const ITEM_DRAGON_BULLET: u64 = 2;   // 龙击弹(火枪龙击弹弹药, 同上)
@@ -227,8 +231,8 @@ module mohayo::item {
         table::borrow(&ds.defs, item_type).bound
     }
 
-    /// 内部入账(raw 单位)
-    public fun credit_raw(item_type: u64, to: address, raw: u128) acquires Vault {
+    /// 内部入账(raw 单位)。`public(friend)` —— 只有 engine / use_item 能铸造(§2.6.11)。
+    public(friend) fun credit_raw(item_type: u64, to: address, raw: u128) acquires Vault {
         assert!(raw > 0, E_ZERO);
         let v = borrow_global_mut<Vault>(@mohayo);
         if (!table::contains(&v.balances, item_type)) {
@@ -243,8 +247,8 @@ module mohayo::item {
         };
     }
 
-    /// 扣减(raw)。余额不足返回 false(战斗中弹尽 = 空过, 不炸交易)。
-    public fun try_consume_raw(item_type: u64, owner: address, raw: u128): bool acquires Vault {
+    /// 扣减(raw)。余额不足返回 false(战斗中弹尽 = 空过, 不炸交易)。`public(friend)`(§2.6.11)。
+    public(friend) fun try_consume_raw(item_type: u64, owner: address, raw: u128): bool acquires Vault {
         let v = borrow_global_mut<Vault>(@mohayo);
         if (!table::contains(&v.balances, item_type)) { return false; };
         let tbl = table::borrow_mut(&mut v.balances, item_type);
@@ -255,13 +259,14 @@ module mohayo::item {
         true
     }
 
-    /// 确定性扣减(不足即 abort)
-    public fun consume_raw(item_type: u64, owner: address, raw: u128) acquires Vault {
+    /// 确定性扣减(不足即 abort)。`public(friend)`(§2.6.11)。
+    public(friend) fun consume_raw(item_type: u64, owner: address, raw: u128) acquires Vault {
         assert!(try_consume_raw(item_type, owner, raw), E_NO_ITEM);
     }
 
     /// 战斗内效果结算(engine 调用): 按 ItemDef.effect_kind 分发。返回 (是否消耗成功, 效果种类, 效果值)。
-    public fun combat_use(item_type: u64, owner: address): (bool, u8, u64) acquires DefStore, Vault {
+    /// `public(friend)` —— 只有 engine 能触发战斗消耗(§2.6.11)。
+    public(friend) fun combat_use(item_type: u64, owner: address): (bool, u8, u64) acquires DefStore, Vault {
         let ds = borrow_global<DefStore>(@mohayo);
         if (!table::contains(&ds.defs, item_type)) { return (false, EFFECT_NONE, 0); };
         let d = *table::borrow(&ds.defs, item_type);

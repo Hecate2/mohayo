@@ -1967,6 +1967,24 @@ module mohayo::tests {
         character::transfer_character(a, cid, @0xDD03); // E_IN_ROOM(13)
     }
 
+    /// §2.6.11 复审: 已在某房间的角色不得再进第二个房间 —— 否则 room_id 被覆盖,
+    /// 退掉旧房会把角色提前解锁(人还在新房战斗中), §7.4「关卡内禁止转移」被绕过。
+    #[test]
+    #[expected_failure(abort_code = 29, location = mohayo::engine)]   // E_CHAR_IN_ROOM
+    fun test_same_character_cannot_join_two_rooms() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let addr = std::signer::address_of(a);
+        character::gm_mint(a, addr, 1, 0, vector[0, 0, 0, 0], vector::empty());
+        let cid = character::owner_latest_char(addr);
+        engine::create_room(a, 1);
+        engine::create_room(a, 1);
+        engine::join_room_as_char(a, 1, cid);
+        assert!(character::get_room_id(cid) == 1, 1);
+        engine::join_room_as_char(a, 2, cid);            // 同一角色跨房双开 → 拒绝
+    }
+
     #[test]
     fun test_history_recorded_on_clear_and_survives_transfer() {
         let a = &std::account::create_account_for_test(@mohayo);

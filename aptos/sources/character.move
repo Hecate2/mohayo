@@ -336,7 +336,8 @@ module mohayo::character {
     }
 
     /// 命运骰子: 换种族+词条, 保留职业/等级/已选自选技; 仅关卡外(room_id==0)可用。
-    public fun reroll_character(char_id: u64, new_race: u8, new_affix_tiers: vector<u8>)
+    /// `public(friend)`: 必须由 `use_item` 核销道具/免费重掷后调用, 不可被任意模块直接白嫖(§2.6.11)。
+    public(friend) fun reroll_character(char_id: u64, new_race: u8, new_affix_tiers: vector<u8>)
     acquires ClassStore, RaceStore, AffixStore, CharacterStore {
         let store = borrow_global_mut<CharacterStore>(@mohayo);
         assert!(table::contains(&store.characters, char_id), E_NOT_FOUND);
@@ -364,7 +365,8 @@ module mohayo::character {
     }
 
     /// 重生卷轴: 整体重建 —— 换种族+词条, 等级重置为 1, 自选技清空(技能=职业技+新种族技); 仅关卡外可用。
-    public fun rebuild_character(char_id: u64, new_race: u8, new_affix_tiers: vector<u8>)
+    /// `public(friend)`: 必须由 `use_item` 核销道具后调用(§2.6.11)。
+    public(friend) fun rebuild_character(char_id: u64, new_race: u8, new_affix_tiers: vector<u8>)
     acquires ClassStore, RaceStore, AffixStore, CharacterStore {
         let store = borrow_global_mut<CharacterStore>(@mohayo);
         assert!(table::contains(&store.characters, char_id), E_NOT_FOUND);

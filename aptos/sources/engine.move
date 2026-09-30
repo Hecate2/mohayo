@@ -32,6 +32,8 @@ module mohayo::engine {
     const E_NOT_EMERGENCY: u64 = 26;
     const E_ROOM_CLOSED: u64 = 27;
     const E_NOT_EXPIRED: u64 = 28;
+    /// 该角色已在某个房间内(§2.6.11 复审: 防同一角色跨房双开覆盖角色锁)
+    const E_CHAR_IN_ROOM: u64 = 29;
 
     /// 个人逃离的延迟回合数(§6.2「若干回合后」；数值层可调)
     const ESCAPE_DELAY: u64 = 3;
@@ -358,6 +360,9 @@ module mohayo::engine {
         account: &signer, room_id: u64, char_id: u64,
     ) acquires RoomStore {
         assert!(character::char_owner(char_id) == signer::address_of(account), E_NOT_PLAN_OWNER);
+        // §2.6.11: 已在别的房间的角色不得再入房 —— 否则 room_id 被覆盖, 退房时会提前解锁
+        // (人在旧房战斗中), §7.4「关卡内禁止转移」被绕过。
+        assert!(character::get_room_id(char_id) == 0, E_CHAR_IN_ROOM);
         let (_hp, max_hp, atk, mag, spd) = character::get_stats(char_id);
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let room = table::borrow_mut(&mut rs.rooms, room_id);

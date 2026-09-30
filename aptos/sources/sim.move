@@ -6,6 +6,7 @@
 /// tuning harness used to fine-tune dungeon/skill/enemy values (e.g. the D5 solo band
 /// of 80–90%, the level-1 gate against D3/D4, and the resource-affix chaining check).
 /// It is `#[test_only]`: it depends on test-only initializers and is never deployed.
+#[test_only]
 module mohayo::sim {
     use mohayo::engine;
     use mohayo::item;

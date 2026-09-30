@@ -559,6 +559,44 @@ struct RoomMember {
   `engine::expire_room` 在「创建后未开始且闲置超过 TTL」时关闭房间，**任何人**可触发（防抢占/囤积房间号）。
   已关闭房间拒绝加入与开战（`E_ROOM_CLOSED`）；事件 `RoomClosed{room_id, reason}`（1=解散 / 2=过期）。
 
+### 2.6.11 Move 复审修正注记（2026-09-30 架构 × 代码复审）
+
+对 `aptos/sources` 做全量复审（架构层 + 局部代码层），用临时 `#[test_only]` 探针复现后逐项修复。
+本节记录**修复前的缺陷**与修复口径，供回归时对照。
+
+- **发布阻断 · `sim` 模块缺 `#[test_only]`**：`sim.move` 的文档注释自称 test_only，但属性没写，
+  导致 `aptos move compile`（生产/发布路径）报 23 处 `no function named ...` 失败——`aptos move test`
+  因走测试模式把问题盖住了。修复：补 `#[test_only]`。**任何改 `sim`/`tests` 的提交都必须同时验证
+  `aptos move compile` 与 `aptos move test` 两条路径**。
+- **越权 · 裸 `public fun`**：`item::credit_raw / try_consume_raw / consume_raw / combat_use` 与
+  `character::reroll_character / rebuild_character` 原本是 `public fun` 且无 signer/来源校验，
+  任意模块可凭空铸道具、白嫖重掷（探针实证：非 friend 模块调 `credit_raw` 铸出 999 份龙击弹；
+  直接调 `reroll_character` 未消耗骰子即改种族）。修复：全部改 `public(friend)`，`item` 新增
+  `friend mohayo::engine` / `friend mohayo::use_item`；只读入口（`balance_*` / `def_of` /
+  `is_bound` / `is_combat_usable` / `one`）保持 public。
+- **角色锁被覆盖 · 同一角色可同时在多个房间**：`join_room_as_char` 未校验角色是否已在房。
+  探针：进房 1 → 再进房 2（`room_id` 被覆盖成 2）→ 退房 1 时 `lock_room(cid, 0)` 把角色解锁，
+  而人仍在房 2 战斗，`transfer_character` 的 `room_id == 0` 断言因此被绕过（§7.4 硬规则失效）。
+  修复：入房前 `assert!(character::get_room_id(char_id) == 0, E_CHAR_IN_ROOM(29))`。
+- **资源词条全线失效**：`character::compute_affixes` 的资源词条循环初值误写为
+  `vector::length(affix_tiers)`（应为 `4`），条件恒假 → AP 消耗−1 / AP 产量+1 / 魔素消耗−1 /
+  魔素产量+1 **四项恒为 0**（§2.3 的一半词条轴从未生效）。sim 的「天赋」走 `join_room_affixed`
+  旁路直填字段，因此标定从未暴露。修复：初值改 `4`，并补一条覆盖四种资源词条的用例。
+- **爆裂魔法缺 `GUARANTEED_HIT`**：430 注册 flags 只有 `FLAG_MANA_ALL(2)`，与 §4.9 / content-design
+  §4.1 要求的「固有绝对命中、无视一切命中惩罚」不符（`base_acc=1000` 只是「基本必中」，会被
+  ACC_DOWN / EVADE_UP 削减）。修复：`flags = FLAG_GUARANTEED_HIT | FLAG_MANA_ALL = 3`。
+- **D5 战斗③变体权重失真**：`spawn_battle` 把**非空 variants 视为完整候选集**（base table 被整体
+  替换），而 `content_registration` 只登记了一条 weight=200 的变体、没有基准条目 → 混沌变体实际
+  **100%**（探针 12/12），与 §8.2「20% 权重切换」不符。修复：按 D9 的写法把基准表也登记为变体条目
+  （督军表 800 / 混沌变体 200 = 80% / 20%），**并重跑 D5 标定**（原 51/60≈85% 是按 100% 变体跑出来的）。
+- **迟到成员仍会被 AoE 命中**：`select_targets` 的加权随机池过滤了 `arrive_delay`，但
+  `ALL_ENEMY(4)` / `ALL_ALLY(7)` / `ROOM_ALL(8)` 三个分支只查 `alive`，与 §2.6.8「倒计时归零前
+  不可被选为目标」冲突。修复：三个分支统一补 `arrive_delay == 0` 过滤。
+- **冗余清理**：engine 内的容量魔数（AP 上限 22 / 成员上限 10 / 效果上限 6 等）改用 `types` 常量
+  （此前 `types` 里 13 个容量常量零引用）；修 `character` 的 `E_CLASS_CAP=16`/`E_SELF_TRANSFER=16`、
+  `E_RACE_CAP=17`/`E_BAD_LEVELS=17` 错误码撞码；删死代码（`skill_registry::bump_room_id`、
+  `item::drop_entry`、`types::ae_set_*`、未引用的 `E_*`）；`aptos/README.md` 重写为 Move 现状。
+
 ### 2.7.1 Move 道具层注记（数据驱动, 2026-09-02 实现）
 
 - **每种道具 = item_type + ItemDef**（name/group/combat_usable/effect_kind/effect_value/decimals），**无 per-type struct**。
