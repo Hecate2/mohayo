@@ -528,6 +528,13 @@ module mohayo::engine {
         assert!(!room.closed, E_ROOM_CLOSED);
         assert!(room.phase == 0 || room.phase == 1 || room.phase == 3, E_NOT_JOINABLE);
         assert!(vector::length(&room.members) < types::MAX_MEMBERS(), E_ROOM_FULL);
+        // §2.6.14 审计: 同一角色**逃离后**会解锁(room_id=0), 若不查本房成员表,
+        // 可以在间歇期「逃离 → 立刻重进同一房间」白拿一个满血槽位并规避救援费。
+        let mi = 0;
+        while (mi < vector::length(&room.members)) {
+            assert!(types::member_char_id(vector::borrow(&room.members, mi)) != char_id, E_CHAR_IN_ROOM);
+            mi = mi + 1;
+        };
         let member = types::make_member(
             max_hp, max_hp, atk, mag, spd,
             0, mana_disc, ap_disc, ap_bon, mana_gain, class_id,
@@ -1279,20 +1286,24 @@ module mohayo::engine {
     }
 
     fun execute_skill(room: &mut Room, room_id: u64, actor_idx: u64, actor_is_enemy: bool, s: &Skill) {
-        // 弹药(火枪): ammo_id>0 时每次施放固定消耗 N 份, 不足则空过(文档 §2.5.2; 怪物 AI 不耗弹药)
+        // 两段式门槛(technical-design §2.5「Phase1 只读检查、Phase2 全部通过才依次扣减」):
+        // Phase1 —— 弹药余额 / 魔素 / AP **只读检查**; 任一不足 → 整次施放失败, 什么都不扣。
+        //   此前的实现把弹药扣减放在魔素/AP 门槛之前, 会出现「技能没放出去、子弹先没了」。
         let ammo_id = (types::skill_ammo_id(s) as u64);
-        if (ammo_id > 0 && !actor_is_enemy) {
-            let owner = types::member_owner(vector::borrow(&room.members, actor_idx));
-            let need = (types::skill_ammo_cost(s) as u128) * item::one();
-            if (!item::try_consume_raw(ammo_id, owner, need)) return;
-        };
+        let has_ammo = (ammo_id == 0) || actor_is_enemy
+            || (item::balance_raw(
+                    ammo_id,
+                    types::member_owner(vector::borrow(&room.members, actor_idx)),
+                ) >= ((types::skill_ammo_cost(s) as u128) * item::one()));
         let mana_cost = apply_mana_discount(room, actor_idx, actor_is_enemy, types::skill_mana_cost(s));
         let ap_cost = apply_ap_discount(room, actor_idx, actor_is_enemy, types::skill_ap_cost(s));
+        if (!has_ammo) return;
         if (mana_cost > room.mana_pool) return;
         if (!actor_is_enemy) {
             let m = vector::borrow(&room.members, actor_idx);
             if ((types::member_ap(m) as u64) < (ap_cost as u64)) return;
         };
+        // Phase2 —— 全部门槛通过, 依次扣减(魔素 → AP → 生命 → 弹药)
         room.mana_pool = room.mana_pool - mana_cost;
         if (!actor_is_enemy) {
             let m = vector::borrow_mut(&mut room.members, actor_idx);
@@ -1305,6 +1316,11 @@ module mohayo::engine {
             } else if (hp_cost > 0) {
                 types::member_set_hp(m, 1);
             };
+        };
+        if (ammo_id > 0 && !actor_is_enemy) {
+            let owner = types::member_owner(vector::borrow(&room.members, actor_idx));
+            let need = (types::skill_ammo_cost(s) as u128) * item::one();
+            item::consume_raw(ammo_id, owner, need);   // 确定性扣减(已通过 Phase1 检查)
         };
         resolve_skill(room, room_id, actor_idx, actor_is_enemy, s);
     }
@@ -1727,7 +1743,8 @@ module mohayo::engine {
         let i = 0;
         while (i < n) {
             let m = vector::borrow_mut(&mut room.members, i);
-            if (!types::member_alive(m) && !types::member_is_summon(m)) {
+            // §2.6.14 审计: 逃离者也是 !alive, 不排除的话羽毛会「复活」一个已离场的人
+            if (!types::member_alive(m) && !types::member_escaped(m) && !types::member_is_summon(m)) {
                 let cap = types::member_max_hp(m);
                 types::member_set_alive(m, true);
                 types::member_set_hp(m, if (hp < cap) { hp } else { cap });
