@@ -34,15 +34,10 @@ module mohayo::item {
     // ---- 角色类(重生/重掷, 仅掉落, 关卡外使用) ----
     public const ITEM_REBIRTH_SCROLL: u64 = 200;  // 重生卷轴(整体重建角色)
     public const ITEM_DICE_OF_FATE: u64 = 201;    // 命运骰子(种族+词条全重掷)
-    // ---- 入场类 ----
-    public const ITEM_DAILY_TICKET: u64 = 300;    // 每日挑战券(每日免费领取, 绑定不可交易)
-    public const ITEM_CHALLENGE_TICKET: u64 = 301; // 挑战券(无视当日入场次数限制, 可交易)
-
     // ===================== 分组 =====================
     public const GROUP_AMMO: u8 = 1;              // 弹药(战斗中不可直接使用, 技能自动消耗)
     public const GROUP_COMBAT_CONSUMABLE: u8 = 2; // 战斗消耗品(可入计划队列)
     public const GROUP_CHARACTER_META: u8 = 4;    // 角色类(重生/重掷, 关卡外)
-    public const GROUP_ENTRY: u8 = 5;             // 入场类(挑战券/每日挑战券)
 
     // ===================== 效果种类(战斗内) =====================
     public const EFFECT_NONE: u8 = 0;

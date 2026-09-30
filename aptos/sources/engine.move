@@ -357,11 +357,10 @@ module mohayo::engine {
     public entry fun create_room(account: &signer, difficulty: u64) acquires RoomStore {
         let addr = signer::address_of(account);
         let dungeon = skill_registry::get_dungeon(difficulty);
-        // 入场次数门控(§7.2): 付费地下城消耗一次当日入场机会(挑战券额度优先扣);
-        // 免费地下城不消耗 —— §6.3 保证负债者仍可进免费图打工复健。
+        // 参与次数门控(§2.6.14): 24 小时滑动窗口内限次, **所有难度都计次(免费图也不例外)**。
+        use_item::consume_entry(addr);
+        // 入场费(§3.1): 付费图开房即扣、直接销毁；余额不足则整笔交易回滚
         let entry_fee = types::dungeon_entry_fee(&dungeon);
-        if (entry_fee > 0) { use_item::consume_entry(addr); };
-        // 入场费(§3.1): 开房即扣、直接销毁；余额不足则整笔交易回滚
         economy::charge_entry(addr, entry_fee);
         let rid = skill_registry::consume_next_room_id();
         let mut = mutator_for_week(week_of(aptos_framework::timestamp::now_seconds()));

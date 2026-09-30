@@ -21,7 +21,7 @@ module mohayo::tests {
         economy::init_for_test(account);
         engine::init_for_test(account);
         use_item::init_for_test(account); // 入场次数门控(create_room → consume_entry)
-        use_item::set_daily_limit(account, 1000000); // 测试需大量开房; 次数规则由专门用例验证
+        use_item::set_window_limit(account, 1000); // 测试需大量开房; 次数规则由专门用例验证
         init_timestamp();
 
         // 测试钱包：覆盖入场费/救援费/收益结算链路
@@ -1713,61 +1713,70 @@ module mohayo::tests {
 
     // ===================== P1b: 入场次数门控与掉落 =====================
 
+    /// §2.6.14: 参与次数是 24 小时滑动窗口 —— **所有难度都计次(免费图也不例外)**。
     #[test]
-    fun test_daily_entry_limit_and_ticket_credit() {
+    fun test_window_limit_counts_all_difficulties() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
         content_registration::register_all_content(a);
-        use_item::set_daily_limit(a, 3);                     // 本用例验证规则本身
+        use_item::set_window_limit(a, 3);
         let p = &std::account::create_account_for_test(@0xCC01);
         let paddr = std::signer::address_of(p);
         economy::gm_mint(a, paddr, 1000);
-        // 付费地下城: 每日 3 次
-        engine::create_room(p, 2);
-        engine::create_room(p, 2);
-        engine::create_room(p, 2);
-        assert!(use_item::entries_left(paddr) == 0, 1);
-        // 免费地下城不消耗次数
+        assert!(use_item::entries_left(paddr) == 3, 1);
+        engine::create_room(p, 2);                            // 付费图 D2
+        engine::create_room(p, 1);                            // 免费图 D1 也计次
+        assert!(use_item::entries_left(paddr) == 1, 2);
         engine::create_room(p, 1);
-        assert!(use_item::entries_left(paddr) == 0, 2);
-        // 第 4 次付费入场被拒 → 见 test_daily_entry_limit_rejects_fourth_paid_room
+        assert!(use_item::entries_left(paddr) == 0, 3);
     }
 
+    /// 窗口满了就拒绝（免费图也一样）。
     #[test]
-    #[expected_failure(abort_code = 3)]
-    fun test_daily_entry_limit_rejects_fourth_paid_room() {
+    #[expected_failure(abort_code = 3)]                       // E_NO_ENTRIES
+    fun test_window_limit_rejects_over_limit() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
         content_registration::register_all_content(a);
-        use_item::set_daily_limit(a, 3);
+        use_item::set_window_limit(a, 3);
         let p = &std::account::create_account_for_test(@0xCC02);
-        economy::gm_mint(a, std::signer::address_of(p), 1000);
-        engine::create_room(p, 2);
-        engine::create_room(p, 2);
-        engine::create_room(p, 2);
-        engine::create_room(p, 2); // 第四次 → E_NO_ENTRIES
+        engine::create_room(p, 1);
+        engine::create_room(p, 1);
+        engine::create_room(p, 1);
+        engine::create_room(p, 1);                            // 第 4 次 → E_NO_ENTRIES
     }
 
+    /// 窗口是**滑动**的：24 小时前的时间戳会过期，名额随之释放。
     #[test]
-    fun test_challenge_ticket_grants_extra_entry() {
+    fun test_window_limit_slides() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
         content_registration::register_all_content(a);
-        use_item::set_daily_limit(a, 3);
+        use_item::set_window_limit(a, 2);
         let p = &std::account::create_account_for_test(@0xCC03);
         let paddr = std::signer::address_of(p);
-        economy::gm_mint(a, paddr, 1000);
-        engine::create_room(p, 2);
-        engine::create_room(p, 2);
-        engine::create_room(p, 2);
-        assert!(use_item::entries_left(paddr) == 0, 1);
-        // 用一张挑战券 → +1 额外额度, 突破当日限制
-        item::gm_mint(a, item::ITEM_CHALLENGE_TICKET, paddr, 1);
-        use_item::use_challenge_ticket(p);
-        assert!(use_item::entry_credits(paddr) == 1, 2);
-        engine::create_room(p, 2);                            // 消耗额度, 不再计次数
-        assert!(use_item::entry_credits(paddr) == 0, 3);
-        assert!(use_item::entries_left(paddr) == 0, 4);
+        let t0 = aptos_framework::timestamp::now_seconds();
+        engine::create_room(p, 1);
+        assert!(use_item::entries_left(paddr) == 1, 1);
+        // 12 小时后：还没滑出窗口
+        aptos_framework::timestamp::update_global_time_for_test_secs(t0 + 12 * 3600);
+        assert!(use_item::entries_left(paddr) == 1, 2);
+        engine::create_room(p, 1);
+        assert!(use_item::entries_left(paddr) == 0, 3);
+        // 再过 13 小时（距第一次 25 小时）：第一次滑出窗口，释放 1 个名额
+        aptos_framework::timestamp::update_global_time_for_test_secs(t0 + 25 * 3600);
+        assert!(use_item::entries_left(paddr) == 1, 4);
+        engine::create_room(p, 1);
+        assert!(use_item::entries_left(paddr) == 0, 5);
+    }
+
+    /// GM 不能把窗口上限调到离谱的值（每账号要按上限存时间戳）。
+    #[test]
+    #[expected_failure(abort_code = 4)]                       // E_LIMIT_TOO_BIG
+    fun test_window_limit_capped() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        use_item::set_window_limit(a, 100000);
     }
 
     #[test]

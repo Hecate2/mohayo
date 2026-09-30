@@ -343,7 +343,7 @@ module mohayo::sim {
         skill_registry::init_for_test(a);
         engine::init_for_test(a);
         use_item::init_for_test(a);
-        use_item::set_daily_limit(a, 1000000); // 仿真需成千上万次开房
+        use_item::set_window_limit(a, 1000); // 仿真需成千上万次开房
         init_timestamp();                      // 入场次数门控读 timestamp::now_seconds
 
         economy::init_for_test(a);
@@ -1188,44 +1188,12 @@ module mohayo::sim {
         let own = std::signer::address_of(a);
         let b = &std::account::create_account_for_test(@0xCAFE);
         let baddr = std::signer::address_of(b);
-        item::gm_mint(a, item::ITEM_DAILY_TICKET, own, 1);
-        assert!(item::is_bound(item::ITEM_DAILY_TICKET), 1); // 确认绑定标记
-        item::transfer(a, item::ITEM_DAILY_TICKET, baddr, item::one()); // 绑定 → E_BOUND(6)
-    }
-
-    #[test]
-    fun sim_item_daily_ticket_credit() {
-        let a = &std::account::create_account_for_test(@mohayo);
-        reg(a);
-        let own = std::signer::address_of(a);
-        use_item::claim_daily_ticket(a);             // 每日免费领 1 张绑定券
-        assert!(item::balance_whole(item::ITEM_DAILY_TICKET, own) == 1, 1);
-        use_item::use_daily_ticket(a);               // 兑成 1 额外入场额度
-        assert!(item::balance_whole(item::ITEM_DAILY_TICKET, own) == 0, 2);
-        assert!(use_item::entry_credits(own) == 1, 3);
-    }
-
-    #[test]
-    fun sim_item_challenge_ticket_credit() {
-        let a = &std::account::create_account_for_test(@mohayo);
-        reg(a);
-        let own = std::signer::address_of(a);
-        item::gm_mint(a, item::ITEM_CHALLENGE_TICKET, own, 2); // 可交易挑战券, GM 铸 2 张
-        use_item::use_challenge_ticket(a);
-        use_item::use_challenge_ticket(a);
-        assert!(item::balance_whole(item::ITEM_CHALLENGE_TICKET, own) == 0, 1);
-        assert!(use_item::entry_credits(own) == 2, 2);
-        let c1 = use_item::daily_available(own);     // 今日未领 → 可领(需 timestamp 已始)
-        assert!(c1, 3);
-    }
-
-    #[test]
-    #[expected_failure(abort_code = 2)]
-    fun sim_item_daily_ticket_twice() {
-        let a = &std::account::create_account_for_test(@mohayo);
-        reg(a);
-        use_item::claim_daily_ticket(a);
-        use_item::claim_daily_ticket(a); // 同一天再领 → E_ALREADY_CLAIMED(2)
+        // 挑战券类道具已随「24 小时滑动窗口」取消(§2.6.14), 这里临时注册一件绑定道具,
+        // 继续覆盖「绑定 = 不可转移」这条机制本身。
+        item::register_item(a, 999, b"bound_probe", 9, false, item::EFFECT_NONE, 0, 18, true);
+        assert!(item::is_bound(999), 1);
+        item::gm_mint(a, 999, own, 1);
+        item::transfer(a, 999, baddr, item::one()); // 绑定 → E_BOUND(6)
     }
 
     /// 初始化 aptos_framework 时间戳, 并把"今日"推进到非零日(便于每日领取判定)。

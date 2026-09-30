@@ -555,14 +555,14 @@ module mohayo::content_registration {
             vector[item::ITEM_DRAGON_BULLET, item::ITEM_SMOKE_BOMB, item::ITEM_SPRING_OF_LIFE, 0],
             vector[90, 120, 40, 750], vector[1, 1, 1, 0]);
         item::register_drop_table(account, 6,
-            vector[item::ITEM_DRAGON_BULLET, item::ITEM_SPRING_OF_LIFE, item::ITEM_CHALLENGE_TICKET, 0],
-            vector[100, 60, 40, 800], vector[1, 1, 1, 0]);
+            vector[item::ITEM_DRAGON_BULLET, item::ITEM_SPRING_OF_LIFE, 0],
+            vector[100, 60, 800], vector[1, 1, 0]);
         item::register_drop_table(account, 7,
-            vector[item::ITEM_SPRING_OF_LIFE, item::ITEM_CHALLENGE_TICKET, item::ITEM_PHOENIX_FEATHER, 0],
-            vector[80, 60, 25, 835], vector[1, 1, 1, 0]);
+            vector[item::ITEM_SPRING_OF_LIFE, item::ITEM_PHOENIX_FEATHER, 0],
+            vector[80, 25, 835], vector[1, 1, 0]);
         item::register_drop_table(account, 8,
-            vector[item::ITEM_CHALLENGE_TICKET, item::ITEM_PHOENIX_FEATHER, item::ITEM_DICE_OF_FATE, 0],
-            vector[80, 40, 15, 865], vector[1, 1, 1, 0]);
+            vector[item::ITEM_PHOENIX_FEATHER, item::ITEM_DICE_OF_FATE, 0],
+            vector[40, 15, 865], vector[1, 1, 0]);
         item::register_drop_table(account, 9,
             vector[item::ITEM_PHOENIX_FEATHER, item::ITEM_DICE_OF_FATE, item::ITEM_REBIRTH_SCROLL, 0],
             vector[60, 30, 12, 898], vector[1, 1, 1, 0]);
@@ -593,11 +593,6 @@ module mohayo::content_registration {
             item::GROUP_CHARACTER_META, false, item::EFFECT_NONE, 0, 18, false); // 重生卷轴: 整体重建角色
         item::register_item(account, item::ITEM_DICE_OF_FATE, b"dice_of_fate",
             item::GROUP_CHARACTER_META, false, item::EFFECT_NONE, 0, 18, false); // 命运骰子: 种族+词条全重掷(保留职业/等级/自选技)
-        // ---- 入场类 ----
-        item::register_item(account, item::ITEM_DAILY_TICKET, b"daily_challenge_ticket",
-            item::GROUP_ENTRY, false, item::EFFECT_NONE, 0, 18, true);       // 每日挑战券: 每日免费领取, 绑定不可交易
-        item::register_item(account, item::ITEM_CHALLENGE_TICKET, b"challenge_ticket",
-            item::GROUP_ENTRY, false, item::EFFECT_NONE, 0, 18, false);      // 挑战券: 可交易, 无视当日入场次数限制
     }
 
     // ===================== private helpers =====================
