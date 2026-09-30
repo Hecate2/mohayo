@@ -698,8 +698,9 @@ struct RoomMember {
   测试与仿真走 `#[test_only]` 的 `*_test` 变体，不注入协议熵，
   随机流与旧实现完全一致，**既有 162 个用例与全部标定值不变**。
 - **玩家建号入口**（§2.1/§2.3）：此前只有 GM 的 `gm_mint`，玩家无法建号，游戏开不起来。
-  新增 `character::create_character`（`#[randomness]` 私有 entry）：随机掷种族与词条，
-  不消耗任何资源。**首次建号额外发放启动资金 + 3 次免费重掷**（复用既有的 `created_before` 判定，
+  新增 `character::create_character(account, class_id, skill_ids)`（`#[randomness]` 私有 entry）：
+  玩家自定职业（`class_id = 0` 即无职业）与自选池技能（§2.6 流程，槽位外的截断），
+  种族与词条随机掷出，不消耗任何资源。**首次建号额外发放启动资金 + 3 次免费重掷**（复用既有的 `created_before` 判定，
   按账号只发一次，防止「建号 → 卖号 → 再建」循环领取）。新增每账号角色数上限。
 - **队长必须是在场队员**：`create_room` 不要求有角色，`start_combat` 只要求「有成员」且「调用者等于
   `room.leader`」，于是队长可以是完全不在队伍里的地址。而进入下一场（`advance_battle`）与推进回合
