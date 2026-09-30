@@ -17,6 +17,10 @@ module mohayo::economy {
     const E_NOT_SPENDER: u64 = 3;
     const E_INSUFFICIENT_BALANCE: u64 = 4;
 
+    /// 首次建号发放的启动资金（§2.6.14：「很少一点」，刚好够在低难度付费图试几次）。
+    /// 按账号只发一次，见 `character::create_character`。数值层参数。
+    public fun STARTING_GRANT(): u64 { 20 }
+
     struct CoinStore has key {
         balances: Table<address, i128>,
         minters: Table<address, bool>,

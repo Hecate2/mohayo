@@ -2549,6 +2549,76 @@ module mohayo::tests {
     }
 
 
+    // ===================== §2.6.14 玩家建号入口 =====================
+
+    /// 玩家建号：链上掷种族与词条，首次建号发启动资金 + 3 次免费重掷，第二次起只建号。
+    #[test]
+    fun test_create_character_grants_once() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let p = &std::account::create_account_for_test(@0xC001);
+        let paddr = std::signer::address_of(p);
+        let bal0 = economy::balance_of(paddr);
+        assert!(bal0 == 0, 1);
+        character::create_character_test(p, 2, 7);          // 剑士
+        let c1 = character::owner_latest_char(paddr);
+        assert!(c1 != 0, 2);
+        assert!(character::get_class_id(c1) == 2, 3);
+        assert!(character::get_level(c1) == 1, 4);
+        assert!(economy::balance_of(paddr) == bal0 + (economy::STARTING_GRANT() as i128), 5);
+        assert!(character::free_rerolls(paddr) == 3, 6);    // 首号福利
+        // 第二个角色：不再发启动资金，也不再有免费重掷
+        character::create_character_test(p, 3, 11);
+        assert!(economy::balance_of(paddr) == bal0 + (economy::STARTING_GRANT() as i128), 7);
+        assert!(character::free_rerolls(paddr) == 3, 8);
+        assert!(character::owner_latest_char(paddr) != c1, 9);
+    }
+
+    /// 无职业路线（class 0）能用：中性模板 + 3 个自选槽，且没有任何职业技。
+    /// 注意种族是随机掷的，所以这里只断言与种族无关的部分。
+    #[test]
+    fun test_create_classless_character() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let p = &std::account::create_account_for_test(@0xC002);
+        let paddr = std::signer::address_of(p);
+        assert!(vector::length(&skill_registry::get_class_skill_ids(0)) == 0, 1);  // 无职业无职业技
+        character::create_character_test(p, 0, 3);
+        let cid = character::owner_latest_char(paddr);
+        assert!(character::get_class_id(cid) == 0, 2);
+        let (_cls, _race, lvl, hp, _mhp, _atk, _mag, _spd, _skills, _rid) = character::get_character(cid);
+        assert!(lvl == 1 && hp > 0, 3);
+    }
+
+    /// 负债者不得建号（§6.3）。
+    #[test]
+    #[expected_failure(abort_code = 22, location = mohayo::character)]   // E_DEBTOR
+    fun test_create_character_rejected_when_debtor() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let p = &std::account::create_account_for_test(@0xC003);
+        economy::gm_charge_rescue(a, std::signer::address_of(p), 5);   // 先变负债
+        character::create_character_test(p, 1, 5);
+    }
+
+    /// 每账号角色数上限。
+    #[test]
+    #[expected_failure(abort_code = 23, location = mohayo::character)]   // E_CHAR_CAP
+    fun test_create_character_cap() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let p = &std::account::create_account_for_test(@0xC004);
+        let i = 0;
+        while (i < 11) {
+            character::create_character_test(p, 1, (i + 1) * 13);
+            i = i + 1;
+        };
+    }
+
     // ===================== §2.6.14 生产随机数入口 =====================
 
     /// 生产入口是私有 `#[randomness] entry`，测试里用 engine 的 `#[test_only]` 钩子穿进去，

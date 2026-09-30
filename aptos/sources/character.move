@@ -2,6 +2,7 @@
 /// Owns `ClassStore`, `RaceStore`, `CharacterStore` at @mohayo.
 module mohayo::character {
     use aptos_framework::event;
+    use aptos_framework::randomness;
     use aptos_std::table::{Self, Table};
     use std::signer;
     use std::vector;
@@ -28,10 +29,14 @@ module mohayo::character {
     // 20/21: 原先误用 16/17 与上面两个撞码(§2.6.11 复审修正)
     const E_CLASS_CAP: u64 = 20;
     const E_RACE_CAP: u64 = 21;
+    const E_DEBTOR: u64 = 22;
+    const E_CHAR_CAP: u64 = 23;
 
     const MAX_CLASSES: u64 = 32;
     const MAX_RACES: u64 = 16;
     const MAX_AFFIX_TEMPLATES: u64 = 64;
+    /// 每账号角色数上限（§2.6.14 加的防御性上限：建号免费，不设上限会成为存储增长口子）
+    const MAX_CHARS_PER_PLAYER: u64 = 10;
     const MAX_RESOURCE_AFFIX: u64 = 4;
     /// 能力词条槽位数(HP/ATK/MAG/SPD)：资源词条从该下标之后开始(§2.3)
     const ABILITY_SLOTS: u64 = 4;
@@ -186,28 +191,25 @@ module mohayo::character {
 
     // ---- character creation ----
 
-    /// GM mint: specific race, specific affixes, specific skills.
-    public entry fun gm_mint(
-        account: &signer,
-        owner: address,
-        class_id: u8,
-        race: u8,
-        affix_tiers: vector<u8>,
-        skill_ids: vector<u64>,
-    ) acquires ClassStore, RaceStore, AffixStore, CharacterStore {
-        assert!(signer::address_of(account) == @mohayo, E_NOT_OWNER);
+    /// 建号内核：`gm_mint` / `gm_mint_at_level` / 玩家入口 `create_character` 共用。
+    /// 返回新角色 id。`self_select` 是玩家从自选池挑的技能（会过白名单与槽位截断），
+    /// 原样存进 `Character.self_select` 以便重掷时复用。
+    fun mint_character(
+        owner: address, class_id: u8, race: u8,
+        affix_tiers: &vector<u8>, self_select: &vector<u64>, level: u16,
+    ): u64 acquires ClassStore, RaceStore, AffixStore, CharacterStore {
         let class = get_class(class_id);
         let race_def = get_race(race);
-        let skills = merge_skills(class_id, &class, race, &race_def, &skill_ids);
-        let (ability_bonuses, resource_types, mana_disc, ap_disc, ap_bon, mana_gain) = compute_affixes(&affix_tiers);
-        let (hp, atk, mag, spd) = compute_stats(class_id, &class, race, &race_def, &ability_bonuses, 1);
+        let skills = merge_skills(class_id, &class, race, &race_def, self_select);
+        let (ability_bonuses, resource_types, mana_disc, ap_disc, ap_bon, mana_gain) = compute_affixes(affix_tiers);
+        let (hp, atk, mag, spd) = compute_stats(class_id, &class, race, &race_def, &ability_bonuses, level);
         let store = borrow_global_mut<CharacterStore>(@mohayo);
         let id = store.count + 1;
         let c = Character {
-            id, owner, class_id, race, level: 1,
+            id, owner, class_id, race, level,
             hp, max_hp: hp, attack: atk, magic: mag, speed: spd,
             skill_ids: skills,
-            self_select: skill_ids,
+            self_select: *self_select,
             ability_bonuses,
             resource_types,
             mana_discount: mana_disc,
@@ -222,10 +224,65 @@ module mohayo::character {
         if (!table::contains(&store.owner_chars, owner)) {
             table::add(&mut store.owner_chars, owner, vector::empty());
         };
-        let list = table::borrow_mut(&mut store.owner_chars, owner);
-        vector::push_back(list, id);
-        event::emit(CharacterCreated { id, owner, class_id, race, level: 1 });
-        grant_first_char_bonus(store, owner);
+        vector::push_back(table::borrow_mut(&mut store.owner_chars, owner), id);
+        event::emit(CharacterCreated { id, owner, class_id, race, level });
+        id
+    }
+
+    /// 玩家建号入口（§2.2 / §2.5.1 / §2.6）。
+    /// 玩家**只能自主决定职业**（`class_id = 0` 即「无职业」路线），种族与词条由链上随机掷出。
+    /// 首次建号额外发放**启动资金**与 3 次免费重掷（`created_before` 判定，按账号只发一次）。
+    /// 私有 `entry` + `#[randomness]`：掷骰用协议随机数，玩家无法预先挑选结果(§2.6.14)。
+    #[randomness]
+    entry fun create_character(
+        account: &signer, class_id: u8,
+    ) acquires ClassStore, RaceStore, AffixStore, CharacterStore {
+        do_create_character(account, class_id, randomness::u64_integer());
+    }
+
+    /// 建号（测试/仿真入口）：注入种子，便于复现固定的种族/词条组合。
+    #[test_only]
+    public entry fun create_character_test(
+        account: &signer, class_id: u8, seed: u64,
+    ) acquires ClassStore, RaceStore, AffixStore, CharacterStore {
+        do_create_character(account, class_id, seed);
+    }
+
+    fun do_create_character(
+        account: &signer, class_id: u8, seed: u64,
+    ) acquires ClassStore, RaceStore, AffixStore, CharacterStore {
+        let owner = signer::address_of(account);
+        assert!(!economy::is_debtor(owner), E_DEBTOR);                        // §6.3 负债者不得创建角色
+        assert!(owned_character_count(owner) < MAX_CHARS_PER_PLAYER, E_CHAR_CAP);
+        let r = rng::new(seed);
+        let race = roll_random_race(&mut r);
+        let tiers = roll_random_affix_tiers(&mut r);
+        let _id = mint_character(owner, class_id, race, &tiers, &vector::empty<u64>(), 1);
+        // 首号福利：启动资金（免费重掷在下面同一个判定里发）
+        if (grant_first_char_bonus(owner)) {
+            economy::credit(owner, economy::STARTING_GRANT());
+        };
+    }
+
+    /// 该账号当前持有的角色数
+    fun owned_character_count(owner: address): u64 acquires CharacterStore {
+        let store = borrow_global<CharacterStore>(@mohayo);
+        if (!table::contains(&store.owner_chars, owner)) { return 0 };
+        vector::length(table::borrow(&store.owner_chars, owner))
+    }
+
+    /// GM mint: specific race, specific affixes, specific skills.
+    public entry fun gm_mint(
+        account: &signer,
+        owner: address,
+        class_id: u8,
+        race: u8,
+        affix_tiers: vector<u8>,
+        skill_ids: vector<u64>,
+    ) acquires ClassStore, RaceStore, AffixStore, CharacterStore {
+        assert!(signer::address_of(account) == @mohayo, E_NOT_OWNER);
+        let _id = mint_character(owner, class_id, race, &affix_tiers, &skill_ids, 1);
+        let _first = grant_first_char_bonus(owner);
     }
 
     /// GM mint at arbitrary level.
@@ -239,36 +296,8 @@ module mohayo::character {
         level: u16,
     ) acquires ClassStore, RaceStore, AffixStore, CharacterStore {
         assert!(signer::address_of(account) == @mohayo, E_NOT_OWNER);
-        let class = get_class(class_id);
-        let race_def = get_race(race);
-        let skills = merge_skills(class_id, &class, race, &race_def, &skill_ids);
-        let (ability_bonuses, resource_types, mana_disc, ap_disc, ap_bon, mana_gain) = compute_affixes(&affix_tiers);
-        let (hp, atk, mag, spd) = compute_stats(class_id, &class, race, &race_def, &ability_bonuses, level);
-        let store = borrow_global_mut<CharacterStore>(@mohayo);
-        let id = store.count + 1;
-        let c = Character {
-            id, owner, class_id, race, level,
-            hp, max_hp: hp, attack: atk, magic: mag, speed: spd,
-            skill_ids: skills,
-            self_select: skill_ids,
-            ability_bonuses,
-            resource_types,
-            mana_discount: mana_disc,
-            ap_discount: ap_disc,
-            ap_bonus: ap_bon,
-            mana_gain_bonus: mana_gain,
-            room_id: 0,
-            runs: 0, clears: 0, best_difficulty: 0,
-        };
-        table::add(&mut store.characters, id, c);
-        store.count = id;
-        if (!table::contains(&store.owner_chars, owner)) {
-            table::add(&mut store.owner_chars, owner, vector::empty());
-        };
-        let list = table::borrow_mut(&mut store.owner_chars, owner);
-        vector::push_back(list, id);
-        event::emit(CharacterCreated { id, owner, class_id, race, level });
-        grant_first_char_bonus(store, owner);
+        let _id = mint_character(owner, class_id, race, &affix_tiers, &skill_ids, level);
+        let _first = grant_first_char_bonus(owner);
     }
 
     /// GM set level + recompute stats.
@@ -401,11 +430,13 @@ module mohayo::character {
 
     /// 首角色重掷包(§2.3/§7.6): 每个 playerId 只在**首次创建角色**时获得 3 次免费重掷,
     /// 以 created_before 判定(卖掉首号再建也拿不到 —— 一次性福利, 防止「卖号→再建」循环领取)。
-    fun grant_first_char_bonus(store: &mut CharacterStore, owner: address) {
-        if (!table::contains(&store.created_before, owner)) {
-            table::add(&mut store.created_before, owner, true);
-            table::add(&mut store.free_rerolls, owner, 3u8);
-        };
+    /// 返回 true 表示这次正是首角色（调用方据此发放启动资金）。
+    fun grant_first_char_bonus(owner: address): bool acquires CharacterStore {
+        let store = borrow_global_mut<CharacterStore>(@mohayo);
+        if (table::contains(&store.created_before, owner)) { return false };
+        table::add(&mut store.created_before, owner, true);
+        table::add(&mut store.free_rerolls, owner, 3u8);
+        true
     }
 
     /// 重掷入口的资源检查(§2.3 二选一): 先扣免费重掷计数器, 没有则由调用方核销一枚命运骰子。

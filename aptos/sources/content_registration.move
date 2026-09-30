@@ -62,6 +62,8 @@ module mohayo::content_registration {
     public entry fun register_all_content(account: &signer) {
         // ===================== CLASSES =====================
         // make_class_def(base_hp_pct, base_attack_pct, base_magic_pct, base_speed_pct, skill_slots)
+        // 0 = 「无职业」路线（§2.5.1）：中性模板（全 0 修正）+ 3 个自选槽，没有职业技、没有词条倾向。
+        character::register_class(account, 0, types::make_class_def(0, 0, 0, 0, 3));      // 无职业
         character::register_class(account, 1, types::make_class_def(150, 115, 90, 90, 1));   // 守卫
         character::register_class(account, 2, types::make_class_def(105, 130, 105, 120, 1)); // 剑士
         character::register_class(account, 3, types::make_class_def(85, 90, 140, 105, 1));   // 黑魔法师
