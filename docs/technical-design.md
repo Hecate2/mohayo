@@ -623,6 +623,36 @@ struct RoomMember {
   - `aptos/README.md` 原为 EVM 时代内容（56 技能 / `#[randomness]` / 13 测试 / ERC 术语），已重写为
     Move 现状，并写明「`move compile` 与 `move test` 两条路径都要过」。
 
+### 2.6.12 Move 房间回收注记（2026-09-30 实现）
+
+对齐 `gameplay-design.md` §3.1。此前 `RoomStore.rooms` **只增不减**：房间关闭只置 `closed` 标记，
+战斗结束后房间永久留在表里，`MAX_ROOMS` 也已因「代码里根本没有上限」而删除。本小节把房间变成
+**可回收资源**，并顺手补上「关房不解角色锁」的缺口。
+
+- **终态标记 `Room.end_secs`**：房间进入终态时记录时刻，用于回收窗口计时。终态有两种来源：
+  ① `closed = true`（队长解散 / 闲置过期）；② `phase = 2`（战斗结算完成）。
+  结算入口统一走 `mark_settled(room, result)`，把「置 phase、置 result、记 end_secs」收在一处。
+- **回收窗口 `RoomStore.reclaim_delay`**（默认 3600 秒，GM 用 `set_reclaim_delay` 调）：
+  终态房间在窗口内仍可读取（客户端要看结算结果、掉落与履历），窗口过后才允许删除。
+- **`reclaim_room(account, room_id)`**：**任何人**可触发，无特权（与 Keeper、过期同理）。
+  断言 `(closed || phase == 2) && now >= end_secs + reclaim_delay`，否则 `E_NOT_RECLAIMABLE(30)`。
+  通过后先释放房间内所有玩家成员的角色锁（`unlock_members`，**不记履历**），再
+  `table::remove` 掉整条房间，发 `RoomReclaimed`。
+  **房间号永不重用**（`Registry.next_room_id` 只增），因此回收不会让客户端缓存或
+  `rng_seed` 派生规则错位。回收后房间相关视图一律 `E_ROOM_NOT_FOUND`。
+- **关房即解锁**：`disband_room` 与 `expire_room`（大厅期）现在会调 `unlock_members`。
+  此前成员角色保持 `room_id != 0`，只能靠自己再调一次 `leave_room` 才能解锁，
+  而带着锁的角色进不了别的房间（`E_CHAR_IN_ROOM`）。关房语义上就该把人放出来。
+- **战斗期停摆过期**：`expire_room` 从「只管大厅期」扩到**战斗期**。战斗中的房间若
+  `now >= last_advance_secs + room_ttl`（默认 2 小时无人推进，例如 Keeper 长期停摆或全队弃房），
+  任何人都能触发，按**既有超时规则**收尾（`settle_timeout`：扣救援费 + 记未通关履历 + 进入终态），
+  事件 `RoomClosed{reason: 3}`。这里刻意复用 §6.3 已定案的「超时按全队被击败处理」，
+  不新造「弃房免罚」的逃生口 —— 代价是 Keeper 长时间停摆会让在局队伍按超时结算，
+  运营方需在此之前修复 Keeper 或调用 `emergency_advance`。
+  已结算房间不再走 `expire_room`，直接等回收窗口。
+- 新增视图 `room_reclaimable(room_id)`。事件 `RoomClosed` 的 `reason` 取值：
+  1 = 队长解散，2 = 大厅闲置过期，3 = 战斗期停摆过期。
+
 ### 2.7.1 Move 道具层注记（数据驱动, 2026-09-02 实现）
 
 - **每种道具 = item_type + ItemDef**（name/group/combat_usable/effect_kind/effect_value/decimals），**无 per-type struct**。

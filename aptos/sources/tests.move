@@ -2379,4 +2379,124 @@ module mohayo::tests {
         assert!(b_hp == 1000, 2);                      // 未到场 → 不被 AoE 命中
         assert!(a_hp < 1000, 3);                       // 已在场 → 照常吃 AoE
     }
+
+    // ===================== §2.6.12 房间回收 =====================
+
+    /// 未进入终态的房间（大厅期、开着）不可回收。
+    #[test]
+    #[expected_failure(abort_code = 30, location = mohayo::engine)]   // E_NOT_RECLAIMABLE
+    fun test_reclaim_rejected_when_not_terminal() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::set_reclaim_delay(a, 0);
+        engine::create_room(a, 1);
+        engine::reclaim_room(a, 1);
+    }
+
+    /// 已结算房间在保留窗口内不可回收（客户端还要读结算结果）。
+    #[test]
+    #[expected_failure(abort_code = 30, location = mohayo::engine)]   // E_NOT_RECLAIMABLE
+    fun test_reclaim_rejected_within_retention_window() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::set_reclaim_delay(a, 3600);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 30000, 26000, 13000, 600);
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[820]);
+        run_room(a, 1);
+        assert!(engine::room_phase(1) == 2, 1);      // 已结算
+        engine::reclaim_room(a, 1);                  // 窗口没到
+    }
+
+    /// 结算完成的房间在窗口过后可被回收。
+    #[test]
+    fun test_reclaim_settled_room() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::set_reclaim_delay(a, 60);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 30000, 26000, 13000, 600);
+        engine::start_combat(a, 1);
+        engine::set_plan(a, 1, 0, vector[820]);
+        run_room(a, 1);
+        assert!(engine::room_phase(1) == 2, 1);
+        assert!(!engine::room_reclaimable(1), 2);
+        let t0 = aptos_framework::timestamp::now_seconds();
+        aptos_framework::timestamp::update_global_time_for_test_secs(t0 + 61);
+        assert!(engine::room_reclaimable(1), 3);
+        engine::reclaim_room(a, 1);                  // 任何人可触发
+    }
+
+    /// 回收后房间相关视图一律 E_ROOM_NOT_FOUND(3)。房间号不重用。
+    #[test]
+    #[expected_failure(abort_code = 3, location = mohayo::engine)]    // E_ROOM_NOT_FOUND
+    fun test_reclaimed_room_views_report_not_found() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::set_reclaim_delay(a, 0);             // 立即回收
+        engine::create_room(a, 1);
+        engine::disband_room(a, 1);
+        engine::reclaim_room(a, 1);
+        let _ = engine::room_phase(1);
+    }
+
+    /// §2.6.12: 关房应当释放成员角色锁 —— 此前要成员自己再调一次 leave_room 才能解锁，
+    /// 带着锁的角色进不了别的房间(E_CHAR_IN_ROOM)。
+    #[test]
+    fun test_disband_releases_character_lock() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::set_reclaim_delay(a, 60);
+        let addr = std::signer::address_of(a);
+        character::gm_mint(a, addr, 1, 0, vector[0, 0, 0, 0], vector::empty());
+        let cid = character::owner_latest_char(addr);
+        engine::create_room(a, 1);
+        engine::join_room_as_char(a, 1, cid);
+        assert!(character::get_room_id(cid) == 1, 1);
+        engine::disband_room(a, 1);
+        assert!(character::get_room_id(cid) == 0, 2);   // 关房即解锁
+        // 解锁后同一角色可以立刻进别的房间
+        engine::create_room(a, 1);
+        engine::join_room_as_char(a, 2, cid);
+        assert!(character::get_room_id(cid) == 2, 3);
+        // 保留窗口过后回收 1 号房
+        let t0 = aptos_framework::timestamp::now_seconds();
+        aptos_framework::timestamp::update_global_time_for_test_secs(t0 + 61);
+        assert!(engine::room_reclaimable(1), 4);
+        engine::reclaim_room(a, 1);
+    }
+
+    /// §2.6.12: 战斗期长期无人推进(Keeper 停摆 / 全队弃房)时，任何人可让房间过期，
+    /// 按既有超时规则收尾：扣救援费 + 记未通关履历 + 释放角色锁 + 进入终态。
+    #[test]
+    fun test_expire_combat_room_after_stall() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        engine::set_room_ttl(a, 60);
+        let addr = std::signer::address_of(a);
+        character::gm_mint(a, addr, 1, 0, vector[0, 0, 0, 0], vector::empty());
+        let cid = character::owner_latest_char(addr);
+        economy::gm_mint(a, addr, 1000);
+        engine::create_room(a, 1);
+        engine::join_room_as_char(a, 1, cid);
+        engine::start_combat(a, 1);
+        let bal_before = economy::balance_of(addr);
+        let t0 = aptos_framework::timestamp::now_seconds();
+        aptos_framework::timestamp::update_global_time_for_test_secs(t0 + 61);
+        engine::expire_room(a, 1);
+        assert!(engine::room_phase(1) == 2, 1);                 // 进入终态
+        assert!(engine::room_result(1) == 2, 2);                // 按超时(败)结算
+        assert!(character::get_room_id(cid) == 0, 3);           // 角色解锁
+        assert!(economy::balance_of(addr) == bal_before - 10, 4); // D1 救援费 10
+        let (runs, clears, _best) = character::get_history(cid);
+        assert!(runs == 1 && clears == 0, 5);                    // 记了一次未通关
+    }
+
 }

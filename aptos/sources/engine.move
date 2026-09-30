@@ -34,6 +34,8 @@ module mohayo::engine {
     const E_NOT_EXPIRED: u64 = 28;
     /// 该角色已在某个房间内(§2.6.11 复审: 防同一角色跨房双开覆盖角色锁)
     const E_CHAR_IN_ROOM: u64 = 29;
+    /// 房间未进入终态、或终态保留窗口还没过(§2.6.12 房间回收)
+    const E_NOT_RECLAIMABLE: u64 = 30;
 
     /// 个人逃离的延迟回合数(§6.2「若干回合后」；数值层可调)
     const ESCAPE_DELAY: u64 = 3;
@@ -45,6 +47,8 @@ module mohayo::engine {
     const TURN_COOLDOWN_SECS: u64 = 2;
     /// 兜底推进门槛(秒)：§3.1「距上次推进 ≥ 30 区块」后任何人都可解卡
     const EMERGENCY_SECS: u64 = 30;
+    /// 房间进入终态后的**保留窗口**(秒)：窗口内仍可读结算结果，过后任何人可回收(§2.6.12)
+    const DEFAULT_RECLAIM_DELAY: u64 = 3600;
 
     // ---- 周常变异种类(§3.4「只采纳便宜实现」) ----
     public fun MUT_NONE(): u8 { 0 }
@@ -60,6 +64,8 @@ module mohayo::engine {
         rooms: Table<u64, Room>,
         /// 未开始房间的闲置过期时长(秒, §3.1 默认 2 小时, GM 可调)
         room_ttl: u64,
+        /// 终态房间的保留窗口(秒, §2.6.12 默认 1 小时, GM 可调) —— 过后任何人可回收
+        reclaim_delay: u64,
         /// 自然周 → 当周变异(§3.4: 创建房间时快照当周, 周中变更不影响已创建房间)
         weekly_mutators: Table<u64, Mutator>,
     }
@@ -69,7 +75,9 @@ module mohayo::engine {
         value: i64,
     }
 
-    struct Room has store {
+    /// 房间全部状态。`drop` 是必需的：`table::remove` 会把值交还给调用方，
+    /// 而回收房间(§2.6.12)就是要显式销毁它。
+    struct Room has drop, store {
         id: u64,
         difficulty: u8,
         phase: u8,
@@ -85,6 +93,8 @@ module mohayo::engine {
         /// 创建时间(秒)与关闭标记(§3.1 闲置过期 / 队长解散)
         created_secs: u64,
         closed: bool,
+        /// 进入终态的时刻(秒, §2.6.12)：closed 置位时或结算完成时写入，用于回收窗口计时
+        end_secs: u64,
         mutator_kind: u8,
         mutator_value: i64,
         leader: address,
@@ -165,16 +175,50 @@ module mohayo::engine {
     struct MutatorSnapshot has drop, store { room_id: u64, kind: u8, value: i64 }
     #[event]
     struct RoomClosed has drop, store { room_id: u64, reason: u8 }
+    #[event]
+    struct RoomReclaimed has drop, store { room_id: u64 }
 
     // ============================ init ============================
 
     fun init_module(account: &signer) {
-        move_to(account, RoomStore { rooms: table::new(), room_ttl: 7200, weekly_mutators: table::new() });
+        move_to(account, RoomStore {
+            rooms: table::new(),
+            room_ttl: 7200,
+            reclaim_delay: DEFAULT_RECLAIM_DELAY,
+            weekly_mutators: table::new(),
+        });
     }
 
-    // ============================ 房间关闭(§3.1 解散 / 闲置过期) ============================
+    // ============================ 房间关闭 / 回收(§3.1, §2.6.12) ============================
 
-    /// 队长在大厅期**解散**房间(§3.1)。
+    /// 房间进入终态(结算完成)：置 phase/result，并记录终态时刻供回收窗口计时(§2.6.12)。
+    fun mark_settled(room: &mut Room, result: u8) {
+        room.phase = 2;
+        room.result = result;
+        room.end_secs = aptos_framework::timestamp::now_seconds();
+    }
+
+    /// 释放房间内所有**玩家成员**的角色锁，不记履历 —— 用于关房/回收这类「这一局还没打完」的场景。
+    fun unlock_members(room: &Room) {
+        let n = vector::length(&room.members);
+        let i = 0;
+        while (i < n) {
+            let m = vector::borrow(&room.members, i);
+            if (!types::member_is_summon(m)) {
+                let cid = types::member_char_id(m);
+                if (cid != 0) { character::lock_room(cid, 0); };
+            };
+            i = i + 1;
+        };
+    }
+
+    /// 房间是否已过终态保留窗口、可被回收(§2.6.12)。
+    fun is_reclaimable(room: &Room, delay: u64): bool {
+        (room.closed || room.phase == 2)
+            && aptos_framework::timestamp::now_seconds() >= room.end_secs + delay
+    }
+
+    /// 队长在**大厅期**解散房间(§3.1)。关房即释放成员角色锁，成员不必再自己调 `leave_room`。
     public entry fun disband_room(account: &signer, room_id: u64) acquires RoomStore {
         let addr = signer::address_of(account);
         let rs = borrow_global_mut<RoomStore>(@mohayo);
@@ -182,26 +226,63 @@ module mohayo::engine {
         assert!(room.phase == 0, E_NOT_LOBBY);
         assert!(room.leader == addr, E_NOT_LEADER);
         room.closed = true;
+        room.end_secs = aptos_framework::timestamp::now_seconds();
+        unlock_members(room);
         event::emit(RoomClosed { room_id, reason: 1 }); // 1 = 队长解散
     }
 
-    /// 闲置过期(§3.1)：创建后一直未开始、闲置超过 `room_ttl` 即自动关闭，
-    /// 防恶意抢占/囤积房间号。**任何人**都能触发（与 Keeper 同权限，无特权）。
+    /// 闲置过期(§3.1 / §2.6.12)：**任何人**可触发（与 Keeper 同权限，无特权）。两种情形：
+    /// - 大厅期(phase 0)：开房后一直未开始、闲置超过 `room_ttl` → 关闭并释放成员角色锁。
+    /// - 战斗期(phase 1)：距上次推进超过 `room_ttl`（Keeper 长期停摆 / 全队弃房）→
+    ///   按既有**超时规则**收尾（扣救援费 + 记未通关履历），房间进入终态。
+    /// 已结算房间不走这里，等回收窗口过后直接 `reclaim_room`。
     public entry fun expire_room(account: &signer, room_id: u64) acquires RoomStore {
         let _ = account;
+        let now = aptos_framework::timestamp::now_seconds();
         let rs = borrow_global_mut<RoomStore>(@mohayo);
         let ttl = rs.room_ttl;
         let room = table::borrow_mut(&mut rs.rooms, room_id);
-        assert!(room.phase == 0, E_NOT_LOBBY);
-        assert!(aptos_framework::timestamp::now_seconds() >= room.created_secs + ttl, E_NOT_EXPIRED);
-        room.closed = true;
-        event::emit(RoomClosed { room_id, reason: 2 }); // 2 = 闲置过期
+        if (room.phase == 0) {
+            assert!(now >= room.created_secs + ttl, E_NOT_EXPIRED);
+            room.closed = true;
+            room.end_secs = now;
+            unlock_members(room);
+            event::emit(RoomClosed { room_id, reason: 2 }); // 2 = 大厅闲置过期
+        } else if (room.phase == 1) {
+            assert!(now >= room.last_advance_secs + ttl, E_NOT_EXPIRED);
+            settle_timeout(room, room_id);                  // 与回合上限清退同一条路径
+            room.closed = true;
+            event::emit(RoomClosed { room_id, reason: 3 }); // 3 = 战斗期停摆过期
+        } else {
+            assert!(false, E_NOT_EXPIRED);                  // 已结算 → 走 reclaim_room
+        };
+    }
+
+    /// 回收一个已过终态保留窗口的房间(§2.6.12)。**任何人**可触发。
+    /// 先从表里摘除，房间号**不重用**（`Registry.next_room_id` 只增），
+    /// 因此客户端缓存与 `rng_seed` 派生规则都不会错位。
+    public entry fun reclaim_room(account: &signer, room_id: u64) acquires RoomStore {
+        let _ = account;
+        let rs = borrow_global_mut<RoomStore>(@mohayo);
+        assert!(table::contains(&rs.rooms, room_id), E_ROOM_NOT_FOUND);
+        let delay = rs.reclaim_delay;
+        let room = table::borrow_mut(&mut rs.rooms, room_id);
+        assert!(is_reclaimable(room, delay), E_NOT_RECLAIMABLE);
+        unlock_members(room); // 兜底：终态房间理论上已解锁，重复置 0 无害
+        table::remove(&mut rs.rooms, room_id);
+        event::emit(RoomReclaimed { room_id });
     }
 
     /// GM 调整闲置过期时长(秒)
     public entry fun set_room_ttl(account: &signer, secs: u64) acquires RoomStore {
         assert!(signer::address_of(account) == @mohayo, E_NOT_LEADER);
         borrow_global_mut<RoomStore>(@mohayo).room_ttl = secs;
+    }
+
+    /// GM 调整终态房间的保留窗口(秒)
+    public entry fun set_reclaim_delay(account: &signer, secs: u64) acquires RoomStore {
+        assert!(signer::address_of(account) == @mohayo, E_NOT_LEADER);
+        borrow_global_mut<RoomStore>(@mohayo).reclaim_delay = secs;
     }
 
     #[view]
@@ -214,6 +295,19 @@ module mohayo::engine {
     #[view]
     public fun room_ttl(): u64 acquires RoomStore {
         borrow_global<RoomStore>(@mohayo).room_ttl
+    }
+
+    /// 该房间是否已过终态保留窗口、可被 `reclaim_room` 回收(§2.6.12)
+    #[view]
+    public fun room_reclaimable(room_id: u64): bool acquires RoomStore {
+        let rs = borrow_global<RoomStore>(@mohayo);
+        assert!(table::contains(&rs.rooms, room_id), E_ROOM_NOT_FOUND);
+        is_reclaimable(table::borrow(&rs.rooms, room_id), rs.reclaim_delay)
+    }
+
+    #[view]
+    public fun reclaim_delay(): u64 acquires RoomStore {
+        borrow_global<RoomStore>(@mohayo).reclaim_delay
     }
 
     // ============================ 周常变异(§3.4) ============================
@@ -284,6 +378,7 @@ module mohayo::engine {
             reward_pool: 0,
             created_secs: aptos_framework::timestamp::now_seconds(),
             closed: false,
+            end_secs: 0,
             mutator_kind: mut.kind,
             mutator_value: mut.value,
             leader: addr,
@@ -450,8 +545,7 @@ module mohayo::engine {
         assert!(room.leader == addr, E_NOT_LEADER);
         settle_rewards(room, room_id);
         release_all(room, true); // 全员逃离 = 提前结束关卡, 存活者按通关记履历
-        room.phase = 2;
-        room.result = 1;
+        mark_settled(room, 1);
         event::emit(RunRetreated { room_id });
     }
 
@@ -1758,6 +1852,15 @@ module mohayo::engine {
 
     // ============================ internal: end check ============================
 
+    /// 超时清退(§6.3)：按「全队被击败」同一套规则收尾。
+    /// 回合上限清退(`check_end`)与战斗期停摆过期(`expire_room`)共用这一条路径。
+    fun settle_timeout(room: &mut Room, room_id: u64) {
+        charge_rescue_fees(room, room_id); // 超时按全队被击败处理(§6.3)
+        release_all(room, false);
+        mark_settled(room, 2);
+        event::emit(DefeatEvt { room_id });
+    }
+
     fun check_end(room: &mut Room, room_id: u64) {
         // Defeat is checked FIRST: a mutual wipe (party dies the same action the
         // last enemy dies) is a loss, never a victory — the party must SURVIVE to win.
@@ -1778,8 +1881,7 @@ module mohayo::engine {
         if (!any_player_alive && player_count > 0) {
             charge_rescue_fees(room, room_id); // 全队被击败 → 全员倒扣救援费(可负)
             release_all(room, false);          // 释放角色锁 + 履历(未通关)
-            room.phase = 2;
-            room.result = 2;
+            mark_settled(room, 2);
             event::emit(DefeatEvt { room_id });
             return;
         };
@@ -1798,10 +1900,9 @@ module mohayo::engine {
                 room.phase = 3;
                 event::emit(BattleCleared { room_id, battle_index: room.battle_index, total_battles: room.total_battles });
             } else {
-                room.phase = 2;
-                room.result = 1;
                 settle_rewards(room, room_id); // 存活者按随机权重分配奖池(§6.1)
                 release_all(room, true);       // 释放角色锁 + 履历(通关)
+                mark_settled(room, 1);
                 event::emit(VictoryEvt { room_id });
             };
             return;
@@ -1812,11 +1913,7 @@ module mohayo::engine {
         let dungeon = skill_registry::get_dungeon(room.difficulty as u64);
         let turn_budget = types::dungeon_turn_interval(&dungeon);
         if (turn_budget > 0 && room.battle_turns > turn_budget) {
-            charge_rescue_fees(room, room_id); // 超时按全队被击败处理(§6.3)
-            release_all(room, false);
-            room.phase = 2;
-            room.result = 2;
-            event::emit(DefeatEvt { room_id });
+            settle_timeout(room, room_id);
         };
     }
 
@@ -2047,7 +2144,12 @@ module mohayo::engine {
     #[test_only]
     public fun init_for_test(account: &signer) {
         if (!exists<RoomStore>(signer::address_of(account))) {
-            move_to(account, RoomStore { rooms: table::new(), room_ttl: 7200, weekly_mutators: table::new() });
+            move_to(account, RoomStore {
+                rooms: table::new(),
+                room_ttl: 7200,
+                reclaim_delay: DEFAULT_RECLAIM_DELAY,
+                weekly_mutators: table::new(),
+            });
         };
     }
 }
