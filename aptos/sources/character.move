@@ -183,6 +183,57 @@ module mohayo::character {
         };
     }
 
+    // ---- GM 链上入口 ----
+    //
+    // 与 skill_registry 同理：Aptos 的 `entry fun` 不能收结构体参数（交易参数只支持基本类型），
+    // 而 ClassDef / RaceDef / AffixTemplate 都是结构体 —— 所以内核保持 `public fun`，
+    // 另配一层吃扁平原始字段的 entry 包装。全部是 upsert 语义（存在则覆盖），
+    // GM 改数值不必重新发布合约。
+
+    /// GM 注册/覆写一个职业定义。
+    public entry fun gm_register_class(
+        account: &signer,
+        id: u8,
+        base_hp_pct: i64,
+        base_attack_pct: i64,
+        base_magic_pct: i64,
+        base_speed_pct: i64,
+        skill_slots: u8,
+    ) acquires ClassStore {
+        register_class(account, id, types::make_class_def(
+            base_hp_pct, base_attack_pct, base_magic_pct, base_speed_pct, skill_slots,
+        ));
+    }
+
+    /// GM 注册/覆写一个种族定义。`stat_mods` 是长度 3 的向量（攻/魔/速修正）。
+    public entry fun gm_register_race(
+        account: &signer,
+        id: u8,
+        hp_mod: i64,
+        stat_mods: vector<i64>,
+        race_skill_id: u64,
+        race_skill_id2: u64,
+        self_select_bonus: u8,
+    ) acquires RaceStore {
+        register_race(account, id, types::make_race_def(
+            hp_mod, stat_mods, race_skill_id, race_skill_id2, self_select_bonus,
+        ));
+    }
+
+    /// GM 注册/覆写一个词条模板。
+    /// `tier_values` 必须满 10 档、`stat_type < 4`（与 `register_affix_template` 同一套校验）。
+    public entry fun gm_register_affix_template(
+        account: &signer,
+        id: u8,
+        stat_type: u8,
+        tier_weights: vector<u16>,
+        tier_values: vector<u16>,
+    ) acquires AffixStore {
+        register_affix_template(account, id, types::make_affix_template(
+            stat_type, tier_weights, tier_values,
+        ));
+    }
+
     public entry fun set_race_tier_weights(account: &signer, common: u16, rare: u16, legendary: u16) acquires RaceStore {
         assert!(signer::address_of(account) == @mohayo, E_NOT_OWNER);
         let store = borrow_global_mut<RaceStore>(@mohayo);

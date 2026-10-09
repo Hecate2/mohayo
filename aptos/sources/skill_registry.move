@@ -136,8 +136,23 @@ module mohayo::skill_registry {
 
     // ---- registration ----
 
-    /// 注册技能。`skill.id != 0` 时按显式 key 注册(分组分区, 见 content.move 分区表),
-    /// == 0 时自动分配(顺序 id, 供测试/临时技能)。显式 key 不得与已注册冲突。
+    // ===================== GM 链上入口（交易参数只能是基本类型） =====================
+    //
+    // 下面这一层 `entry` 包装是「上线后 GM 不必重新发布合约就能改内容」的落地形态。
+    //
+    // 为什么需要它：Aptos 的 `entry fun` **不能收结构体参数**（交易参数只支持基本类型与
+    // vector thereof），而 Skill / MonsterAI / EnemyTemplate / TableEntry 全是结构体 ——
+    // 所以真正的注册逻辑只能是 `public fun`，光那样它就无法作为交易入口被调用。
+    // 于是每个注册函数配一个吃**扁平原始字段**的 entry 包装，在包装里组装结构体再调内核。
+    //
+    // 语义分层（刻意如此）：`register_*` 内核保持**追加**（id 撞了就 abort）—— 注册层
+    // 需要这个防重复保证。而 GM 入口走 `upsert_*`：已存在则原地覆盖。这正是「上线后调
+    // 数值」需要的 —— 否则每改一个数都要重发整份 content_registration，且中途失败无法续跑。
+    // `register_ai/template/table` 是 auto-id 追加，没有「同一条」的概念，只能追加。
+
+    /// 注册一条技能（**追加语义**：id 已存在则 `E_SKILL_EXISTS`）。
+    /// 供本模块内部与 `content_registration` 批量注册用 —— 注册层需要这个「防重复」保证。
+    /// GM 改数值请用下面的 `gm_register_skill`（upsert 语义）。
     public fun register_skill(account: &signer, s: Skill) acquires Registry {
         let addr = signer::address_of(account);
         assert!(addr == @mohayo, E_NOT_OWNER);
@@ -150,6 +165,50 @@ module mohayo::skill_registry {
         let new_s = reconstruct_skill_with_id(&s, id);
         table::add(&mut r.skills, id, new_s);
         if (id > r.skill_count) { r.skill_count = id; };
+    }
+
+    /// upsert 一条技能：已存在则原地覆盖，不存在才走追加。
+    /// GM 改数值走这里 —— `register_skill` 的「id 已存在就 abort」是注册层需要的防重复，
+    /// 但对「上线后调数值」这个场景是障碍（每次改都要重发整个 content_registration）。
+    fun upsert_skill(account: &signer, s: Skill) acquires Registry {
+        let addr = signer::address_of(account);
+        assert!(addr == @mohayo, E_NOT_OWNER);
+        let id = types::skill_id(&s);
+        if (id == 0) {
+            // 自动分配 id 的调用没有「同一条」的语义, 只能追加
+            register_skill(account, s);
+            return
+        };
+        let r = borrow_global_mut<Registry>(@mohayo);
+        validate_skill(&s, false);
+        assert!(id <= MAX_SKILLS, E_SKILL_CAP);
+        let new_s = reconstruct_skill_with_id(&s, id);
+        if (table::contains(&r.skills, id)) {
+            *table::borrow_mut(&mut r.skills, id) = new_s;
+        } else {
+            table::add(&mut r.skills, id, new_s);
+            if (id > r.skill_count) { r.skill_count = id; };
+        };
+    }
+
+    /// upsert 一个职业的职业技能：技能本身 upsert，且不会往 class_skills 里重复追加 id。
+    fun upsert_class_skill(account: &signer, s: Skill, class_id: u8) acquires Registry {
+        let addr = signer::address_of(account);
+        assert!(addr == @mohayo, E_NOT_OWNER);
+        let id = types::skill_id(&s);
+        if (id == 0) {
+            register_class_skill(account, s, class_id);
+            return
+        };
+        let already = table::contains(&borrow_global<Registry>(@mohayo).skills, id);
+        upsert_skill(account, s);
+        if (already) { return };   // 已在池里, 不重复登记到职业技能列表
+        let r = borrow_global_mut<Registry>(@mohayo);
+        if (!table::contains(&r.class_skills, class_id)) {
+            table::add(&mut r.class_skills, class_id, vector::empty());
+        };
+        let list = table::borrow_mut(&mut r.class_skills, class_id);
+        vector::push_back(list, id);
     }
 
     public fun register_class_skill(account: &signer, s: Skill, class_id: u8) acquires Registry {
@@ -248,6 +307,206 @@ module mohayo::skill_registry {
         } else {
             table::add(&mut r.battle_count, difficulty, len as u64);
         };
+    }
+
+    // ===================== GM 链上入口（扁平参数 → 组装结构体 → 调内核） =====================
+
+    /// GM 注册/覆写一条技能（无效果、无召唤的纯数值技能）。
+    ///
+    /// 常用场景：改 power / damage_cap / base_acc / 费用。带效果或召唤的技能用
+    /// `gm_register_skill_full`。
+    #[allow(unused_parameter)]
+    public entry fun gm_register_skill(
+        account: &signer,
+        id: u64,
+        kind: u8,
+        ap_cost: u16,
+        ap_gain: u16,
+        ammo_id: u16,
+        ammo_cost: u16,
+        mana_cost: u64,
+        hp_cost: u16,
+        targeting: u8,
+        weight_mode: u8,
+        target_count: u8,
+        power: u64,
+        damage_cap: u64,
+        base_acc: u16,
+        flags: u8,
+    ) acquires Registry {
+        upsert_skill(account, types::make_skill(
+            id, kind, ap_cost, ap_gain, ammo_id, ammo_cost, mana_cost, hp_cost,
+            targeting, weight_mode, target_count, power, damage_cap, base_acc, flags,
+            vector::empty(), types::make_summon_rule(0, 0, 0),
+        ));
+    }
+
+    /// GM 注册/覆写一条带效果与召唤规则的技能。
+    /// 效果与召唤规则用**并行原始向量**表达（交易参数不能是结构体 vector）。
+    public entry fun gm_register_skill_full(
+        account: &signer,
+        id: u64,
+        kind: u8,
+        ap_cost: u16,
+        ap_gain: u16,
+        ammo_id: u16,
+        ammo_cost: u16,
+        mana_cost: u64,
+        hp_cost: u16,
+        targeting: u8,
+        weight_mode: u8,
+        target_count: u8,
+        power: u64,
+        damage_cap: u64,
+        base_acc: u16,
+        flags: u8,
+        effect_ops: vector<u8>,
+        effect_durations: vector<u8>,
+        effect_magnitudes: vector<u16>,
+        effect_scopes: vector<u8>,
+        effect_probs: vector<u16>,
+        summon_template_id: u64,
+        summon_max_count: u8,
+        summon_enemy_headroom: u8,
+    ) acquires Registry {
+        let n = vector::length(&effect_ops);
+        assert!(
+            n == vector::length(&effect_durations)
+                && n == vector::length(&effect_magnitudes)
+                && n == vector::length(&effect_scopes)
+                && n == vector::length(&effect_probs),
+            E_SKILL_CAP,
+        );
+        let fx = vector::empty<types::EffectSpec>();
+        let i = 0;
+        while (i < n) {
+            vector::push_back(&mut fx, types::make_effect_spec(
+                *vector::borrow(&effect_ops, i),
+                *vector::borrow(&effect_durations, i),
+                *vector::borrow(&effect_magnitudes, i),
+                *vector::borrow(&effect_scopes, i),
+                *vector::borrow(&effect_probs, i),
+            ));
+            i = i + 1;
+        };
+        upsert_skill(account, types::make_skill(
+            id, kind, ap_cost, ap_gain, ammo_id, ammo_cost, mana_cost, hp_cost,
+            targeting, weight_mode, target_count, power, damage_cap, base_acc, flags,
+            fx, types::make_summon_rule(summon_template_id, summon_max_count, summon_enemy_headroom),
+        ));
+    }
+
+    /// GM 把一条技能登记为某职业的职业技能。
+    public entry fun gm_register_class_skill(
+        account: &signer,
+        class_id: u8,
+        id: u64,
+        kind: u8,
+        ap_cost: u16,
+        ap_gain: u16,
+        mana_cost: u64,
+        hp_cost: u16,
+        targeting: u8,
+        weight_mode: u8,
+        target_count: u8,
+        power: u64,
+        damage_cap: u64,
+        base_acc: u16,
+        flags: u8,
+    ) acquires Registry {
+        upsert_class_skill(account, types::make_skill(
+            id, kind, ap_cost, ap_gain, 0, 0, mana_cost, hp_cost,
+            targeting, weight_mode, target_count, power, damage_cap, base_acc, flags,
+            vector::empty(), types::make_summon_rule(0, 0, 0),
+        ), class_id);
+    }
+
+    /// GM 追加一条怪物 AI（技能循环）。
+    public entry fun gm_register_ai(
+        account: &signer, skill_cycle: vector<u64>,
+    ) acquires Registry {
+        register_ai(account, types::make_monster_ai(skill_cycle, (vector::length(&skill_cycle) as u8)));
+    }
+
+    /// GM 追加一个敌人模板。`on_death_*` 为 0 表示无死亡召唤。
+    public entry fun gm_register_template(
+        account: &signer,
+        ai_id: u64,
+        threat: u8,
+        max_hp: u64,
+        power: u64,
+        magic: u64,
+        speed: u64,
+        base_acc: u16,
+        reward_min: u16,
+        reward_max: u16,
+        on_death_template_id: u64,
+        on_death_count: u8,
+        on_death_prob: u16,
+    ) acquires Registry {
+        register_template(account, types::make_enemy_template(
+            ai_id, threat, max_hp, power, magic, speed, base_acc, reward_min, reward_max,
+            types::make_on_death_spawn(on_death_template_id, on_death_count, on_death_prob),
+        ));
+    }
+
+    /// GM 追加一张敌人构成表（模板 + 权重）。
+    public entry fun gm_register_table(
+        account: &signer, template_ids: vector<u64>, weights: vector<u16>,
+    ) acquires Registry {
+        let n = vector::length(&template_ids);
+        assert!(n == vector::length(&weights), E_TABLE_CAP);
+        let entries = vector::empty<TableEntry>();
+        let i = 0;
+        while (i < n) {
+            vector::push_back(&mut entries, types::make_table_entry(
+                *vector::borrow(&template_ids, i), *vector::borrow(&weights, i),
+            ));
+            i = i + 1;
+        };
+        register_table(account, entries);
+    }
+
+    /// GM 注册/覆写一座地下城的配置。
+    public entry fun gm_set_dungeon(
+        account: &signer,
+        difficulty: u64,
+        table_id: u64,
+        enemy_count: u64,
+        mana_per_turn: u64,
+        entry_fee: u64,
+        rescue_fee: u64,
+        turn_interval: u64,
+        battles: u8,
+    ) acquires Registry {
+        set_dungeon(account, difficulty, types::make_dungeon_config(
+            table_id, enemy_count, mana_per_turn, entry_fee, rescue_fee, turn_interval, battles,
+        ));
+    }
+
+    /// GM 覆写某难度的战斗序列（表 id + 每场敌人数）。
+    public entry fun gm_set_dungeon_battles(
+        account: &signer,
+        difficulty: u64,
+        table_ids: vector<u64>,
+        enemy_counts: vector<u64>,
+    ) acquires Registry {
+        let n = vector::length(&table_ids);
+        assert!(n == vector::length(&enemy_counts), E_BATTLE_CAP);
+        let configs = vector::empty<BattleConfig>();
+        let i = 0;
+        while (i < n) {
+            vector::push_back(&mut configs, types::make_battle_config(
+                *vector::borrow(&table_ids, i), *vector::borrow(&enemy_counts, i),
+            ));
+            i = i + 1;
+        };
+        set_dungeon_battles(account, difficulty, configs);
+    }
+
+    /// GM 把技能加入自选池白名单（content-design §5 红线：只有池内技能能被玩家自选）。
+    public entry fun gm_add_pool_skill(account: &signer, id: u64) acquires Registry {
+        add_pool_skill(account, id);
     }
 
     /// 给某场战斗挂一个变体（§8.2）。`enemy_count = 0` 表示沿用这场战斗配置的敌人数，

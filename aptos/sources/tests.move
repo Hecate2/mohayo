@@ -3174,4 +3174,128 @@ module mohayo::tests {
             true, item::EFFECT_HEAL, 100, 18, false);
         assert!(vector::length(&item::item_type_ids()) == 10, 4);
     }
+
+    // ===================== GM 链上入口（entry 包装层） =====================
+
+    /// GM 通过链上 entry 覆写技能数值 —— 上线后不必重新发布合约。
+    /// 这条路径此前**不存在**：内核是 `public fun`，而 Aptos 的 entry 不能收结构体参数，
+    /// 所以 Skill/MonsterAI/EnemyTemplate/TableEntry 的注册函数全都无法作为交易入口。
+    #[test]
+    fun test_gm_can_upsert_skill_onchain() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        // 520 圣泉(白魔法师 class 4 的群奶): power 450 → 999
+        let before = skill_registry::get_skill(content::SKILL_HOLY_SPRING);
+        assert!(types::skill_power(&before) == 450, 1);
+        let class4_before = vector::length(&skill_registry::get_class_skill_ids(4));
+        skill_registry::gm_register_skill(
+            a, content::SKILL_HOLY_SPRING,
+            types::KIND_SUPPORT(), 1, 1, 0, 0, 8, 0,
+            types::TGT_ALL_ALLY(), types::WT_UNIFORM(), 1,
+            999, 0, 1000, 0,
+        );
+        let after = skill_registry::get_skill(content::SKILL_HOLY_SPRING);
+        assert!(types::skill_power(&after) == 999, 2);      // 数值已改
+        assert!(types::skill_mana_cost(&after) == 8, 3);     // 其余字段按传入值
+        // upsert 不新增条目: 职业技能列表长度不变(不会重复登记同一个 id)
+        assert!(vector::length(&skill_registry::get_class_skill_ids(4)) == class4_before, 4);
+    }
+
+    /// 带效果与召唤规则的技能走 `_full` 入口，效果用并行向量表达。
+    #[test]
+    fun test_gm_can_register_skill_with_effects_onchain() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        // 造一条测试技能: 900 号, 单效果(眩晕 op1), 无召唤
+        skill_registry::gm_register_skill_full(
+            a, 900,
+            types::KIND_PHYSICAL(), 2, 1, 0, 0, 3, 0,
+            types::TGT_RAND_SINGLE_ENEMY(), types::WT_UNIFORM(), 1,
+            1200, 0, 900, 0,
+            vector[types::OP_STUN()], vector[2], vector[1000], vector[0], vector[1000],
+            0, 0, 0,
+        );
+        let s = skill_registry::get_skill(900);
+        assert!(types::skill_power(&s) == 1200, 1);
+        assert!(types::skill_mana_cost(&s) == 3, 2);
+        assert!(vector::length(types::skill_effects(&s)) == 1, 3);
+        assert!(types::skill_targeting(&s) == types::TGT_RAND_SINGLE_ENEMY(), 4);
+    }
+
+    /// GM 覆写地下城配置（难度 3 的入场费/救援费/魔素）。
+    #[test]
+    fun test_gm_can_tweak_dungeon_onchain() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let d0 = skill_registry::get_dungeon(3);
+        assert!(types::dungeon_entry_fee(&d0) == 10, 1);
+        // GM 把 D3 入场费调到 12、救援费调到 30
+        skill_registry::gm_set_dungeon(a, 3, 8, 3, 3, 12, 30, 120, 3);
+        let d1 = skill_registry::get_dungeon(3);
+        assert!(types::dungeon_entry_fee(&d1) == 12, 2);
+        assert!(types::dungeon_rescue_fee(&d1) == 30, 3);
+        assert!(types::dungeon_enemy_count(&d1) == 3, 4);
+    }
+
+    /// GM 追加 AI / 模板 / 构成表 —— 这是「上线后加新怪」的路径。
+    /// 注意这三个内核是**追加**(auto-id)而非 upsert，所以计数会增长。
+    #[test]
+    fun test_gm_can_append_ai_template_table_onchain() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        skill_registry::gm_register_ai(a, vector[content::SKILL_IDLE]);
+        let ai_last = skill_registry::get_ai(24);   // 原 23 条 → 新增第 24 条
+        assert!(types::ai_cycle_len(&ai_last) == 1, 1);
+        skill_registry::gm_register_template(a, 24, 0, 5000, 100, 0, 50, 900, 10, 20, 0, 0, 0);
+        let t = skill_registry::get_template(36);   // 原 35 条 → 新增第 36 条
+        assert!(types::template_max_hp(&t) == 5000, 2);
+        skill_registry::gm_register_table(a, vector[36], vector[1000]);
+        let entries = skill_registry::get_table(32); // 原 31 张 → 新增第 32 张
+        assert!(vector::length(&entries) == 1, 3);
+        assert!(types::table_entry_template_id(vector::borrow(&entries, 0)) == 36, 4);
+    }
+
+    /// GM 覆写职业/种族/词条模板 —— character 侧的三个入口。
+    #[test]
+    fun test_gm_can_upsert_class_race_affix_onchain() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        // 职业 1 守卫: 基础 hp +150 → 改成 +260
+        assert!(types::class_def_hp_pct(&character::get_class(1)) == 150, 1);
+        character::gm_register_class(a, 1, 260, 115, 90, 90, 1);
+        assert!(types::class_def_hp_pct(&character::get_class(1)) == 260, 2);
+        // 种族 0 人类: 自选槽 +2 → 改成 +4
+        assert!(types::race_def_self_select_bonus(&character::get_race(0)) == 2, 3);
+        character::gm_register_race(a, 0, 0, vector[0, 0, 0], 0, 0, 4);
+        assert!(types::race_def_self_select_bonus(&character::get_race(0)) == 4, 4);
+        // 词条模板 0: 满档值 2000 → 改成 3000
+        character::gm_register_affix_template(a, 0, 0,
+            vector[450, 200, 140, 90, 55, 30, 18, 10, 5, 2],
+            vector[0, 150, 250, 380, 520, 750, 950, 1200, 1500, 3000]);
+        let addr = std::signer::address_of(a);
+        character::gm_mint(a, addr, 1, 0, vector[10, 10, 10, 10], vector::empty());
+        let cid = character::owner_latest_char(addr);
+        assert!(*vector::borrow(&character::get_ability_bonuses(cid), 0) == 3000, 5);
+    }
+
+    /// GM 入口必须挡住非 @mohayo 调用者（否则任何人能改全服内容）。
+    #[test]
+    #[expected_failure(abort_code = 1, location = mohayo::skill_registry)]   // E_NOT_OWNER
+    fun test_gm_skill_entry_rejects_non_admin() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let p = &std::account::create_account_for_test(@0xBB99);
+        skill_registry::gm_register_skill(
+            p, 850,
+            types::KIND_SUPPORT(), 0, 1, 0, 0, 2, 0,
+            types::TGT_RAND_SINGLE_ALLY(), types::WT_HP_DEFICIT_ALLY(), 1,
+            999, 0, 1000, 0,
+        );
+    }
 }
