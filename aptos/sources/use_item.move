@@ -6,6 +6,7 @@
 ///   各调用一次 `consume_entry` —— **24 小时滑动窗口**内限次，
 ///   **所有难度都计次(免费图也不例外)**。取代原先「挑战券兑出的额度」那种可无限堆积的账本。
 module mohayo::use_item {
+    use aptos_framework::event;
     use aptos_framework::randomness;
     use aptos_framework::timestamp;
     use aptos_std::table::{Self, Table};
@@ -20,6 +21,8 @@ module mohayo::use_item {
     const E_NOT_OWNER: u64 = 1;
     const E_NO_ENTRIES: u64 = 3;
     const E_LIMIT_TOO_BIG: u64 = 4;
+    /// set_window_limit 传 0 → consume_entry 恒 abort, 全服永久无法入场。
+    const E_LIMIT_TOO_SMALL: u64 = 5;
 
     /// 参与次数的统计窗口：24 小时滑动窗口
     const WINDOW_SECS: u64 = 86400;
@@ -27,6 +30,12 @@ module mohayo::use_item {
     const DEFAULT_WINDOW_LIMIT: u64 = 3;
     /// GM 可设的窗口次数上限（防止把限额调成天文数字, 那样每账号要存一堆时间戳）
     const MAX_WINDOW_LIMIT: u64 = 1000;
+    /// GM 可设的窗口次数下限（0 会让 consume_entry 恒 abort → 全服无法入场）
+    const MIN_WINDOW_LIMIT: u64 = 1;
+
+    /// 参与次数上限被 GM 调整。Indexer/Keeper 需要靠它感知这个全局经济参数的变化。
+    #[event]
+    struct WindowLimitSet has drop, store { limit: u64 }
 
     /// 参与次数门控（§2.6.14）：每账号只保留**最近若干次参与的时间戳**（长度 ≤ 窗口上限），
     /// 过期即丢、满则拒绝。存储量与窗口上限同阶，不会像额度账本那样无限堆积。
@@ -150,9 +159,20 @@ module mohayo::use_item {
     }
 
     /// GM 调整窗口内的参与次数上限（数值层参数，无需改代码）
+    ///
+    /// 上下界都要拦。上界防「调成天文数字」把每账号的时间戳存储拉爆;
+    /// **下界同样致命**: limit = 0 时 consume_entry 的
+    /// `assert!(vector::length(list) < limit)` 恒为 false, 于是 create_room 与
+    /// join_room_as_char 全部 abort —— 全服永久无法入场, 且只能靠再发一笔
+    /// 修正交易恢复(和 set_race_pools 那条同类地雷)。
+    ///
+    /// 发事件: 参与次数是全局经济参数, Indexer 与 Keeper 都需要知道它被改过
+    /// (对比 economy::set_minter 有 MinterSet)。
     public entry fun set_window_limit(account: &signer, limit: u64) acquires EntryGate {
         assert!(signer::address_of(account) == @mohayo, E_NOT_OWNER);
         assert!(limit <= MAX_WINDOW_LIMIT, E_LIMIT_TOO_BIG);
+        assert!(limit >= MIN_WINDOW_LIMIT, E_LIMIT_TOO_SMALL);
         borrow_global_mut<EntryGate>(@mohayo).window_limit = limit;
+        event::emit(WindowLimitSet { limit });
     }
 }

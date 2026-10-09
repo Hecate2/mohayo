@@ -1856,6 +1856,26 @@ module mohayo::tests {
         use_item::set_window_limit(a, 100000);
     }
 
+    /// GM 不能把窗口上限调成 0 —— 那会让 consume_entry 的
+    /// `assert!(length < limit)` 恒为 false, 全服**永久无法入场**, 只能靠再发一笔
+    /// 修正交易恢复。此前只有上界, 这是与 set_race_pools 同类的「一笔交易瘫痪全网」地雷。
+    #[test]
+    #[expected_failure(abort_code = 5, location = mohayo::use_item)]                       // E_LIMIT_TOO_SMALL
+    fun test_window_limit_floor() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        use_item::set_window_limit(a, 0);
+    }
+
+    /// 边界值 1 可用（不是把 1 也一起拦掉）。
+    #[test]
+    fun test_window_limit_accepts_one() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        use_item::set_window_limit(a, 1);
+        assert!(use_item::window_limit() == 1, 1);
+    }
+
     #[test]
     fun test_drop_table_grants_item_on_victory() {
         let a = &std::account::create_account_for_test(@mohayo);
