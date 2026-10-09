@@ -30,6 +30,15 @@ module mohayo::character {
     const E_RACE_CAP: u64 = 21;
     const E_DEBTOR: u64 = 22;
     const E_CHAR_CAP: u64 = 23;
+    /// GM 注册词条模板时 stat_type 越界(>= ABILITY_SLOTS)。此前不校验, 而 compute_affixes
+    /// 拿它直接索引长度 4 的 bonuses —— 一笔注册交易就能让此后每次建号/重掷/升级全部 abort。
+    const E_AFFIX_STAT_TYPE: u64 = 24;
+    /// GM 注册词条模板时 tier_values 不足 10 档。compute_affixes 按 (tier-1) 索引,
+    /// 玩家掷出高 tier 时同样 abort。
+    const E_AFFIX_TIERS: u64 = 25;
+    /// set_race_pools 传了空池。未注册的 race_id / 空 vector 都让 pick_race 的
+    /// vector::borrow 越界 abort —— 一笔 GM 交易瘫痪全网建号。
+    const E_RACE_POOL_BAD: u64 = 26;
 
     const MAX_CLASSES: u64 = 32;
     const MAX_RACES: u64 = 16;
@@ -158,6 +167,12 @@ module mohayo::character {
 
     public fun register_affix_template(account: &signer, id: u8, tmpl: AffixTemplate) acquires AffixStore {
         assert!(signer::address_of(account) == @mohayo, E_NOT_OWNER);
+        // stat_type 是 compute_affixes 里 bonuses 的下标(长度 ABILITY_SLOTS), tier_values
+        // 按 (tier-1) 索引(roll_random_affix_tiers 掷 1..10)。两条都不校验的话, 一笔注册
+        // 交易就能让此后每次建号/重掷/升级/转移在 compute_affixes 里 abort, 且无补救手段
+        // (只能再发一笔修正交易)。注册前拦下来。
+        assert!((types::affix_stat_type(&tmpl) as u64) < ABILITY_SLOTS, E_AFFIX_STAT_TYPE);
+        assert!(vector::length(types::affix_tier_values(&tmpl)) == 10, E_AFFIX_TIERS);
         let store = borrow_global_mut<AffixStore>(@mohayo);
         assert!(store.count < MAX_AFFIX_TEMPLATES, E_AFFIX_TEMPLATE_CAP);
         if (table::contains(&store.templates, id)) {
@@ -182,10 +197,31 @@ module mohayo::character {
         legendary: vector<u8>,
     ) acquires RaceStore {
         assert!(signer::address_of(account) == @mohayo, E_NOT_OWNER);
+        // 三个池都必须非空, 且每个 race_id 都已注册。pick_race 直接
+        // vector::borrow(pool, below(pool.len)), 空池 → below(0)=0 → borrow 越界 abort;
+        // 未注册的 id → get_race 的 E_UNKNOWN_RACE。两者都会让**每一次**建号/命运骰子/
+        // 重生卷轴 abort, 即一笔 GM 交易瘫痪全网, 只能靠再发一笔修正交易恢复。
+        // 这是常驻入口(非一次性注册), 必须每次都拦。
+        assert!(vector::length(&common) > 0, E_RACE_POOL_BAD);
+        assert!(vector::length(&rare) > 0, E_RACE_POOL_BAD);
+        assert!(vector::length(&legendary) > 0, E_RACE_POOL_BAD);
+        check_races_registered(&common);
+        check_races_registered(&rare);
+        check_races_registered(&legendary);
         let store = borrow_global_mut<RaceStore>(@mohayo);
         store.common_races = common;
         store.rare_races = rare;
         store.legendary_races = legendary;
+    }
+
+    /// set_race_pools 的前置校验：池内每个 id 都必须已注册。
+    fun check_races_registered(pool: &vector<u8>) acquires RaceStore {
+        let store = borrow_global<RaceStore>(@mohayo);
+        let i = 0;
+        while (i < vector::length(pool)) {
+            assert!(table::contains(&store.races, *vector::borrow(pool, i)), E_RACE_POOL_BAD);
+            i = i + 1;
+        };
     }
 
     // ---- character creation ----

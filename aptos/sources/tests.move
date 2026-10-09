@@ -517,6 +517,12 @@ module mohayo::tests {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
         character::set_race_tier_weights(a, 850, 120, 30);
+        // set_race_pools 现在要求池内每个 race_id 都已注册（否则 pick_race 越界 abort）
+        let i = 0;
+        while (i < 8) {
+            character::register_race(a, (i as u8), types::make_race_def(0, vector[0, 0, 0], 0, 0, 0));
+            i = i + 1;
+        };
         character::set_race_pools(
             a,
             vector[0, 1, 2, 3],
@@ -527,6 +533,57 @@ module mohayo::tests {
 
     #[test]
     fun test_affix_template() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        // tier_values 必须给满 10 档（compute_affixes 按 (tier-1) 索引，玩家掷出高 tier 时会越界）
+        let tmpl = types::make_affix_template(
+            1,
+            vector[500, 300, 200, 100, 50, 30, 20, 10, 5, 2],
+            vector[50, 100, 200, 300, 400, 500, 600, 700, 800, 900],
+        );
+        character::register_affix_template(a, 0, tmpl);
+    }
+
+    // ===================== GM 注册入口校验（防一笔交易瘫痪全网） =====================
+
+    /// set_race_pools 传空池 → 此后每次建号都在 pick_race 的 vector::borrow 越界 abort。
+    #[test]
+    #[expected_failure(abort_code = 26, location = mohayo::character)]   // E_RACE_POOL_BAD
+    fun test_set_race_pools_rejects_empty_pool() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        character::register_race(a, 0, types::make_race_def(0, vector[0, 0, 0], 0, 0, 0));
+        character::set_race_pools(a, vector[0], vector[0], vector[]);
+    }
+
+    /// set_race_pools 传未注册的 race_id → 建号时 get_race 的 E_UNKNOWN_RACE。
+    #[test]
+    #[expected_failure(abort_code = 26, location = mohayo::character)]   // E_RACE_POOL_BAD
+    fun test_set_race_pools_rejects_unregistered_race() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        character::register_race(a, 0, types::make_race_def(0, vector[0, 0, 0], 0, 0, 0));
+        character::set_race_pools(a, vector[0], vector[0], vector[99]);
+    }
+
+    /// stat_type >= ABILITY_SLOTS(4) → compute_affixes 索引长度 4 的 bonuses 时越界。
+    #[test]
+    #[expected_failure(abort_code = 24, location = mohayo::character)]   // E_AFFIX_STAT_TYPE
+    fun test_register_affix_rejects_bad_stat_type() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        let tmpl = types::make_affix_template(
+            7,
+            vector[500, 300, 200, 100, 50, 30, 20, 10, 5, 2],
+            vector[50, 100, 200, 300, 400, 500, 600, 700, 800, 900],
+        );
+        character::register_affix_template(a, 0, tmpl);
+    }
+
+    /// tier_values 不足 10 档 → 玩家掷出高 tier 时 compute_affixes 越界 abort。
+    #[test]
+    #[expected_failure(abort_code = 25, location = mohayo::character)]   // E_AFFIX_TIERS
+    fun test_register_affix_rejects_short_tier_values() {
         let a = &std::account::create_account_for_test(@mohayo);
         setup(a);
         let tmpl = types::make_affix_template(1, vector[500, 300, 200], vector[50, 100, 200]);
