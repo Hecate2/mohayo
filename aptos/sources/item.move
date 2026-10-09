@@ -59,6 +59,8 @@ module mohayo::item {
     const E_ZERO: u64 = 5;
     const E_BOUND: u64 = 6;
     const E_BAD_TABLE: u64 = 7;
+    /// combat_usable = true 但 effect_kind 不在引擎认得的 1..=4 内 —— 会静默吞道具。
+    const E_BAD_EFFECT: u64 = 8;
 
     /// 道具定义(key-value, 按类型分组)
     struct ItemDef has copy, drop, store {
@@ -181,6 +183,13 @@ module mohayo::item {
         bound: bool,
     ) acquires DefStore, Vault {
         assert!(signer::address_of(account) == @mohayo, E_NOT_OWNER);
+        // combat_usable = true 必须配一个引擎认得的 effect_kind。否则这道道具能被排进计划队列,
+        // 却在引擎的 if-chain 里全部落空 —— 库存扣掉、事件照发、效果为零, 且无任何报错。
+        // register_item 的设计初衷就是「上线后 GM 一笔交易加新道具」, 这个校验是那道门槛。
+        assert!(
+            !combat_usable || (effect_kind >= EFFECT_MANA_BOOST && effect_kind <= EFFECT_REVIVE),
+            E_BAD_EFFECT,
+        );
         if (!exists<DefStore>(@mohayo)) { init_module(account); };
         let d = ItemDef { name, group, combat_usable, effect_kind, effect_value, decimals, bound };
         let ds = borrow_global_mut<DefStore>(@mohayo);
@@ -253,15 +262,39 @@ module mohayo::item {
         assert!(try_consume_raw(item_type, owner, raw), E_NO_ITEM);
     }
 
-    /// 战斗内效果结算(engine 调用): 按 ItemDef.effect_kind 分发。返回 (是否消耗成功, 效果种类, 效果值)。
+    /// 是否持有至少 `amount` 的余额。
+    fun has_item(item_type: u64, owner: address, amount: u128): bool acquires Vault {
+        let v = borrow_global<Vault>(@mohayo);
+        if (!table::contains(&v.balances, item_type)) { return false };
+        let tbl = table::borrow(&v.balances, item_type);
+        if (!table::contains(tbl, owner)) { return false };
+        *table::borrow(tbl, owner) >= amount
+    }
+
+    /// 战斗内效果**预检**(engine 调用): 只判定「这东西能不能用、是什么效果」, **不扣库存**。
+    /// 拆成两步是为了治「道具被消耗、无效果、无退款」: 引擎先 peek, 确认场上真有合法目标
+    /// (治疗要有人掉血、复活要有人倒地) 才 `combat_consume`, 否则原样留在背包里。
+    ///
+    /// 返回 (是否可用, 效果种类, 效果值)。不可用时 kind = EFFECT_NONE。
     /// `public(friend)` —— 只有 engine 能触发战斗消耗(§2.6.11)。
-    public(friend) fun combat_use(item_type: u64, owner: address): (bool, u8, u64) acquires DefStore, Vault {
+    public(friend) fun combat_peek(item_type: u64, owner: address): (bool, u8, u64) acquires DefStore, Vault {
         let ds = borrow_global<DefStore>(@mohayo);
-        if (!table::contains(&ds.defs, item_type)) { return (false, EFFECT_NONE, 0); };
+        if (!table::contains(&ds.defs, item_type)) { return (false, EFFECT_NONE, 0) };
         let d = *table::borrow(&ds.defs, item_type);
-        if (!d.combat_usable) { return (false, EFFECT_NONE, 0); };
-        if (!try_consume_raw(item_type, owner, ONE)) { return (false, EFFECT_NONE, 0); };
+        if (!d.combat_usable) { return (false, EFFECT_NONE, 0) };
+        // combat_usable = true 却配了未知 effect_kind(或 EFFECT_NONE)时, 引擎的 if-chain
+        // 全不命中 → 库存照扣、事件照发、效果为零。register_item 已拦, 这里再兜一层。
+        if (d.effect_kind == EFFECT_NONE || d.effect_kind > EFFECT_REVIVE) {
+            return (false, EFFECT_NONE, 0);
+        };
+        if (!has_item(item_type, owner, ONE)) { return (false, EFFECT_NONE, 0) };
         (true, d.effect_kind, d.effect_value)
+    }
+
+    /// 战斗内效果的**实际扣减**: 扣 1 整份。`combat_peek` 返回 true 后才调。
+    /// `public(friend)`(§2.6.11)。
+    public(friend) fun combat_consume(item_type: u64, owner: address): bool acquires Vault {
+        try_consume_raw(item_type, owner, ONE)
     }
 
     // ===================== 查询 =====================

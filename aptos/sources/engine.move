@@ -1258,10 +1258,16 @@ module mohayo::engine {
         types::member_set_plan_start(m, cur_plan_start + 1);
         if (skill_id >= item::ITEM_SKILL_BASE) {
             // 道具使用(文档 §2.6: 排进计划队列, 占 1 回合行动位)
+            //
+            // 「先判定有没有合法目标, 再扣库存」: 此前 combat_use 先扣 1 整份再分发效果, 于是
+            // 全队满血时放治疗药水、无人倒地时放不死鸟之羽, 都会**库存已扣、效果为零、事件照发**。
+            // 现在先 peek(不扣), 确认场上有目标才 consume; 没有目标就整回合空过, 道具留在背包。
             let item_type = skill_id - item::ITEM_SKILL_BASE;
             let owner = types::member_owner(vector::borrow(&room.members, idx));
-            let (ok, kind, value) = item::combat_use(item_type, owner);
-            if (!ok) return; // 非战斗道具/无库存 → 空过
+            let (ok, kind, value) = item::combat_peek(item_type, owner);
+            if (!ok) return; // 非战斗道具/无库存/配置非法 → 空过
+            if (!item_has_valid_target(room, kind)) return; // 无合法目标 → 空过, **不扣道具**
+            if (!item::combat_consume(item_type, owner)) return; // 竞态(理论上不会): 扣失败则空过
             if (kind == item::EFFECT_MANA_BOOST) {
                 room.mana_pool = room.mana_pool + value;
             } else if (kind == item::EFFECT_HEAL) {
@@ -1708,7 +1714,46 @@ module mohayo::engine {
 
     // ============================ internal: item effects ============================
 
-    /// 治疗我方血量亏空绝对值最高的存活真人(非召唤)。无存活者则无效果(道具仍已消耗)。
+    /// 该效果此刻是否有合法目标(与下面各 item_* 的目标判定**必须同口径**, 否则会出现
+    /// 「这里判有、那边判无 → 白扣一次」)。判定口径:
+    /// - HEAL   : 存在存活真人且血量未满(否则治疗量会溢出为 0)
+    /// - REVIVE : 存在被击败且未逃离的真人(召唤物不可复活, 与 item_revive 一致)
+    /// - 其余(MANA_BOOST / SMOKE_ALL): 恒有目标 —— 魔素池与场上单位数无关, 烟幕总能施加。
+    fun item_has_valid_target(room: &Room, kind: u8): bool {
+        if (kind == item::EFFECT_HEAL) { return item_has_wounded(room) };
+        if (kind == item::EFFECT_REVIVE) { return item_has_downed(room) };
+        true
+    }
+
+    /// 是否有存活真人血量未满。
+    fun item_has_wounded(room: &Room): bool {
+        let n = vector::length(&room.members);
+        let i = 0;
+        while (i < n) {
+            let m = vector::borrow(&room.members, i);
+            if (types::member_alive(m) && !types::member_is_summon(m)
+                && types::member_hp(m) < types::member_max_hp(m)) { return true };
+            i = i + 1;
+        };
+        false
+    }
+
+    /// 是否有可被复活的真人(被击败 ∧ 未逃离 ∧ 非召唤)。
+    fun item_has_downed(room: &Room): bool {
+        let n = vector::length(&room.members);
+        let i = 0;
+        while (i < n) {
+            let m = vector::borrow(&room.members, i);
+            if (!types::member_alive(m) && !types::member_escaped(m) && !types::member_is_summon(m)) {
+                return true
+            };
+            i = i + 1;
+        };
+        false
+    }
+
+    /// 治疗我方血量亏空绝对值最高的存活真人(非召唤)。无存活者则无效果
+    /// (调用方已用 item_has_valid_target 拦过, 这里是防御式分支)。
     fun item_heal_most_wounded(room: &mut Room, room_id: u64, amount: u64) {
         let best: i64 = -1;
         let best_idx: u64 = 0;
@@ -1748,7 +1793,7 @@ module mohayo::engine {
     }
 
     /// 不死鸟之羽: 复活本场第一名被击败的真人队友(非召唤), 回到 max(value, max_hp 封顶)。
-    /// 无被击败者则道具已消耗但无效果。
+    /// 无被击败者则不消耗(调用方已用 item_has_valid_target 拦过)。
     fun item_revive(room: &mut Room, room_id: u64, hp: u64) {
         let n = vector::length(&room.members);
         let i = 0;

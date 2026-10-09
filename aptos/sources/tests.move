@@ -1876,6 +1876,91 @@ module mohayo::tests {
         assert!(item::balance_whole(item::ITEM_MANA_FIREWORK, addr) == before + 1, 2);
     }
 
+    // ===================== P1: 道具消耗语义（无目标不扣库存） =====================
+
+    /// 全队满血时排治疗药水 → 场上无合法目标，整回合空过且**库存不扣**。
+    /// 此前 combat_use 先扣 1 整份再分发效果，于是满血放药水 = 静默吞道具。
+    #[test]
+    fun test_healing_potion_not_consumed_when_nobody_wounded() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let addr = std::signer::address_of(a);
+        item::gm_mint(a, item::ITEM_HEALING_POTION, addr, 3);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 5000, 10, 1000, 100);
+        engine::start_combat_test(a, 1);
+        let before = item::balance_whole(item::ITEM_HEALING_POTION, addr);
+        // 排治疗药水(占一个行动位):  ITEM_SKILL_BASE + item_type
+        engine::set_plan(a, 1, 0, vector[item::ITEM_SKILL_BASE + item::ITEM_HEALING_POTION]);
+        engine::step_for_test(a, 1);
+        // 无人受伤 → 空过, 药水还在背包里
+        assert!(item::balance_whole(item::ITEM_HEALING_POTION, addr) == before, 1);
+    }
+
+    /// 有人受伤时同一张药水**正常生效并扣除** —— 证明上一条不是「道具从此无效」。
+    #[test]
+    fun test_healing_potion_consumed_when_someone_wounded() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let addr = std::signer::address_of(a);
+        item::gm_mint(a, item::ITEM_HEALING_POTION, addr, 3);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 5000, 10, 1000, 100);
+        engine::start_combat_test(a, 1);
+        engine::test_set_member_hp(a, 1, 0, 1000);   // 制造亏空 → 有合法目标
+        let before = item::balance_whole(item::ITEM_HEALING_POTION, addr);
+        engine::set_plan(a, 1, 0, vector[item::ITEM_SKILL_BASE + item::ITEM_HEALING_POTION]);
+        engine::step_for_test(a, 1);
+        assert!(item::balance_whole(item::ITEM_HEALING_POTION, addr) == before - 1, 1);
+        let (h0, _, _, _, _, _) = engine::member_state(1, 0);
+        assert!(h0 > 1000, 2);                       // 确实被治疗了
+    }
+
+    /// 无人倒地时放不死鸟之羽 → 不消耗。全灭羽毛是稀缺资源(D9 权重 60/1000)。
+    #[test]
+    fun test_phoenix_feather_not_consumed_when_nobody_downed() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let addr = std::signer::address_of(a);
+        item::gm_mint(a, item::ITEM_PHOENIX_FEATHER, addr, 1);
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 5000, 10, 1000, 100);
+        engine::start_combat_test(a, 1);
+        let before = item::balance_whole(item::ITEM_PHOENIX_FEATHER, addr);
+        engine::set_plan(a, 1, 0, vector[item::ITEM_SKILL_BASE + item::ITEM_PHOENIX_FEATHER]);
+        engine::step_for_test(a, 1);
+        assert!(item::balance_whole(item::ITEM_PHOENIX_FEATHER, addr) == before, 1);
+    }
+
+    /// register_item: combat_usable = true 却配未知 effect_kind → 拒绝注册。
+    /// 否则这种道具会被排进计划队列、在引擎 if-chain 里全部落空, 静默吞掉。
+    #[test]
+    #[expected_failure(abort_code = 8, location = mohayo::item)]   // E_BAD_EFFECT
+    fun test_register_item_rejects_unknown_effect_kind() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        item::register_item(
+            a, 900, b"bad", item::GROUP_COMBAT_CONSUMABLE,
+            true, 7, 100, 18, false,   // effect_kind = 7 = 引擎不认
+        );
+    }
+
+    /// combat_usable = false 的道具(弹药等)不受 effect_kind 校验约束。
+    #[test]
+    fun test_register_item_allows_ammo_without_effect_kind() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        item::register_item(
+            a, 901, b"ammo", item::GROUP_AMMO,
+            false, item::EFFECT_NONE, 0, 18, false,   // 弹药: 战斗不可直接使用, 无效果
+        );
+        let (_n, _g, cu, ek, _ev, _d, _b) = item::def_of(901);
+        assert!(!cu && ek == item::EFFECT_NONE, 1);
+    }
+
     // ===================== P2: 加权目标 / 池技语义 / 双修公式 =====================
 
     /// 急救包扎(850) = 随机我方 + 按生命亏空加权(§4.2): 残血者更可能被抽中, 满血者也可能。
