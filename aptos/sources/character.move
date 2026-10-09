@@ -499,6 +499,8 @@ module mohayo::character {
             assert!(table::contains(&store.characters, char_id), E_NOT_FOUND);
             let c = table::borrow(&store.characters, char_id);
             assert!(c.owner == owner, E_NOT_OWNER);
+            // 刻意**不**断言 c.room_id == 0（§2.6.14 已定案保留）：房间内属性是入房快照，
+            // 关卡内升级对当前这局无影响，是有意留出的误操作空间。与 transfer/reroll 不同。
             (c.class_id, c.race, (c.level as u64), c.ability_bonuses)
         };
         let target = cur_level + (levels as u64);
@@ -526,6 +528,10 @@ module mohayo::character {
     acquires CharacterStore, ClassStore, RaceStore {
         let owner = signer::address_of(account);
         assert!(to != owner, E_SELF_TRANSFER);
+        // 接收方容量校验。建号侧的 MAX_CHARS_PER_PLAYER 若不在转移侧同样拦住, 就成了纸面
+        // 上限: A 建满 10 个 → 全部转给 B → A 再建 10 个, 循环往复。加上全模块没有任何
+        // 销毁/删除入口(characters 表只增不减), 角色数会无上限膨胀。
+        assert!(owned_character_count(to) < MAX_CHARS_PER_PLAYER, E_CHAR_CAP);
         let (class_id, race, ability_bonuses) = {
             let store = borrow_global<CharacterStore>(@mohayo);
             assert!(table::contains(&store.characters, char_id), E_NOT_FOUND);

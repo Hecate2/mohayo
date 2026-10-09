@@ -2062,6 +2062,28 @@ module mohayo::tests {
         character::transfer_character(a, cid, @0xDD03); // E_IN_ROOM(13)
     }
 
+    /// 接收方角色数已达上限 → 拒绝转移。否则 MAX_CHARS_PER_PLAYER 只是建号侧的纸面上限:
+    /// A 建满 10 个全转给 B, A 再建 10 个, 循环往复(且全模块无任何销毁入口)。
+    #[test]
+    #[expected_failure(abort_code = 23, location = mohayo::character)]   // E_CHAR_CAP
+    fun test_transfer_rejected_when_receiver_full() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let addr = std::signer::address_of(a);
+        let buyer = &std::account::create_account_for_test(@0xDD05);
+        let baddr = std::signer::address_of(buyer);
+        // 接收方先攒满 10 个
+        let i = 0;
+        while (i < 10) {
+            character::gm_mint(a, baddr, 1, 0, vector[0, 0, 0, 0], vector[850]);
+            i = i + 1;
+        };
+        character::gm_mint(a, addr, 1, 0, vector[0, 0, 0, 0], vector[850]);
+        let cid = character::owner_latest_char(addr);
+        character::transfer_character(a, cid, baddr);  // E_CHAR_CAP(23)
+    }
+
     /// §2.6.11 复审: 已在某房间的角色不得再进第二个房间 —— 否则 room_id 被覆盖,
     /// 退掉旧房会把角色提前解锁(人还在新房战斗中), §7.4「关卡内禁止转移」被绕过。
     #[test]
