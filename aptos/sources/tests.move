@@ -4,6 +4,7 @@ module mohayo::tests {
     use std::signer;
     use std::vector;
     use mohayo::types;
+    use mohayo::content;
     use mohayo::skill_registry;
     use mohayo::character;
     use mohayo::economy;
@@ -2382,6 +2383,46 @@ module mohayo::tests {
         let ec = engine::enemy_count(1);
         std::debug::print(&vector[ec]);
         assert!(ec <= 3, 1);   // §4.5-1: 存活敌人数不超过「存活角色数 + 2」
+    }
+
+    // ===================== 事件字段（客户端渲染依赖） =====================
+
+    /// 友方替身人偶(530, FLAG_SUMMON_ALLY)进的是 **members** 向量, 此前却也发
+    /// `EnemySpawned` 且该事件没有 `is_enemy` —— 客户端收到后无法判断 index 该去
+    /// members 还是 enemies 找, 会把友方单位当敌人渲染。
+    /// 本用例锁定「召唤物落在 members 里」这个前提(配合 EnemySpawned.is_enemy 的修复)。
+    #[test]
+    fun test_ally_summon_lands_in_members_not_enemies() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        // 530 属 class 4, 这里用 test_only 裸属性面板(char_id=0 → 跳过技能归属校验)
+        engine::create_room(a, 1);
+        engine::join_room(a, 1, 5000, 10, 10, 100);   // 槽位 0 = 玩家
+        engine::start_combat_test(a, 1);
+        let members_before = engine::member_count(1);
+        let enemies_before = engine::enemy_count(1);
+        // 530 的 mana_cost = 4, 而 D1 首回合魔素池只有 2 → 第一回合放不出, 第二回合才行
+        engine::set_plan(a, 1, 0, vector[content::SKILL_DECOY_DOLL]);
+        engine::step_for_test(a, 1);
+        assert!(engine::room_phase(1) == 1, 1);        // 仍在战斗(没被误判为结束)
+        assert!(engine::member_count(1) == members_before, 2);  // 魔素不足 → 未召唤
+        engine::set_plan(a, 1, 0, vector[content::SKILL_DECOY_DOLL]);
+        engine::step_for_test(a, 1);
+        // 替身人偶进 members → 成员 +1, 敌人不变
+        assert!(engine::member_count(1) == members_before + 1, 3);
+        assert!(engine::enemy_count(1) == enemies_before, 4);
+        // 新增的那个成员是召唤物(is_summon), 不是玩家 —— 这正是 EnemySpawned 需要
+        // is_enemy=false 才能让客户端区分出来的原因
+        let (is_summon, escaped, _delay) = engine::member_flags(1, members_before);
+        assert!(is_summon, 5);
+        assert!(!escaped, 6);
+        // **事件本身**必须带 is_enemy=false 且 index 指向 members 槽位。
+        // 只断言向量长度变化证不了这一点 —— 那正是这个缺陷当初漏出去的原因。
+        let (spawn_evts, ev_is_enemy, ev_index) = engine::test_enemy_spawned_events(1);
+        assert!(spawn_evts >= 1, 7);
+        assert!(!ev_is_enemy, 8);                       // 友方召唤物, 绝不能标成敌人
+        assert!(ev_index == members_before, 9);         // index 指向 members 的新槽位
     }
 
     // ===================== Q3: 回合驱动防护（§3.1 竞态与滥用） =====================

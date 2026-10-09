@@ -124,10 +124,17 @@ module mohayo::engine {
 
     #[event]
     struct RoomCreated has drop, store { room_id: u64, leader: address }
+    /// `member_index` = 该成员在 `room.members` 里的槽位。
+    ///
+    /// **稳定性**: 开战后稳定（战斗期无人能真正离开 members 向量 —— `request_escape` 与
+    /// 死亡都只改 `escaped`/`alive` 标志位）。仅大厅期(phase 0)的 `leave_room` 会
+    /// `vector::remove` 造成后续槽位整体前移 —— 所以大厅期不要缓存 index，或在
+    /// MemberLeft 时按 index 自行左移。这是刻意保留的语义（用户定案：退房即真退出，
+    /// 不做标记式移除）。
     #[event]
-    struct MemberJoined has drop, store { room_id: u64, player: address }
+    struct MemberJoined has drop, store { room_id: u64, player: address, member_index: u64 }
     #[event]
-    struct MemberLeft has drop, store { room_id: u64, player: address }
+    struct MemberLeft has drop, store { room_id: u64, player: address, member_index: u64 }
     #[event]
     struct CombatStarted has drop, store { room_id: u64, turn_id: u64 }
     #[event]
@@ -154,8 +161,15 @@ module mohayo::engine {
     struct EffectApplied has drop, store { room_id: u64, is_enemy: bool, index: u64, op: u8, magnitude: u16, duration: u8 }
     #[event]
     struct UnitDied has drop, store { room_id: u64, is_enemy: bool, index: u64 }
+    /// 单位入场。**`is_enemy` 必读** —— `index` 指向哪个向量由它决定：
+    /// - `is_enemy = true`  → `index` 是 `room.enemies` 的下标（战斗开场 / 敌方召唤 / 死亡召唤）
+    /// - `is_enemy = false` → `index` 是 `room.members` 的下标（FLAG_SUMMON_ALLY 的友方替身人偶）
+    ///
+    /// 此前这个事件没有 `is_enemy`，而友方召唤物（resolve_summon 的 ally 分支）塞进的是
+    /// `members` 却也发 `EnemySpawned` —— 客户端收到后无法判断该去哪个向量找，
+    /// 会把友方单位当敌人渲染。
     #[event]
-    struct EnemySpawned has drop, store { room_id: u64, index: u64, template_id: u64 }
+    struct EnemySpawned has drop, store { room_id: u64, is_enemy: bool, index: u64, template_id: u64 }
     #[event]
     struct ManaChanged has drop, store { room_id: u64, pool: u64 }
     #[event]
@@ -479,12 +493,12 @@ module mohayo::engine {
             true, false, signer::address_of(account), 0,
         );
         vector::push_back(&mut room.members, member);
+        let idx = vector::length(&room.members) - 1;
         if (room.phase == 1) {
-            let idx = vector::length(&room.members) - 1;
             types::member_set_arrive_delay(vector::borrow_mut(&mut room.members, idx), JOIN_DELAY as u8);
         };
         ensure_leader(room, room_id);   // 队长必须是在场队员(§2.6.14)
-        event::emit(MemberJoined { room_id, player: signer::address_of(account) });
+        event::emit(MemberJoined { room_id, player: signer::address_of(account), member_index: idx });
     }
 
     // Test-only join that also sets the character's resource-affix fields
@@ -509,12 +523,12 @@ module mohayo::engine {
             signer::address_of(account), 0,
         );
         vector::push_back(&mut room.members, member);
+        let idx = vector::length(&room.members) - 1;
         if (room.phase == 1) {
-            let idx = vector::length(&room.members) - 1;
             types::member_set_arrive_delay(vector::borrow_mut(&mut room.members, idx), JOIN_DELAY as u8);
         };
         ensure_leader(room, room_id);   // 队长必须是在场队员(§2.6.14)
-        event::emit(MemberJoined { room_id, player: signer::address_of(account) });
+        event::emit(MemberJoined { room_id, player: signer::address_of(account), member_index: idx });
     }
 
     /// Production join: binds this room slot to `char_id`. The caller must own
@@ -554,13 +568,13 @@ module mohayo::engine {
         );
         vector::push_back(&mut room.members, member);
         // §4.5-5 中途加入: 战斗进行中入队 → 延迟到场; 间歇期/大厅 → 立即
+        let idx = vector::length(&room.members) - 1;
         if (room.phase == 1) {
-            let idx = vector::length(&room.members) - 1;
             types::member_set_arrive_delay(vector::borrow_mut(&mut room.members, idx), JOIN_DELAY as u8);
         };
         character::lock_room(char_id, room_id); // §7.4: 关卡内禁止角色转移
         ensure_leader(room, room_id);   // 队长必须是在场队员(§2.6.14)
-        event::emit(MemberJoined { room_id, player: signer::address_of(account) });
+        event::emit(MemberJoined { room_id, player: signer::address_of(account), member_index: idx });
     }
 
     /// 大厅期离房(§3.1 解散前的自由加入/退出)。开战后改用 `request_escape`。
@@ -572,6 +586,7 @@ module mohayo::engine {
         let n = vector::length(&room.members);
         let i = 0;
         let found = false;
+        let left_index = 0;
         while (i < n) {
             let m = vector::borrow(&room.members, i);
             if (types::member_owner(m) == addr && !types::member_is_summon(m)) {
@@ -579,13 +594,16 @@ module mohayo::engine {
                 vector::remove(&mut room.members, i);
                 if (cid != 0) { character::lock_room(cid, 0); }; // 大厅退房: 解绑, 不记履历
                 found = true;
+                left_index = i;
                 break;
             };
             i = i + 1;
         };
         assert!(found, E_BAD_INDEX);
         ensure_leader(room, room_id);
-        event::emit(MemberLeft { room_id, player: addr });
+        // `member_index` 是**被移除前**的槽位。vector::remove 让后续成员整体前移,
+        // 客户端收到本事件后应把 > left_index 的缓存槽位左移一位(见事件定义处的说明)。
+        event::emit(MemberLeft { room_id, player: addr, member_index: left_index });
     }
 
     // ============================ escape & retreat (§6.2) ============================
@@ -895,6 +913,21 @@ module mohayo::engine {
          if (types::member_alive(m)) { 1 } else { 0 })
     }
 
+    /// 槽位身份：`is_summon`(替身人偶等召唤物) + `escaped` + `arrive_delay`。
+    ///
+    /// `member_state` 只给属性与 alive，客户端无从区分「这个槽位是玩家角色还是召唤物」——
+    /// 而替身人偶进的就是 members 向量。客户端拿到 index 后还要靠这里确认身份，
+    /// 才能正确渲染血条与阵营标记（配合 EnemySpawned 的 is_enemy）。
+    #[view]
+    public fun member_flags(room_id: u64, index: u64): (bool, bool, u8) acquires RoomStore {
+        let rs = borrow_global<RoomStore>(@mohayo);
+        assert!(table::contains(&rs.rooms, room_id), E_ROOM_NOT_FOUND);
+        let room = table::borrow(&rs.rooms, room_id);
+        assert!(index < vector::length(&room.members), E_BAD_INDEX);
+        let m = vector::borrow(&room.members, index);
+        (types::member_is_summon(m), types::member_escaped(m), types::member_arrive_delay(m))
+    }
+
     /// 成员的 AP(§4.6；此前没有任何入口能读到成员 AP)
     #[view]
     public fun member_ap(room_id: u64, member_index: u64): u16 acquires RoomStore {
@@ -1103,7 +1136,7 @@ module mohayo::engine {
                     if (room.mutator_kind == MUT_HP() && room.mutator_value != 0) {
                         scale_enemy_hp(vector::borrow_mut(&mut room.enemies, idx), room.mutator_value);
                     };
-                    event::emit(EnemySpawned { room_id, index: idx, template_id: tid });
+                    event::emit(EnemySpawned { room_id, is_enemy: true, index: idx, template_id: tid });
                     break;
                 };
                 acc = new_acc;
@@ -1589,7 +1622,8 @@ module mohayo::engine {
                     vector::empty(), vector::empty(), 0, true, true, @mohayo, 0,
                 );
                 vector::push_back(&mut room.members, minion);
-                event::emit(EnemySpawned { room_id, index: idx, template_id: stid });
+                // 友方替身人偶进的是 **members** 向量, 不是 enemies
+                event::emit(EnemySpawned { room_id, is_enemy: false, index: idx, template_id: stid });
             };
         } else {
             // §4.5-1 缺口公式: 先读场上存活数 —— 存活敌人数 < 存活角色数 + 2 时,
@@ -1623,7 +1657,7 @@ module mohayo::engine {
                 if (room.mutator_kind == MUT_HP() && room.mutator_value != 0) {
                     scale_enemy_hp(vector::borrow_mut(&mut room.enemies, idx), room.mutator_value);
                 };
-                event::emit(EnemySpawned { room_id, index: idx, template_id: stid });
+                event::emit(EnemySpawned { room_id, is_enemy: true, index: idx, template_id: stid });
                 j = j + 1;
             };
         };
@@ -1849,7 +1883,7 @@ module mohayo::engine {
                     if (room.mutator_kind == MUT_HP() && room.mutator_value != 0) {
                         scale_enemy_hp(vector::borrow_mut(&mut room.enemies, new_idx), room.mutator_value);
                     };
-                    event::emit(EnemySpawned { room_id, index: new_idx, template_id: ods_tid });
+                    event::emit(EnemySpawned { room_id, is_enemy: true, index: new_idx, template_id: ods_tid });
                     j = j + 1;
                 };
             };
@@ -2424,6 +2458,32 @@ module mohayo::engine {
         let t = aptos_framework::timestamp::now_seconds();
         aptos_framework::timestamp::update_global_time_for_test_secs(t + 2);
         advance_turn_test(who, room_id, room_turn(room_id));
+    }
+
+    /// 测试钩子：读 @mohayo 的 `EnemySpawned` 事件流，返回 (本房间条数, 最后一条的
+    /// `is_enemy`, 最后一条的 `index`)。
+    ///
+    /// 事件字段此前完全没有测试覆盖 —— `EnemySpawned` 缺 `is_enemy`（友方召唤物也发这个
+    /// 事件、index 却指向 members）就是这样漏出去的：断言成员向量长度变化只能证明
+    /// 「召唤物落在 members」，证不了「事件告诉客户端它落在 members」。
+    #[test_only]
+    public fun test_enemy_spawned_events(room_id: u64): (u64, bool, u64) {
+        let all = event::emitted_events<EnemySpawned>();
+        let n = vector::length(&all);
+        let seen = 0;
+        let newest_is_enemy = true;
+        let newest_index = 0;
+        let i = 0;
+        while (i < n) {
+            let e = vector::borrow(&all, i);
+            if (e.room_id == room_id) {
+                seen = seen + 1;
+                newest_is_enemy = e.is_enemy;
+                newest_index = e.index;
+            };
+            i = i + 1;
+        };
+        (seen, newest_is_enemy, newest_index)
     }
 
     /// 测试钩子：走**生产入口**（私有 `#[randomness] entry`）开战，用于验证真实随机数路径能跑通。
