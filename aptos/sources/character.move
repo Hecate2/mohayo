@@ -680,6 +680,36 @@ module mohayo::character {
         if (vector::length(list) == 0) { 0 } else { *vector::borrow(list, vector::length(list) - 1) }
     }
 
+    /// 该 playerId 名下**全部**角色 id(按创建顺序)。
+    ///
+    /// `owner_latest_char` 只给最后一个, 客户端拿不到角色清单 —— 而每账号可持有多达
+    /// MAX_CHARS_PER_PLAYER 个角色, 所以角色列表页/选择器在本接口出现之前根本做不出来
+    /// (既没有枚举入口, 也没有等价 view)。
+    #[view]
+    public fun characters_of(owner: address): vector<u64> acquires CharacterStore {
+        let store = borrow_global<CharacterStore>(@mohayo);
+        if (!table::contains(&store.owner_chars, owner)) return vector::empty();
+        *table::borrow(&store.owner_chars, owner)
+    }
+
+    /// 角色的能力词条加成 [HP, ATK, MAG, SPD]（已折算进 compute_stats 的原始值）。
+    ///
+    /// 资源类词条另有 get_resource_types / get_mana_discount / get_ap_discount /
+    /// get_ap_bonus / get_mana_gain_bonus 汇总入口, 但这四项能力加成此前没有任何读接口 ——
+    /// 客户端拿得到资源词条却拿不到能力词条, 角色卡的词条面板渲染不出来。
+    #[view]
+    public fun get_ability_bonuses(id: u64): vector<u16> acquires CharacterStore {
+        let store = borrow_global<CharacterStore>(@mohayo);
+        assert!(table::contains(&store.characters, id), E_NOT_FOUND);
+        table::borrow(&store.characters, id).ability_bonuses
+    }
+
+    /// 该 playerId 名下角色数（建号上限 MAX_CHARS_PER_PLAYER 的客户端侧口径）。
+    #[view]
+    public fun character_count(owner: address): u64 acquires CharacterStore {
+        owned_character_count(owner)
+    }
+
     #[view]
     public fun get_class_id(id: u64): u8 acquires CharacterStore {
         let store = borrow_global<CharacterStore>(@mohayo);

@@ -63,6 +63,25 @@ module mohayo::types {
 
     // ---- capacities ----
     // 只保留引擎真的会读的上限；未落地的容量声明已删除(§2.6.11 复审)，避免「文档说有限、代码没有」。
+
+    /// 客户端需要的常量打包成一个 view。
+    ///
+    /// `types.move` 里全是 `public fun` 常量, **没有 #[view] 就一个都读不到**
+    /// (public fun 不进 view 上下文)。而这些是前端必须知道的硬边界: 房间人数上限、
+    /// AP 上限、命中率下限、等级上限、效果位上限。若让客户端硬编码 10/22/50/300,
+    /// 数值层任何一次调整都会静默改坏前端 —— 所以这里给一个聚合入口。
+    /// 返回顺序: (MAX_MEMBERS, MAX_ENEMIES, MAX_EFFECTS, MAX_SKILL_EFFECTS,
+    ///            MAX_STRIKES, AP_CAP_BASE, MIN_HIT_RATE, MAX_LEVEL,
+    ///            BASE_HP, BASE_ATTACK, BASE_MAGIC, BASE_SPEED)
+    #[view]
+    public fun client_constants(): (u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64) {
+        (
+            MAX_MEMBERS(), MAX_ENEMIES(), MAX_EFFECTS(), MAX_SKILL_EFFECTS(),
+            MAX_STRIKES(), AP_CAP_BASE(), MIN_HIT_RATE(), MAX_LEVEL(),
+            BASE_HP(), BASE_ATTACK(), BASE_MAGIC(), BASE_SPEED()
+        )
+    }
+
     public fun MAX_MEMBERS(): u64 { 10 }
     public fun MAX_ENEMIES(): u64 { 10 }
     public fun MAX_EFFECTS(): u64 { 6 }

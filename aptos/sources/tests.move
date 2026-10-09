@@ -3019,4 +3019,118 @@ module mohayo::tests {
         engine::test_production_advance_turn(a, 1, engine::room_turn(1));
         assert!(engine::room_turn(1) == 2, 3);
     }
+
+    // ===================== 客户端读接口补齐 =====================
+
+    /// 角色列表: `owner_latest_char` 只给最后一个, 客户端拿不到名下全部角色
+    /// (每账号可持有至多 MAX_CHARS_PER_PLAYER 个) —— 角色列表页此前无法实现。
+    #[test]
+    fun test_characters_of_lists_all_owned_chars() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let p = &std::account::create_account_for_test(@0xBB01);
+        let paddr = std::signer::address_of(p);
+        assert!(vector::length(&character::characters_of(paddr)) == 0, 1);
+        character::create_character_test(p, 1, vector::empty(), 7);
+        character::create_character_test(p, 2, vector::empty(), 19);
+        let ids = character::characters_of(paddr);
+        assert!(vector::length(&ids) == 2, 2);
+        assert!(*vector::borrow(&ids, 0) != *vector::borrow(&ids, 1), 3);   // 两个不同角色
+        assert!(character::owner_latest_char(paddr) == *vector::borrow(&ids, 1), 4);
+        assert!(character::character_count(paddr) == 2, 5);
+    }
+
+    /// 转移后角色列表跟着走（两个方向的清单都要正确）。
+    #[test]
+    fun test_characters_of_follows_transfer() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let p1 = &std::account::create_account_for_test(@0xBB02);
+        let p2 = &std::account::create_account_for_test(@0xBB03);
+        let a1 = std::signer::address_of(p1);
+        let a2 = std::signer::address_of(p2);
+        character::create_character_test(p1, 1, vector::empty(), 3);
+        let cid = character::owner_latest_char(a1);
+        character::transfer_character(p1, cid, a2);
+        assert!(vector::length(&character::characters_of(a1)) == 0, 1);
+        assert!(vector::length(&character::characters_of(a2)) == 1, 2);
+        assert!(*vector::borrow(&character::characters_of(a2), 0) == cid, 3);
+    }
+
+    /// 能力词条加成可读(4 项: HP/ATK/MAG/SPD)。此前资源类词条有读接口, 这四项没有,
+    /// 角色卡的词条面板渲染不出来。
+    #[test]
+    fun test_ability_bonuses_readable() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let addr = std::signer::address_of(a);
+        // 人类(0) + 满档词条 → 四项能力加成都是 tier 10 的值(2000)
+        character::gm_mint(a, addr, 1, 0, vector[10, 10, 10, 10], vector::empty());
+        let cid = character::owner_latest_char(addr);
+        let ab = character::get_ability_bonuses(cid);
+        assert!(vector::length(&ab) == 4, 1);
+        let i = 0;
+        while (i < 4) {
+            assert!(*vector::borrow(&ab, i) == 2000, i + 2);
+            i = i + 1;
+        };
+    }
+
+    /// types::client_constants 聚合 view —— 客户端必须能读到硬边界常量,
+    /// 而不是硬编码 10/22/50/300(数值层一改就静默改坏前端)。
+    #[test]
+    fun test_client_constants_view() {
+        let (members, enemies, effects, skill_fx, strikes, ap_cap, min_hit, max_lv, bhp, batk, bmag, bspd)
+            = types::client_constants();
+        assert!(members == 10 && enemies == 10, 1);
+        assert!(effects == 6 && skill_fx == 4 && strikes == 8, 2);
+        assert!(ap_cap == 22, 3);
+        assert!(min_hit == 50, 4);
+        assert!(max_lv == 300, 5);
+        assert!(bhp == 100 && batk == 10 && bmag == 10 && bspd == 10, 6);
+    }
+
+    /// 掉落表可读 —— GM 自己就能确认表配没配错, 客户端也能展示「这关掉什么」。
+    #[test]
+    fun test_drop_table_readable() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        // 未登记的难度 → 三条全空
+        let (t0, w0, a0) = item::drop_table(999);
+        assert!(vector::length(&t0) == 0 && vector::length(&w0) == 0 && vector::length(&a0) == 0, 1);
+        // 覆写 D1 后读回, 形状与入参一致
+        item::register_drop_table(a, 1,
+            vector[item::ITEM_MANA_FIREWORK, 0], vector[300, 700], vector[1, 0]);
+        let (tys, ws, amts) = item::drop_table(1);
+        assert!(vector::length(&tys) == 2, 2);
+        assert!(*vector::borrow(&tys, 0) == item::ITEM_MANA_FIREWORK, 3);
+        assert!(*vector::borrow(&ws, 0) == 300 && *vector::borrow(&ws, 1) == 700, 4);
+        assert!(*vector::borrow(&amts, 0) == 1, 5);
+        // 难度可枚举(修 DropStore 后新登记的 id 要能被列出来)
+        assert!(vector::contains(&item::drop_table_ids(), &1), 6);
+    }
+
+    /// 道具 id 可枚举 —— 此前 def_of 要求调用方已知 id, 没有「有哪些道具」的读出口,
+    /// 上线后 GM 加了新道具客户端也发现不了。
+    #[test]
+    fun test_item_type_ids_enumerable() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_all_content(a);
+        let ids = item::item_type_ids();
+        assert!(vector::length(&ids) == 9, 1);   // 当前注册的 9 种
+        assert!(vector::contains(&ids, &item::ITEM_DICE_OF_FATE), 2);
+        // 覆写已存在的 id 不应重复登记
+        item::register_item(a, item::ITEM_DICE_OF_FATE, b"dice", item::GROUP_CHARACTER_META,
+            false, item::EFFECT_NONE, 0, 18, false);
+        assert!(vector::length(&item::item_type_ids()) == 9, 3);
+        // 新 id 追加到末尾
+        item::register_item(a, 950, b"new", item::GROUP_COMBAT_CONSUMABLE,
+            true, item::EFFECT_HEAL, 100, 18, false);
+        assert!(vector::length(&item::item_type_ids()) == 10, 4);
+    }
 }

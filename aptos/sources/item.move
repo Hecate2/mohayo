@@ -16,6 +16,7 @@ module mohayo::item {
     use std::signer;
     use std::table::{Self, Table};
     use std::vector;
+    use aptos_framework::event;
     use mohayo::rng;
 
     // 余额写入口只对引擎与关卡外编排模块开放(§2.6.11 复审): 防止任意模块凭空铸道具/销毁他人道具。
@@ -75,6 +76,9 @@ module mohayo::item {
 
     struct DefStore has key {
         defs: Table<u64, ItemDef>,
+        /// 已登记的道具 id（升序）。配合 `item_type_ids` 让 GM / 客户端能枚举 ——
+        /// `def_of` 要求调用方已知 id, 此前没有任何「有哪些道具」的读出口。
+        item_type_ids: vector<u64>,
     }
 
     /// vault: item_type → (address → raw 余额, u128)
@@ -92,13 +96,31 @@ module mohayo::item {
     /// difficulty → 掉落表（通关/全员逃离时结算）
     struct DropStore has key {
         tables: Table<u64, vector<DropEntry>>,
+        /// 已登记的掉落表难度 id（升序）。配合 `drop_table_ids` 让 GM 能枚举自查。
+        difficulty_ids: vector<u64>,
     }
+
+    // ===================== 事件 =====================
+
+    /// 玩家转移道具（`transfer`）。道具层此前**零事件** —— 直接转移完全不可见，
+    /// 客户端背包只能轮询余额、Indexer 无法追踪道具流向。这与 Fungible Token 的语义
+    /// （可拆散可转移）不匹配。
+    #[event]
+    struct Transferred has drop, store { player: address, to: address, item_type: u64, amount: u64 }
+
+    /// GM 铸造道具（仅审计用，正常经济路径不应出现）。
+    #[event]
+    struct Minted has drop, store { item_type: u64, to: address, amount: u64 }
+
+    /// 某难度的掉落表被 GM 登记/覆写。
+    #[event]
+    struct DropTableSet has drop, store { difficulty: u64, entries: u64 }
 
     // ===================== 初始化 =====================
     fun init_module(account: &signer) {
-        move_to(account, DefStore { defs: table::new() });
+        move_to(account, DefStore { defs: table::new(), item_type_ids: vector::empty() });
         move_to(account, Vault { balances: table::new() });
-        move_to(account, DropStore { tables: table::new() });
+        move_to(account, DropStore { tables: table::new(), difficulty_ids: vector::empty() });
     }
 
     #[test_only]
@@ -136,7 +158,9 @@ module mohayo::item {
             *table::borrow_mut(&mut ds.tables, difficulty) = entries;
         } else {
             table::add(&mut ds.tables, difficulty, entries);
+            vector::push_back(&mut ds.difficulty_ids, difficulty);
         };
+        event::emit(DropTableSet { difficulty, entries: n });
     }
 
     /// 按难度掉落表掷一次（确定性：seed 由调用方提供）。
@@ -197,6 +221,7 @@ module mohayo::item {
             *table::borrow_mut(&mut ds.defs, item_type) = d;
         } else {
             table::add(&mut ds.defs, item_type, d);
+            vector::push_back(&mut ds.item_type_ids, item_type);
         };
         let v = borrow_global_mut<Vault>(@mohayo);
         if (!table::contains(&v.balances, item_type)) {
@@ -210,6 +235,7 @@ module mohayo::item {
         assert!(signer::address_of(account) == @mohayo, E_NOT_OWNER);
         assert!(whole_units > 0, E_ZERO);
         credit_raw(item_type, to, (whole_units as u128) * ONE);
+        event::emit(Minted { item_type, to, amount: whole_units });
     }
 
     /// 玩家转移(任意 raw 数量, 允许拆散交易; 绑定道具不可转移)
@@ -219,6 +245,7 @@ module mohayo::item {
         assert!(!is_bound(item_type), E_BOUND);
         assert!(try_consume_raw(item_type, addr, raw), E_NO_ITEM);
         credit_raw(item_type, to, raw);
+        event::emit(Transferred { player: addr, to, item_type, amount: ((raw / ONE) as u64) });
     }
 
     /// 道具是否绑定(绑定 = 不可转移, 防止可交易资产汇聚后涌向同一强角色)
@@ -325,6 +352,60 @@ module mohayo::item {
         assert!(table::contains(&ds.defs, item_type), E_NOT_FOUND);
         let d = table::borrow(&ds.defs, item_type);
         (d.name, d.group, d.combat_usable, d.effect_kind, d.effect_value, d.decimals, d.bound)
+    }
+
+    /// 某难度掉落表的条目，返回三条等长并行向量 (item_types, weights, amounts)。
+    /// 未登记则三条全空。
+    ///
+    /// 用并行向量而非 `vector<(u64, u16, u64)>`: Move 不允许元组做容器类型参数。
+    /// 形状与 `register_drop_table` 的入参一致, 便于对账。
+    ///
+    /// register_drop_table 的设计目标是「上线后 GM 一笔交易调整掉落」，但读侧此前完全没有
+    /// 对应接口 —— GM 自己都无法确认表配没配错，客户端也无法展示「这一关可能掉什么」。
+    #[view]
+    public fun drop_table(difficulty: u64): (vector<u64>, vector<u16>, vector<u64>) acquires DropStore {
+        if (!exists<DropStore>(@mohayo)) { return (vector::empty(), vector::empty(), vector::empty()) };
+        let ds = borrow_global<DropStore>(@mohayo);
+        if (!table::contains(&ds.tables, difficulty)) {
+            return (vector::empty(), vector::empty(), vector::empty());
+        };
+        let entries = table::borrow(&ds.tables, difficulty);
+        let n = vector::length(entries);
+        let tys = vector::empty<u64>();
+        let ws = vector::empty<u16>();
+        let amts = vector::empty<u64>();
+        let i = 0;
+        while (i < n) {
+            let e = vector::borrow(entries, i);
+            vector::push_back(&mut tys, e.item_type);
+            vector::push_back(&mut ws, e.weight);
+            vector::push_back(&mut amts, e.amount);
+            i = i + 1;
+        };
+        (tys, ws, amts)
+    }
+
+    /// 已登记掉落表的全部难度 id（升序）。配合 `drop_table` 让 GM / 客户端能枚举。
+    #[view]
+    public fun drop_table_ids(): vector<u64> acquires DropStore {
+        if (!exists<DropStore>(@mohayo)) { return vector::empty() };
+        borrow_global<DropStore>(@mohayo).difficulty_ids
+    }
+
+    /// 已登记道具定义的 id（升序）。`def_of` 要求调用方已知 id，
+    /// 这个入口让 GM / 客户端能发现「上线后新加了哪些道具」。
+    #[view]
+    public fun item_type_ids(): vector<u64> acquires DefStore {
+        if (!exists<DefStore>(@mohayo)) { return vector::empty() };
+        let ds = borrow_global<DefStore>(@mohayo);
+        let i = 0;
+        let n = vector::length(&ds.item_type_ids);
+        let out = vector::empty<u64>();
+        while (i < n) {
+            vector::push_back(&mut out, *vector::borrow(&ds.item_type_ids, i));
+            i = i + 1;
+        };
+        out
     }
 
     #[view]
