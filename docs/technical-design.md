@@ -1,7 +1,7 @@
 # 摸哈游（Mohayo）：技术实现设计
 
 > **⚠️ 文档状态声明（2026-09-02）**：本文 §1–§8 主体写于 **EVM/Solidity 迁移前时代**（Conflux eSpace/Foundry/Hardhat 语境），
-> 已不是当前实现的权威描述。当前实现已重写为 **Aptos Move**（仓库 `aptos/sources/`：`types`/`skill_registry`/`engine`/`character`/
+> 已不是当前实现的权威描述。当前实现已重写为 **Aptos Move**（仓库根目录 `sources/`：`types`/`skill_registry`/`engine`/`character`/
 > `content_registration`/`sim` 等模块）。迁移后仍被本仓库权威使用的章节：**§2.6.1（Move 版技能计划归属与拥有权校验）** 与
 > §2.5 原语表（op 语义在 Move 引擎中以 `types.move` 为准，DOT 结算见 op8 行）。其余章节（链选型/代付 gas/Foundry 工具链/菜市
 > Solidity 结构等）仅作历史与设计意图参考，勿据此实现。
@@ -379,7 +379,7 @@ struct RoomMember {
 
 ### 2.6.1 Move 重写注记：技能计划的归属与拥有权校验（当前实现）
 
-> 说明：§2.5/§2.6 的 Solidity 示意为迁移前版本；本小节以当前 `aptos/sources`（Move）实现为准，
+> 说明：§2.5/§2.6 的 Solidity 示意为迁移前版本；本小节以当前 `sources/`（Move）实现为准，
 > 并将代码中的**技能归属红线**显式记录于此。其余章节（RNG/菜市等）已在 Move 版另行落点，本节不重述。
 
 **红线（用户定案）**：玩家可使用的技能**只来自职业、种族、自选池三个来源**（`content-design.md` §2.5 / §4 / §5）——

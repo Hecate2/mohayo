@@ -1,6 +1,6 @@
 # 摸哈游（Mohayo）：测试机制设计
 > **⚠️ 文档状态声明（2026-09-02）**：本文描述的是 **EVM 时代的 Foundry/Hardhat 测试体系**（`forge`/`out/`/Hardhat 部署），
-> 已被废弃。当前实现为 **Aptos Move**，测试入口 = `aptos move test`（`aptos/sources/tests.move` 模块级单元测试 +
+> 已被废弃。当前实现为 **Aptos Move**，测试入口 = `aptos move test`（根目录 `sources/tests.move` 模块级单元测试 +
 > `sim.move` 蒙特卡洛通关率仿真/平衡标定）。本文仅作历史参考。
 
 

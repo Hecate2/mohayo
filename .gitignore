@@ -1,21 +1,23 @@
-out-release/
-aptos/build/
+# Move
+build/
 
 # Foundry
-out/
-cache/
-broadcast/
-lib/
+solidity/out/
+solidity/out-release/
+solidity/cache/
+solidity/broadcast/
+solidity/lib/
 
 # Node / Hardhat
 node_modules/
-hardhat/artifacts/
-hardhat/cache/
-hardhat/typechain-types/
+solidity/hardhat/artifacts/
+solidity/hardhat/cache/
+solidity/hardhat/typechain-types/
+solidity/hardhat/lib/
 
 # Deployments (keep the .gitkeep, ignore runtime-generated chain files)
-deployments/*.json
-!deployments/.gitkeep
+solidity/deployments/*.json
+!solidity/deployments/.gitkeep
 
 # Env & secrets
 .env

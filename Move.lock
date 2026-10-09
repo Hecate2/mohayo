@@ -5,13 +5,13 @@
 version = 4
 
 [pinned.testnet.AptosFramework]
-source = { local = "../.vendor/aptos-core/aptos-move/framework/aptos-framework" }
+source = { local = ".vendor/aptos-core/aptos-move/framework/aptos-framework" }
 use_environment = "testnet"
 manifest_digest = "C924A1DD72F654232DD8FEBC0AE13E18A1F36490C87823757CA499A11BA46ADB"
 deps = { AptosStdlib = "AptosStdlib", MoveStdlib = "MoveStdlib_1" }
 
 [pinned.testnet.AptosStdlib]
-source = { local = "../.vendor/aptos-core/aptos-move/framework/aptos-stdlib" }
+source = { local = ".vendor/aptos-core/aptos-move/framework/aptos-stdlib" }
 use_environment = "testnet"
 manifest_digest = "7AFB66695545775FBFBB2D3078ADFD084244D5002392E837FDE21D9EA1C6D01C"
 deps = { MoveStdlib = "MoveStdlib_1" }
@@ -29,7 +29,7 @@ manifest_digest = "C4FE4C91DE74CBF223B2E380AE40F592177D21870DC2D7EB6227D2D694E05
 deps = {}
 
 [pinned.testnet.MoveStdlib_1]
-source = { local = "../.vendor/aptos-core/aptos-move/framework/move-stdlib" }
+source = { local = ".vendor/aptos-core/aptos-move/framework/move-stdlib" }
 use_environment = "testnet"
 manifest_digest = "C4FE4C91DE74CBF223B2E380AE40F592177D21870DC2D7EB6227D2D694E05363"
 deps = {}

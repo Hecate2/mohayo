@@ -1,7 +1,7 @@
 # 随机数设计（Randomness Design）
 
 > **Move 实现现状（2026-09-30，见 `technical-design.md` §2.6.14）**：本文档主体是 EVM/Solidity 时代的
-> 设计（`block.prevrandao`、`keccak256` 链、`RNGRouter`）。当前 `aptos/sources` 的实现按 Aptos 的
+> 设计（`block.prevrandao`、`keccak256` 链、`RNGRouter`）。当前 `sources/` 的实现按 Aptos 的
 > 等价物落地：熵源换成 **`aptos_framework::randomness`（AIP-41）**，消费随机数的入口一律是**私有
 > `#[randomness] entry fun`**（建号、开战、推进回合、兜底推进、进入下一场、命运骰子/重生卷轴），
 > 每笔交易取一次协议随机数作为该回合的种子，房内同回合的多次抽数继续走内部 xorshift 链。

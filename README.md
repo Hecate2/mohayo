@@ -1,6 +1,6 @@
 # Mohayo — Aptos Move 实现
 
-本目录是「摸哈游」链上部分的 Move 实现。设计权威在 `../docs/`：
+本仓库是「摸哈游」链上部分的 Move 实现。设计权威在 `docs/`：
 `content-design.md` / `gameplay-design.md` 为活设计文档，
 `technical-design.md` §2.5–§2.6.11 记录 Move 实现的语义与每一轮修正。
 
@@ -27,7 +27,7 @@
    分开存放是为了同时借用二者而不触发 Move 借用冲突。
 2. **随机数**。房间创建时由 `room_id` 派生的种子写入 `Room.rng_seed`，
    之后命中、目标抽取、掉落、召唤都从这条流里取数。同一 `room_id` 与同一操作序列必得同一结果，
-   因此仿真可以在本地复现链上战斗。正式随机方案见 `../docs/randomness-design.md`。
+   因此仿真可以在本地复现链上战斗。正式随机方案见 `docs/randomness-design.md`。
 3. **回合驱动**。`advance_turn(account, room_id, expected_turn_id)` 是自动与手动共用的唯一入口，
    靠 `turnId` 互斥加 2 秒冷却防重复推进，`emergency_advance` 在停摆 30 秒后允许任何人解卡。
 4. **技能 key 分区**。`content.move` 按 100–199 基础 / 200–600 五职业 / 700 种族 / 800 自选池 /
