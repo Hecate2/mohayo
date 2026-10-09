@@ -3298,4 +3298,76 @@ module mohayo::tests {
             999, 0, 1000, 0,
         );
     }
+
+    // ===================== 分批内容注册（部署路径） =====================
+
+    /// 分批注册与一键注册产出**完全相同**的内容。
+    /// 这是拆分必须成立的前提 —— 否则测试全绿但线上内容是残的。
+    ///
+    /// 注意：两套注册共用同一个 `@mohayo` 全局存储（内容注册表都是 singleton），所以这个
+    /// 用例验证的是「分批路径把全部内容都注册齐了」，而不是「两条路径产出两份独立数据」。
+    /// `setup` 只能调一次（`init_timestamp_for_test` 会重设全局时间基准）。
+    #[test]
+    fun test_batched_registration_equivalent_to_all_at_once() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        // 按部署顺序分批注册
+        content_registration::register_classes_races(a);
+        content_registration::register_player_skills(a);
+        content_registration::register_enemy_skills(a);
+        content_registration::register_monsters(a);
+        content_registration::register_dungeons_economy(a);
+
+        // 关键内容齐备（这些数字与「一键注册」下的既有测试互为对照）
+        assert!(vector::length(&skill_registry::get_class_skill_ids(1)) == 3, 1);   // 守卫 3 技
+        assert!(skill_registry::is_pool_skill(850), 2);                          // 自选池白名单
+        assert!(!skill_registry::is_pool_skill(content::SKILL_DECOY_DOLL), 3);   // 红线: 敌技不入池
+        assert!(types::template_max_hp(&skill_registry::get_template(35)) == 3000, 4);  // 替身人偶
+        assert!(vector::length(&skill_registry::get_table(31)) == 1, 5);         // 表 31
+        assert!(types::dungeon_battles(&skill_registry::get_dungeon(9)) == 4, 6);  // D9 四场
+        assert!(types::dungeon_entry_fee(&skill_registry::get_dungeon(1)) == 0, 7);// D1 免费
+        assert!(vector::length(&item::item_type_ids()) == 9, 8);                 // 9 种道具
+        assert!(vector::length(&item::drop_table_ids()) == 9, 9);                // D1..D9 掉落表
+        assert!(types::class_def_hp_pct(&character::get_class(1)) == 150, 10);
+        assert!(types::race_def_self_select_bonus(&character::get_race(0)) == 2, 11);
+        // 词条模板满档值(词条校验要求 10 档, 这里确认四槽都在)
+        character::gm_mint(a, std::signer::address_of(a), 1, 0, vector[10, 10, 10, 10], vector::empty());
+        let cid = character::owner_latest_char(std::signer::address_of(a));
+        let ab = character::get_ability_bonuses(cid);
+        assert!(vector::length(&ab) == 4, 12);
+        let i = 0;
+        while (i < 4) { assert!(*vector::borrow(&ab, i) == 2000, 13); i = i + 1; };
+    }
+
+    /// 分批的**意义**在于失败可单独重发：某批中途失败后，之前成功的批次不回滚。
+    /// 这里验证 append-only 的内核在已注册后重跑会 abort（所以部署脚本必须按序、不重试已过的批），
+    /// 同时验证 upsert 类（职业/种族/词条/地下城/掉落表/道具）可以安全重跑。
+    #[test]
+    #[expected_failure(abort_code = 2, location = mohayo::skill_registry)]   // E_SKILL_EXISTS
+    fun test_rerunning_append_batch_aborts() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_classes_races(a);
+        content_registration::register_player_skills(a);
+        // 重复跑同一批 → 技能 id 撞了 → abort（部署脚本据此保证「不重试已过的批」）
+        content_registration::register_player_skills(a);
+    }
+
+    /// 幂等的那几批（职业/种族/词条/地下城/掉落表/道具）重跑安全 —— 部署脚本可以放心重试。
+    #[test]
+    fun test_idempotent_batches_can_rerun_safely() {
+        let a = &std::account::create_account_for_test(@mohayo);
+        setup(a);
+        content_registration::register_classes_races(a);
+        content_registration::register_dungeons_economy(a);
+        let items_before = vector::length(&item::item_type_ids());
+        let drops_before = vector::length(&item::drop_table_ids());
+        // 这两批全是 upsert 语义 → 重跑不新增条目、不报错
+        content_registration::register_classes_races(a);
+        content_registration::register_dungeons_economy(a);
+        assert!(vector::length(&item::item_type_ids()) == items_before, 1);
+        assert!(vector::length(&item::drop_table_ids()) == drops_before, 2);
+        assert!(types::class_def_hp_pct(&character::get_class(1)) == 150, 3);
+        assert!(types::dungeon_entry_fee(&skill_registry::get_dungeon(1)) == 0, 4);
+    }
 }

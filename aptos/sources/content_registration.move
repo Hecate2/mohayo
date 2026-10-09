@@ -59,7 +59,13 @@ module mohayo::content_registration {
     }
 
 
-    public entry fun register_all_content(account: &signer) {
+
+    /// 职业 6 / 种族 8 / 词条模板 4 槽
+    ///
+    /// 部署顺序：classes_races → player_skills → enemy_skills → monsters →
+    /// dungeons_economy（后几批依赖前面的 auto-id 编号，必须按此序）。
+    public entry fun register_classes_races(account: &signer) {
+
         // ===================== CLASSES =====================
         // make_class_def(base_hp_pct, base_attack_pct, base_magic_pct, base_speed_pct, skill_slots)
         // 0 = 「无职业」路线（§2.5.1）：中性模板（全 0 修正）+ 3 个自选槽，没有职业技、没有词条倾向。
@@ -89,6 +95,15 @@ module mohayo::content_registration {
         character::register_affix_template(account, 1, types::make_affix_template(1, weights, vals));
         character::register_affix_template(account, 2, types::make_affix_template(2, weights, vals));
         character::register_affix_template(account, 3, types::make_affix_template(3, weights, vals));
+
+    }
+
+
+    /// 玩家技能 1..44（含五职业技能）
+    ///
+    /// 部署顺序：classes_races → player_skills → enemy_skills → monsters →
+    /// dungeons_economy（后几批依赖前面的 auto-id 编号，必须按此序）。
+    public entry fun register_player_skills(account: &signer) {
 
         // ===================== PLAYER SKILLS 1..44 (canonical order) =====================
         // --- 基础技 (仅作为可自选池，不自动授予) ---
@@ -227,6 +242,15 @@ module mohayo::content_registration {
             types::TGT_ALL_ENEMY(), types::WT_UNIFORM(), 1, 260, 0, 900, 0,
             vector::empty()));                                                          // 900 魔爆术
 
+    }
+
+
+    /// 敌技 45..77 + 自选池白名单（content-design §5 红线）
+    ///
+    /// 部署顺序：classes_races → player_skills → enemy_skills → monsters →
+    /// dungeons_economy（后几批依赖前面的 auto-id 编号，必须按此序）。
+    public entry fun register_enemy_skills(account: &signer) {
+
         // ===================== ENEMY SKILLS 45..56 (canonical order) =====================
         skill_registry::register_skill(account, sk(1015,types::KIND_PHYSICAL(), 0, 0, 0, 0,
             types::TGT_RAND_SINGLE_ENEMY(), types::WT_THREAT_ENEMY(), 1, 1400, 0, 900, 0,
@@ -359,6 +383,15 @@ module mohayo::content_registration {
             skill_registry::add_pool_skill(account, *vector::borrow(&pool, pi));
             pi = pi + 1;
         };
+
+    }
+
+
+    /// 怪物 AI 1..23 + 敌人模板 1..35 + 构成表 1..31
+    ///
+    /// 部署顺序：classes_races → player_skills → enemy_skills → monsters →
+    /// dungeons_economy（后几批依赖前面的 auto-id 编号，必须按此序）。
+    public entry fun register_monsters(account: &signer) {
 
         // ===================== MONSTER AIs (1..23, 紧凑编号) =====================
         // make_monster_ai(skill_cycle, cycle_len); 每回合均匀随机抽一个技能; cycle 内重复=加权。
@@ -507,6 +540,15 @@ module mohayo::content_registration {
         skill_registry::register_table(account, vector[te(31, 1000)]);                        // 30 D9b4 王座宝箱
         skill_registry::register_table(account, vector[te(33, 1000)]);                        // 31 D9b4 皇帝备用机体
 
+    }
+
+
+    /// 地下城 D1..D10 + 战斗变体 + 掉落表 D1..D9 + 道具 9 种
+    ///
+    /// 部署顺序：classes_races → player_skills → enemy_skills → monsters →
+    /// dungeons_economy（后几批依赖前面的 auto-id 编号，必须按此序）。
+    public entry fun register_dungeons_economy(account: &signer) {
+
         // ===================== DUNGEONS D1..D10 =====================
         // make_dungeon_config(table, enemy_count, mana/turn, entry_fee, rescue_fee, turn_interval, battles)
         skill_registry::set_dungeon(account, 1, dng(1, 2, 2, 0, 10, BATTLE_TURN_CAP, 4));   // D1 灰烬矿坑(免费; mana 2 保证每回合挥镐)
@@ -593,7 +635,23 @@ module mohayo::content_registration {
             item::GROUP_CHARACTER_META, false, item::EFFECT_NONE, 0, 18, false); // 重生卷轴: 整体重建角色
         item::register_item(account, item::ITEM_DICE_OF_FATE, b"dice_of_fate",
             item::GROUP_CHARACTER_META, false, item::EFFECT_NONE, 0, 18, false); // 命运骰子: 种族+词条全重掷(保留职业/等级/自选技)
+
     }
+
+
+    /// 一键注册全部内容 —— **仅供测试与仿真**，生产部署请逐批调用上面的 5 个入口。
+    ///
+    /// 它把 190+ 次注册串在一笔交易里：Aptos 单交易的 gas 与序列化体积都可能超限；
+    /// 且各 `register_*` 内核多为「追加 + 撞 id 即 abort」，中途失败整笔回滚且**无法
+    /// 从断点续跑**。分批后任何一批失败都能单独重发那一批。
+    public entry fun register_all_content(account: &signer) {
+        register_classes_races(account);
+        register_player_skills(account);
+        register_enemy_skills(account);
+        register_monsters(account);
+        register_dungeons_economy(account);
+    }
+
 
     // ===================== private helpers =====================
     fun ai(account: &signer, cycle: vector<u64>) {
