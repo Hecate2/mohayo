@@ -2,6 +2,11 @@
 
 > 基于代码仓库与设计文档的完整调研；日期：2026-08-27
 > 触发原因：EVM 链上（Conflux eSpace）难以实现单区块可靠随机数，严重影响游戏体验
+>
+> **⚠️ 历史文档（2026-10-09 标注）**：本文是迁移决策前的调研存档，**迁移已执行完成**——当前实现为 Aptos Move
+> （仓库根目录 `sources/`，随机数走 `aptos_framework::randomness` / AIP-41），Solidity 版本已弃用并收拢于 `solidity/`。
+> 文中「倾向迁移 / 留链」的决策因素、PoC 步骤与迁移成本估算仅作历史参考；实现现状见 `README.md` 与
+> `technical-design.md` §2.6.14。
 
 ---
 

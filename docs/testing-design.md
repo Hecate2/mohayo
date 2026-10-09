@@ -1,7 +1,8 @@
 # 摸哈游（Mohayo）：测试机制设计
 > **⚠️ 文档状态声明（2026-09-02）**：本文描述的是 **EVM 时代的 Foundry/Hardhat 测试体系**（`forge`/`out/`/Hardhat 部署），
 > 已被废弃。当前实现为 **Aptos Move**，测试入口 = `aptos move test`（根目录 `sources/tests.move` 模块级单元测试 +
-> `sim.move` 蒙特卡洛通关率仿真/平衡标定）。本文仅作历史参考。
+> `sim.move` 蒙特卡洛通关率仿真/平衡标定）。本文仅作历史参考；文中目录结构为当时的仓库布局，
+> 该套 EVM 工具链现已整体收拢于 `solidity/` 子目录。
 
 
 > 配套文档：`technical-design.md`（技术实现）、`gameplay-design.md`（玩法）、`content-design.md`（内容）

@@ -1,10 +1,11 @@
 # 摸哈游（Mohayo）：技术实现设计
 
-> **⚠️ 文档状态声明（2026-09-02）**：本文 §1–§8 主体写于 **EVM/Solidity 迁移前时代**（Conflux eSpace/Foundry/Hardhat 语境），
+> **⚠️ 文档状态声明（2026-09-02，2026-09-30 更新）**：本文 §1–§8 主体写于 **EVM/Solidity 迁移前时代**（Conflux eSpace/Foundry/Hardhat 语境），
 > 已不是当前实现的权威描述。当前实现已重写为 **Aptos Move**（仓库根目录 `sources/`：`types`/`skill_registry`/`engine`/`character`/
-> `content_registration`/`sim` 等模块）。迁移后仍被本仓库权威使用的章节：**§2.6.1（Move 版技能计划归属与拥有权校验）** 与
-> §2.5 原语表（op 语义在 Move 引擎中以 `types.move` 为准，DOT 结算见 op8 行）。其余章节（链选型/代付 gas/Foundry 工具链/菜市
-> Solidity 结构等）仅作历史与设计意图参考，勿据此实现。
+> `content_registration`/`sim` 等模块）。迁移后仍被本仓库权威使用的章节：**§2.5 原语表**（op 语义在 Move 引擎中以 `types.move` 为准，
+> DOT 结算见 op8 行）、**§2.6.1–§2.6.15**（Move 实现注记：技能计划归属、技能 key 分区、经济闭环、行动顺序、入场门控、加权目标、
+> 升级/转移/履历、周常变异、回合驱动防护、房间回收、AP 口径、上线前修正、审计处置）、**§2.7.1**（Move 道具层注记）。
+> 其余章节（链选型/代付 gas/Foundry 工具链/菜市 Solidity 结构等）仅作历史与设计意图参考，勿据此实现。
 
 
 
@@ -565,7 +566,7 @@ struct RoomMember {
 
 ### 2.6.11 Move 复审修正注记（2026-09-30 架构 × 代码复审）
 
-对 `aptos/sources` 做全量复审（架构层 + 局部代码层），用临时 `#[test_only]` 探针复现后逐项修复。
+对 `sources/`（原 `aptos/sources/`，仓库重组后位于根目录）做全量复审（架构层 + 局部代码层），用临时 `#[test_only]` 探针复现后逐项修复。
 本节记录**修复前的缺陷**与修复口径，供回归时对照。
 
 - **发布阻断 · `sim` 模块缺 `#[test_only]`**：`sim.move` 的文档注释自称 test_only，但属性没写，
@@ -624,7 +625,7 @@ struct RoomMember {
     `E_BAD_LEVELS` 撞码，现改 20/21。其余 `E_*` 编号保持原值不动（有测试按数字断言）。
     遗留：多处 `#[expected_failure(abort_code = N)]` 未带 `location=`，跨模块同码会误判，
     建议后续统一补 `location`。
-  - `aptos/README.md` 原为 EVM 时代内容（56 技能 / `#[randomness]` / 13 测试 / ERC 术语），已重写为
+  - `README.md`（原 `aptos/README.md`）原为 EVM 时代内容（56 技能 / `#[randomness]` / 13 测试 / ERC 术语），已重写为
     Move 现状，并写明「`move compile` 与 `move test` 两条路径都要过」。
 
 ### 2.6.12 Move 房间回收注记（2026-09-30 实现）
